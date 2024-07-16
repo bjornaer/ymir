@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.12'
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+          version: 1.8.2
+    - name: Install dependencies
+      run: |
+          poetry install --no-interaction
+
+    - name: Build the project
+      run: |
+        poetry build
+        mkdir -p dist
+        cp dist/*.whl dist/*.tar.gz dist/
+
+    - name: Generate requirements.txt
+      run: |
+        poetry export -f requirements.txt --output dist/requirements.txt
+
+    - name: Upload Release Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: ymir-release
+        path: dist/
+
+  homebrew:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+    - name: Create Homebrew Formula
+      id: create_formula
+      run: |
+        VERSION=$(git describe --tags)
+        SHA256=$(sha256sum dist/*.tar.gz | awk '{print $1}')
+        cat <<EOF > ymir.rb
+        class Ymir < Formula
+          include Language::Python::Virtualenv
+
+          desc "A programming language for machine learning engineers."
+          homepage "https://github.com/bjornaer/ymir"
+          url "https://github.com/bjornaer/ymir/releases/download/${VERSION}/ymir-${VERSION}.tar.gz"
+          sha256 "${SHA256}"
+          version "${VERSION}"
+
+          depends_on "python@3.12"
+
+          def install
+            virtualenv_install_with_resources
+          end
+
+          resource "requirements" do
+            url "https://github.com/bjornaer/ymir/releases/download/${VERSION}/requirements.txt"
+          end
+
+          def caveats
+            <<~EOS
+              To use the Ymir CLI, you might need to add the Homebrew Python site-packages to your PYTHONPATH:
+                export PYTHONPATH=#{HOMEBREW_PREFIX}/lib/python3.12/site-packages:$PYTHONPATH
+            EOS
+          end
+        end
+        EOF
+
+    - name: Push Homebrew Formula
+      run: |
+        git clone https://github.com/bjornaer/homebrew-tap.git
+        cd homebrew-tap
+        cp ../ymir.rb .
+        git add ymir.rb
+        git commit -m "Release ${GITHUB_REF#refs/tags/}"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

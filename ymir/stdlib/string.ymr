@@ -1,0 +1,15 @@
+module stdlib.string
+
+export func concat(a: string, b: string) -> string {
+    return a + b
+}
+
+export func split(s: string, delimiter: string) -> array[string] {
+    // Placeholder for actual split logic
+    return []
+}
+
+export func replace(s: string, old: string, new: string) -> string {
+    // Placeholder for actual replace logic
+    return s
+}

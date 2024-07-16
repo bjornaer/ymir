@@ -1,0 +1,99 @@
+[tool.poetry]
+name = "ymir"
+version = "0.1.0"
+description = "ymir is a programming language focused on machine learning systems"
+authors = ["bjornaer <max.schulkin@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/bjornaer/ymir"
+
+packages = [{ include = "ymir", from = "." }]
+
+include = [
+  { path = "ymir/stdlib", format = "sdist" },
+  { path = "ymir/stdlib/**/*.ymr", format = "sdist" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+click = "^8.1.7"
+toml = "^0.10.2"
+llvmlite = "^0.43.0"
+requests = "^2.32.3"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.4.2"
+isort = "^5.13.2"
+ruff = "^0.5.1"
+pytest = "^8.2.2"
+
+[tool.poetry.scripts]
+ymir = "ymir.cli.ymir_cli:cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 120
+target-version = ['py310', 'py311']
+exclude = '''
+(
+  /(
+    \.mypy_cache
+  )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "venv",
+]
+
+# Same as Black.
+line-length = 120
+
+# Assume Python 3.11.
+target-version = "py311"
+
+[tool.ruff.lint]
+# Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
+# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
+# McCabe complexity (`C901`) by default.
+select = ["E", "F"]
+ignore = []
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# Ignore `E402` (import violations) in all `__init__.py` files, and in `path/to/file.py`.
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]

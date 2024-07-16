@@ -1,0 +1,183 @@
+module example
+
+export public = "yes"
+private = "yep, private"
+
+
+# Function definition with return type
+func add(a: int, b: int) -> int {
+    return a + b
+}
+
+# Function using array type hint
+func sum_array(arr: array[int]) -> int {
+    total = 0
+    for i in arr {
+        total = total + i
+    }
+    return total
+}
+
+# Function using map type hint
+func get_value(dct: map[string]int, key: string) -> int {
+    return dct[key]
+}
+
+# Function using tuple type hint
+func swap(tup: tuple[int, int]) -> tuple[int, int] {
+    return (tup[1], tup[0])
+}
+
+# Class definition with a method
+class Calculator {
+    func __init__(self) {
+        self.result = 0
+    }
+
+    func add(self, a: int, b: int) -> int {
+        self.result = a + b
+        return self.result
+    }
+
+    func get_result(self) -> int {
+        return self.result
+    }
+}
+
+# If statement
+func check_positive(n: int) -> string {
+    if n > 0 {
+        return "Positive"
+    } else {
+        return "Non-positive"
+    }
+}
+
+# While loop
+func countdown(start: int) {
+    while start > 0 {
+        print(str(start))
+        start = start - 1
+    }
+    print("Liftoff!")
+}
+
+# Built-in functions
+func math_example() {
+    result = sqrt(16.0)
+    print("sqrt(16.0) = " + str(result))
+}
+
+# Networking example
+func network_example() {
+    sock = socket(AF_INET, SOCK_STREAM, 0)
+    connect(sock, "example.com", 80)
+    send(sock, "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n", 44)
+    response = recv(sock, 4096)
+    print("Received response: " + str(response))
+    close(sock)
+}
+
+# Memory management example
+func memory_example() {
+    obj = allocate(100)
+    retain(obj)
+    release(obj)
+}
+
+# Function to demonstrate a C-style for loop with continue and break
+def sum_even_to_n(n: int) -> int {
+    total = 0
+    for (i = 0; i <= n; i++) {
+        if (i % 2 != 0) {
+            continue
+        }
+        if (i > 10) {
+            break
+        }
+        total = total + i
+    }
+    return total
+}
+
+# Function to demonstrate a for .. in loop with continue and break
+def print_non_zero_elements(arr: array[int]) {
+    for elem in arr {
+        if (elem == 0) {
+            continue
+        }
+        if (elem > 10) {
+            break
+        }
+        print(str(elem))
+    }
+}
+
+# Example of error and nil types
+def divide(a: int, b: int) -> int, error {
+    if (b == 0) {
+        return 0, "division by zero"
+    }
+    return a / b, nil
+}
+
+# Main function
+func main() {
+    print("Hello, Ymir!")
+
+    # Function call
+    result = add(10, 20)
+    print("10 + 20 = " + str(result))
+
+    # Array example
+    arr = [1, 2, 3, 4, 5]
+    sum_result = sum_array(arr)
+    print("Sum of array: " + str(sum_result))
+
+    # For loop examples
+    print("Sum of even numbers up to 10: " + str(sum_even_to_n(15)))
+
+    arr = [1, 2, 0, 3, 4, 5, 11, 6, 0, 7]
+    print("Non-zero elements of array (until element > 10):")
+    print_non_zero_elements(arr)
+
+    # Map example
+    dct = {"one": 1, "two": 2, "three": 3}
+    value = get_value(dct, "two")
+    print("Value from map: " + str(value))
+
+    # Tuple example
+    tup = (10, 20)
+    swapped_tup = swap(tup)
+    print("Swapped tuple: " + str(swapped_tup))
+
+    # Class usage
+    calc = Calculator()
+    calc.add(5, 7)
+    print("Calculator result: " + str(calc.get_result()))
+
+    # Conditional
+    result = check_positive(-5)
+    print("Check positive: " + result)
+
+    # Loop
+    countdown(5)
+
+    # Built-in functions
+    math_example()
+
+    # Networking
+    network_example()
+
+    # Memory management
+    memory_example()
+
+    # Error handling
+    result, err = divide(10, 0)
+    if (err != nil) {
+        panic(err)
+    }
+    print("Result: " + str(result))
+}
+
+main()

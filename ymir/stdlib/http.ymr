@@ -1,0 +1,11 @@
+module stdlib.http
+
+export func http_get(url: string) -> string {
+    // Placeholder for actual HTTP GET logic
+    return ""
+}
+
+export func http_post(url: string, data: string) -> string {
+    // Placeholder for actual HTTP POST logic
+    return ""
+}

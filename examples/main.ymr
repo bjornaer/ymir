@@ -1,0 +1,9 @@
+module main
+
+import "example.ymr"
+
+def main() {
+    print(example.public)
+}
+
+main()

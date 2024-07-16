@@ -1,0 +1,11 @@
+module stdlib.collections
+
+export func sort(arr: array[int]) -> array[int] {
+    // Placeholder for actual sort logic
+    return arr
+}
+
+export func search(arr: array[int], target: int) -> int {
+    // Placeholder for actual search logic
+    return -1
+}

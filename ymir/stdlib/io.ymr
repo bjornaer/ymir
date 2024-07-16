@@ -1,0 +1,10 @@
+module stdlib.io
+
+export func read_file(path: string) -> string {
+    // Placeholder for actual file reading logic
+    return ""
+}
+
+export func write_file(path: string, content: string) -> void {
+    // Placeholder for actual file writing logic
+}
