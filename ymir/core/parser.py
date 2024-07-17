@@ -94,12 +94,21 @@ class Parser:
                 return self.parse_nil()
             elif token.value == "async":
                 return self.parse_async_function_def()
+            elif token.value == "await":
+                return self.parse_await_expression()
             elif token.value == "return":
                 return self.parse_return_statement()
         elif token.type == TokenType.IDENTIFIER:
             return self.parse_assignment_or_expression()
         elif token.type == TokenType.BRACE_OPEN:
-            return self.parse_block()
+            if self.lookahead_is_map_literal():
+                return self.parse_map_literal()
+            else:
+                return self.parse_block()
+        elif token.type == TokenType.BRACKET_OPEN:
+            return self.parse_expression()
+        elif token.type == TokenType.PAREN_OPEN:
+            return self.parse_expression()
         raise SyntaxError(f"Unexpected token: {token}")
 
     def parse_module_def(self) -> ModuleDef:
@@ -131,30 +140,29 @@ class Parser:
 
     def parse_for_loop(self) -> ASTNode:
         self.advance()  # Skip 'for'
-        var_token = self.current_token()
-        self.expect_token(TokenType.IDENTIFIER)
-        if self.current_token().type == TokenType.BRACKET_OPEN:
+        if self.current_token().type == TokenType.PAREN_OPEN:
             return self.parse_cstyle_for_loop()
-        if self.current_token().value == "in":
-            return self.parse_for_in_loop(var_token)
-        raise SyntaxError(f"Unexpected token in for loop: {self.current_token()}")
+        else:
+            var_token = self.current_token()
+            self.expect_token(TokenType.IDENTIFIER)
+            return self.parse_python_style_for_loop(var_token)
 
-    def parse_for_in_loop(self, var_token: Token) -> ForInLoop:
-        self.advance()  # Skip 'in'
+    def parse_cstyle_for_loop(self) -> ForCStyleLoop:
+        self.expect_token(TokenType.PAREN_OPEN)
+        init = self.parse_statement()
+        self.expect_token(TokenType.SEMICOLON)
+        condition = self.parse_expression()
+        self.expect_token(TokenType.SEMICOLON)
+        increment = self.parse_statement()
+        self.expect_token(TokenType.PAREN_CLOSE)
+        body = self.parse_block()
+        return ForCStyleLoop(init, condition, increment, body)
+
+    def parse_python_style_for_loop(self, var_token: Token) -> ForInLoop:
+        self.expect_token(TokenType.KEYWORD, "in")
         iterable = self.parse_expression()
         body = self.parse_block()
         return ForInLoop(var_token.value, iterable, body)
-
-    def parse_cstyle_for_loop(self) -> ForCStyleLoop:
-        self.advance()  # Skip '('
-        init = self.parse_expression()
-        self.expect_token(TokenType.SEMICOLON)  # Expect ';'
-        condition = self.parse_expression()
-        self.expect_token(TokenType.SEMICOLON)  # Expect ';'
-        increment = self.parse_expression()
-        self.expect_token(TokenType.BRACKET_CLOSE)  # Expect ')'
-        body = self.parse_block()
-        return ForCStyleLoop(init, condition, increment, body)
 
     def parse_continue(self) -> Continue:
         self.advance()  # Skip 'continue'
@@ -169,7 +177,7 @@ class Parser:
         return NilType()
 
     def parse_function_def(self, as_async=False) -> FunctionDef:
-        self.advance()  # skip 'func'
+        self.expect_token(TokenType.KEYWORD, "func")
         self.skip_whitespace()
         name = self.current_token().value
         self.advance()  # skip function name
@@ -189,7 +197,14 @@ class Parser:
         )
 
     def parse_async_function_def(self) -> AsyncFunctionDef:
+        self.expect_token(TokenType.KEYWORD, "async")
+        self.skip_whitespace()
         return self.parse_function_def(as_async=True)
+
+    def parse_await_expression(self) -> AwaitExpression:
+        self.advance()  # Skip 'await'
+        expr = self.parse_expression()
+        return AwaitExpression(expr)
 
     def parse_return_statement(self) -> ASTNode:
         self.advance()  # Consume 'return' keyword
@@ -266,10 +281,26 @@ class Parser:
         elif self.current_token().type == TokenType.OPERATOR and self.current_token().value == ".":
             self.advance()  # skip '.'
             return self.parse_expression_with_prefix(name)
+        elif self.current_token().type == TokenType.BRACE_OPEN:
+            # Check if it's a map literal or a block
+            if self.lookahead_is_map_literal():
+                return self.parse_map_literal()
+            else:
+                return self.parse_block()
         elif self.current_token().type == TokenType.NEWLINE:
             self.advance()  # skip newline
             return Expression(name)
+        elif self.current_token().type == TokenType.OPERATOR:
+            # Handle binary operations
+            left = Expression(name)
+            return self.parse_binary_expression(left)
         raise SyntaxError(f"Unexpected token: {self.current_token()} after identifier")
+
+    def parse_binary_expression(self, left: ASTNode) -> ASTNode:
+        operator = self.current_token().value
+        self.advance()  # skip operator
+        right = self.parse_expression()
+        return BinaryOp(left, operator, right)
 
     def parse_expression_with_prefix(self, prefix: str) -> ASTNode:
         if self.current_token().type == TokenType.IDENTIFIER:
@@ -471,3 +502,17 @@ class Parser:
             and self.current_token().value.isspace()
         ):
             self.advance()
+
+    def lookahead_is_map_literal(self) -> bool:
+        # Look ahead to determine if the brace indicates a map literal
+        pos = self.pos
+        token = self.current_token()
+        if token.type == TokenType.BRACE_OPEN:
+            self.advance()
+            if self.current_token().type == TokenType.IDENTIFIER:
+                self.advance()
+                if self.current_token().type == TokenType.COLON:
+                    self.pos = pos  # Reset position
+                    return True
+        self.pos = pos  # Reset position
+        return False
