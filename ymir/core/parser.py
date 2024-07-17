@@ -48,6 +48,8 @@ class Parser:
     def parse(self) -> List[ASTNode]:
         statements = []
         while self.current_token().type != TokenType.EOF:
+            while self.current_token().type == TokenType.NEWLINE:
+                self.advance()
             print(f"Parsing statement: {self.current_token()}")  # Debug print
             statements.append(self.parse_statement())
         return statements
@@ -62,7 +64,11 @@ class Parser:
         self.pos += 1
 
     def parse_statement(self) -> ASTNode:
+        while self.current_token().type == TokenType.NEWLINE:
+            self.advance()
         token = self.current_token()
+        if token.type == TokenType.EOF:
+            return None  # Gracefully handle EOF
         if token.type == TokenType.KEYWORD:
             if token.value == "module":
                 return self.parse_module_def()
@@ -92,15 +98,15 @@ class Parser:
                 return self.parse_return_statement()
         elif token.type == TokenType.IDENTIFIER:
             return self.parse_assignment_or_expression()
+        elif token.type == TokenType.BRACE_OPEN:
+            return self.parse_block()
         raise SyntaxError(f"Unexpected token: {token}")
 
     def parse_module_def(self) -> ModuleDef:
         self.advance()  # Skip 'module'
         name_token = self.current_token()
         self.expect_token(TokenType.IDENTIFIER)
-        self.advance()  # Skip module name
         self.expect_token(TokenType.NEWLINE)
-        self.advance()  # Skip newline
         body = []
         while self.current_token().type != TokenType.EOF:
             if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "module":
@@ -112,26 +118,21 @@ class Parser:
         self.advance()  # Skip 'import'
         module_name = self.current_token().value.strip('"')
         self.expect_token(TokenType.STRING)
-        self.advance()  # Skip the string token
         return ImportDef(module_name)
 
     def parse_export_def(self) -> ExportDef:
         self.advance()  # Skip 'export'
         name_token = self.current_token()
         self.expect_token(TokenType.IDENTIFIER)
-        self.advance()  # Skip the identifier
         self.expect_token(TokenType.OPERATOR, "=")
-        self.advance()  # Skip '='
         value = self.parse_expression()
         self.expect_token(TokenType.NEWLINE)
-        self.advance()  # Skip newline
         return ExportDef(name_token.value, value)
 
     def parse_for_loop(self) -> ASTNode:
         self.advance()  # Skip 'for'
         var_token = self.current_token()
         self.expect_token(TokenType.IDENTIFIER)
-        self.advance()
         if self.current_token().type == TokenType.BRACKET_OPEN:
             return self.parse_cstyle_for_loop()
         if self.current_token().value == "in":
@@ -141,22 +142,18 @@ class Parser:
     def parse_for_in_loop(self, var_token: Token) -> ForInLoop:
         self.advance()  # Skip 'in'
         iterable = self.parse_expression()
-        self.expect_token(TokenType.BRACE_OPEN)
         body = self.parse_block()
-        self.expect_token(TokenType.BRACE_CLOSE)
         return ForInLoop(var_token.value, iterable, body)
 
     def parse_cstyle_for_loop(self) -> ForCStyleLoop:
         self.advance()  # Skip '('
         init = self.parse_expression()
-        self.expect_token(TokenType.DELIMITER)  # Expect ';'
+        self.expect_token(TokenType.SEMICOLON)  # Expect ';'
         condition = self.parse_expression()
-        self.expect_token(TokenType.DELIMITER)  # Expect ';'
+        self.expect_token(TokenType.SEMICOLON)  # Expect ';'
         increment = self.parse_expression()
         self.expect_token(TokenType.BRACKET_CLOSE)  # Expect ')'
-        self.expect_token(TokenType.BRACE_OPEN)
         body = self.parse_block()
-        self.expect_token(TokenType.BRACE_CLOSE)
         return ForCStyleLoop(init, condition, increment, body)
 
     def parse_continue(self) -> Continue:
@@ -173,19 +170,18 @@ class Parser:
 
     def parse_function_def(self, as_async=False) -> FunctionDef:
         self.advance()  # skip 'func'
+        self.skip_whitespace()
         name = self.current_token().value
         self.advance()  # skip function name
+        self.skip_whitespace()
         params, param_types = self.parse_parameters()
+        self.skip_whitespace()
         if self.current_token().type == TokenType.OPERATOR and self.current_token().value == "->":
             self.advance()  # skip '->'
             return_type = self.parse_type_annotation()
         else:
             return_type = None
-        self.expect_token(TokenType.BRACE_OPEN)
-        self.advance()  # Skip '{'
         body = self.parse_block()
-        self.expect_token(TokenType.BRACE_CLOSE)
-        self.advance()  # Skip '}'
         return (
             AsyncFunctionDef(name, params, param_types, return_type, body)
             if as_async
@@ -202,44 +198,56 @@ class Parser:
 
     def parse_class_def(self) -> ClassDef:
         self.advance()  # skip 'class'
+        self.skip_whitespace()
         name = self.current_token().value
         self.advance()  # skip class name
+        self.skip_whitespace()
         base_class = None
         if self.current_token().type == TokenType.COLON:
             self.advance()  # skip ':'
             base_class = self.current_token().value
             self.advance()  # skip base class name
         self.expect_token(TokenType.BRACE_OPEN)
-        methods = self.parse_methods()
+        methods, members = self.parse_class_members()
         self.expect_token(TokenType.BRACE_CLOSE)
-        return ClassDef(name, base_class, methods)
+        return ClassDef(name, base_class, methods, members)
 
-    def parse_methods(self) -> List[FunctionDef]:
+    def parse_class_members(self) -> Tuple[List[FunctionDef], List[ASTNode]]:
         methods = []
+        members = []
         while self.current_token().type != TokenType.BRACE_CLOSE:
-            methods.append(self.parse_function_def())
-        return methods
+            self.skip_whitespace()
+            if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "func":
+                methods.append(self.parse_function_def())
+            else:
+                # Handle other class members if necessary
+                members.append(self.parse_statement())
+            self.skip_whitespace()
+        return methods, members
 
     def parse_if_statement(self) -> IfStatement:
         self.advance()  # skip 'if'
+        self.skip_whitespace()
+        self.expect_token(TokenType.PAREN_OPEN)
         condition = self.parse_expression()
-        self.expect_token(TokenType.BRACE_OPEN)
+        self.expect_token(TokenType.PAREN_CLOSE)
+        self.skip_whitespace()
         then_body = self.parse_block()
-        self.expect_token(TokenType.BRACE_CLOSE)
+        self.skip_whitespace()
         else_body = None
         if self.current_token().value == "else":
             self.advance()  # skip 'else'
-            self.expect_token(TokenType.BRACE_OPEN)
             else_body = self.parse_block()
-            self.expect_token(TokenType.BRACE_CLOSE)
         return IfStatement(condition, then_body, else_body)
 
     def parse_while_statement(self) -> WhileStatement:
         self.advance()  # skip 'while'
+        self.skip_whitespace()
+        self.expect_token(TokenType.PAREN_OPEN)
         condition = self.parse_expression()
-        self.expect_token(TokenType.BRACE_OPEN)
+        self.expect_token(TokenType.PAREN_CLOSE)
+        self.skip_whitespace()
         body = self.parse_block()
-        self.expect_token(TokenType.BRACE_CLOSE)
         return WhileStatement(condition, body)
 
     def parse_assignment_or_expression(self) -> ASTNode:
@@ -281,24 +289,26 @@ class Parser:
     def parse_parameters(self) -> Tuple[List[str], List[Type]]:
         params = []
         param_types = []
+        self.skip_whitespace()
         if self.current_token().type == TokenType.PAREN_OPEN:
             self.advance()  # Skip '('
+            while self.current_token().type != TokenType.PAREN_CLOSE:
+                self.skip_whitespace()
+                param_name = self.current_token().value
+                self.advance()  # Skip parameter name
+                self.skip_whitespace()
+                self.advance()  # Skip ':'
+                self.skip_whitespace()
+                param_type = self.parse_type_annotation()
+                params.append(param_name)
+                param_types.append(param_type)
+                self.skip_whitespace()
+                if self.current_token().type == TokenType.COMMA:
+                    self.advance()  # Skip ','
+                    self.skip_whitespace()
+            self.advance()  # Skip ')'
         else:
             raise SyntaxError(f"Expected TokenType.PAREN_OPEN, got {self.current_token()}")
-        while self.current_token().type != TokenType.PAREN_CLOSE:
-            print(f"Current token (param name): {self.current_token()}")  # Debug print
-            param_name = self.current_token().value
-            self.advance()
-            print(f"Current token (expect colon): {self.current_token()}")  # Debug print
-            self.expect_token(TokenType.COLON)  # Ensure there's a colon after the parameter name
-            self.advance()  # Skip ':'
-            param_type = self.parse_type_annotation()
-            params.append(param_name)
-            param_types.append(param_type)
-            if self.current_token().type == TokenType.COMMA:
-                self.advance()
-        self.expect_token(TokenType.PAREN_CLOSE)  # Ensure there's a closing parenthesis
-        self.advance()  # Skip ')'
         return params, param_types
 
     def parse_arguments(self) -> List[ASTNode]:
@@ -311,11 +321,18 @@ class Parser:
 
     def parse_block(self) -> List[ASTNode]:
         statements = []
+        self.expect_token(TokenType.BRACE_OPEN)
         while self.current_token().type != TokenType.BRACE_CLOSE:
+            if self.current_token().type == TokenType.EOF:
+                break
             statements.append(self.parse_statement())
+            while self.current_token().type == TokenType.NEWLINE:
+                self.advance()
+        self.expect_token(TokenType.BRACE_CLOSE)
         return statements
 
     def parse_expression(self) -> ASTNode:
+        self.skip_whitespace()
         token = self.current_token()
         if token.type == TokenType.LITERAL:
             self.advance()
@@ -339,18 +356,30 @@ class Parser:
         elif token.type == TokenType.IDENTIFIER:
             identifier = token.value
             self.advance()
+            self.skip_whitespace()
             if self.current_token().type == TokenType.OPERATOR:
                 operator = self.current_token().value
                 self.advance()
+                self.skip_whitespace()
                 right = self.parse_expression()
                 return BinaryOp(identifier, operator, right)
-            return self.parse_expression_with_prefix(identifier)
+            elif self.current_token().type == TokenType.PAREN_OPEN:
+                self.advance()  # skip '('
+                args = self.parse_arguments()
+                self.expect_token(TokenType.PAREN_CLOSE)
+                return FunctionCall(identifier, args)
+            elif self.current_token().type == TokenType.OPERATOR and self.current_token().value == ".":
+                self.advance()  # skip '.'
+                return self.parse_expression_with_prefix(identifier)
+            return Expression(identifier)
         else:
             left = self.current_token().value
             self.advance()
+            self.skip_whitespace()
             if self.current_token().type == TokenType.OPERATOR:
                 operator = self.current_token().value
                 self.advance()
+                self.skip_whitespace()
                 right = self.parse_expression()
                 return BinaryOp(left, operator, right)
             return Expression(left)
@@ -433,3 +462,12 @@ class Parser:
             return  # Gracefully handle EOF when a newline is expected
         if token.type != type or (value and token.value != value):
             raise SyntaxError(f"Expected {type}({value}), got {token}")
+        self.advance()
+
+    def skip_whitespace(self):
+        while (
+            isinstance(self.current_token().value, str)
+            and self.current_token().type != TokenType.EOF
+            and self.current_token().value.isspace()
+        ):
+            self.advance()

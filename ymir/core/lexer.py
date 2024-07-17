@@ -21,6 +21,7 @@ class TokenType(Enum):
     PAREN_CLOSE = auto()
     COLON = auto()
     COMMA = auto()
+    SEMICOLON = auto()
 
 
 class Token:
@@ -89,6 +90,7 @@ class Lexer:
             ("PAREN_CLOSE", r"\)"),
             ("COLON", r":"),
             ("COMMA", r","),
+            ("SEMICOLON", r";"),
             ("NEWLINE", r"\n"),
             ("SKIP", r"[ \t]+"),
             ("COMMENT", r"#.*"),
@@ -130,6 +132,7 @@ class Lexer:
                 "PAREN_CLOSE",
                 "COLON",
                 "COMMA",
+                "SEMICOLON",
             }:
                 token = Token(getattr(TokenType, type), value, line_number, column)
             elif type == "NEWLINE":

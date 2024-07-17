@@ -230,3 +230,100 @@ def test_unexpected_character():
     lexer = Lexer(source_code)
     with pytest.raises(RuntimeError, match=r"Unexpected character '@' on line 1"):
         lexer.tokenize()
+
+
+def test_tokenize_if_statement():
+    source_code = "if (x > 0) { return x }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    expected_tokens = [
+        Token(TokenType.KEYWORD, "if", 1, 0),
+        Token(TokenType.PAREN_OPEN, "(", 1, 3),
+        Token(TokenType.IDENTIFIER, "x", 1, 4),
+        Token(TokenType.OPERATOR, ">", 1, 6),
+        Token(TokenType.LITERAL, 0, 1, 8),
+        Token(TokenType.PAREN_CLOSE, ")", 1, 9),
+        Token(TokenType.BRACE_OPEN, "{", 1, 11),
+        Token(TokenType.KEYWORD, "return", 1, 13),
+        Token(TokenType.IDENTIFIER, "x", 1, 20),
+        Token(TokenType.BRACE_CLOSE, "}", 1, 22),
+        Token(TokenType.EOF, "", 1, 23),
+    ]
+    assert tokens == expected_tokens
+
+
+def test_tokenize_while_statement():
+    source_code = "while (x < 10) { x = x + 1 }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    expected_tokens = [
+        Token(TokenType.KEYWORD, "while", 1, 0),
+        Token(TokenType.PAREN_OPEN, "(", 1, 6),
+        Token(TokenType.IDENTIFIER, "x", 1, 7),
+        Token(TokenType.OPERATOR, "<", 1, 9),
+        Token(TokenType.LITERAL, 10, 1, 11),
+        Token(TokenType.PAREN_CLOSE, ")", 1, 13),
+        Token(TokenType.BRACE_OPEN, "{", 1, 15),
+        Token(TokenType.IDENTIFIER, "x", 1, 17),
+        Token(TokenType.OPERATOR, "=", 1, 19),
+        Token(TokenType.IDENTIFIER, "x", 1, 21),
+        Token(TokenType.OPERATOR, "+", 1, 23),
+        Token(TokenType.LITERAL, 1, 1, 25),
+        Token(TokenType.BRACE_CLOSE, "}", 1, 27),
+        Token(TokenType.EOF, "", 1, 28),
+    ]
+    assert tokens == expected_tokens
+
+
+def test_tokenize_for_in_loop():
+    source_code = "for x in array { x = x + 1 }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    expected_tokens = [
+        Token(TokenType.KEYWORD, "for", 1, 0),
+        Token(TokenType.IDENTIFIER, "x", 1, 4),
+        Token(TokenType.KEYWORD, "in", 1, 6),
+        Token(TokenType.KEYWORD, "array", 1, 9),
+        Token(TokenType.BRACE_OPEN, "{", 1, 15),
+        Token(TokenType.IDENTIFIER, "x", 1, 17),
+        Token(TokenType.OPERATOR, "=", 1, 19),
+        Token(TokenType.IDENTIFIER, "x", 1, 21),
+        Token(TokenType.OPERATOR, "+", 1, 23),
+        Token(TokenType.LITERAL, 1, 1, 25),
+        Token(TokenType.BRACE_CLOSE, "}", 1, 27),
+        Token(TokenType.EOF, "", 1, 28),
+    ]
+    assert tokens == expected_tokens
+
+
+def test_tokenize_cstyle_for_loop():
+    source_code = "for (i = 0; i < 10; i = i + 1) { x = x + 1 }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    expected_tokens = [
+        Token(TokenType.KEYWORD, "for", 1, 0),
+        Token(TokenType.PAREN_OPEN, "(", 1, 4),
+        Token(TokenType.IDENTIFIER, "i", 1, 5),
+        Token(TokenType.OPERATOR, "=", 1, 7),
+        Token(TokenType.LITERAL, 0, 1, 9),
+        Token(TokenType.SEMICOLON, ";", 1, 10),
+        Token(TokenType.IDENTIFIER, "i", 1, 12),
+        Token(TokenType.OPERATOR, "<", 1, 14),
+        Token(TokenType.LITERAL, 10, 1, 16),
+        Token(TokenType.SEMICOLON, ";", 1, 18),
+        Token(TokenType.IDENTIFIER, "i", 1, 20),
+        Token(TokenType.OPERATOR, "=", 1, 22),
+        Token(TokenType.IDENTIFIER, "i", 1, 24),
+        Token(TokenType.OPERATOR, "+", 1, 26),
+        Token(TokenType.LITERAL, 1, 1, 28),
+        Token(TokenType.PAREN_CLOSE, ")", 1, 29),
+        Token(TokenType.BRACE_OPEN, "{", 1, 31),
+        Token(TokenType.IDENTIFIER, "x", 1, 33),
+        Token(TokenType.OPERATOR, "=", 1, 35),
+        Token(TokenType.IDENTIFIER, "x", 1, 37),
+        Token(TokenType.OPERATOR, "+", 1, 39),
+        Token(TokenType.LITERAL, 1, 1, 41),
+        Token(TokenType.BRACE_CLOSE, "}", 1, 43),
+        Token(TokenType.EOF, "", 1, 44),
+    ]
+    assert tokens == expected_tokens

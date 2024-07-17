@@ -2,12 +2,15 @@
 
 from ymir.core.ast import (  # StringLiteral,
     BinaryOp,
+    ClassDef,
     ExportDef,
     Expression,
     FunctionDef,
+    IfStatement,
     ImportDef,
     ModuleDef,
     ReturnStatement,
+    WhileStatement,
 )
 from ymir.core.lexer import Lexer  # , Token, TokenType
 from ymir.core.parser import Parser
@@ -89,42 +92,64 @@ def test_parse_function_def():
     assert isinstance(ast[0].body[0], ReturnStatement)
 
 
-# def test_parse_class_def():
-#     source_code = "class Calculator { func add(a: int, b: int) -> int { return a + b } }"
-#     lexer = Lexer(source_code)
-#     tokens = lexer.tokenize()
-#     parser = Parser(tokens)
-#     ast = parser.parse()
+def test_parse_class_def():
+    source_code = "class Calculator { func add(a: int, b: int) -> int { return a + b } }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    ast = parser.parse()
 
-#     assert isinstance(ast[0], ClassDef)
-#     assert ast[0].name == "Calculator"
-#     assert len(ast[0].methods) == 1
-#     assert isinstance(ast[0].methods[0], FunctionDef)
-
-
-# def test_parse_if_statement():
-#     source_code = "if a > b { return a } else { return b }"
-#     lexer = Lexer(source_code)
-#     tokens = lexer.tokenize()
-#     parser = Parser(tokens)
-#     ast = parser.parse()
-
-#     assert isinstance(ast[0], IfStatement)
-#     assert isinstance(ast[0].condition, BinaryOp)
-#     assert len(ast[0].then_body) == 1
-#     assert len(ast[0].else_body) == 1
+    assert isinstance(ast[0], ClassDef)
+    assert ast[0].name == "Calculator"
+    assert len(ast[0].methods) == 1
+    assert isinstance(ast[0].methods[0], FunctionDef)
 
 
-# def test_parse_while_statement():
-#     source_code = "while a > b { a = a - 1 }"
-#     lexer = Lexer(source_code)
-#     tokens = lexer.tokenize()
-#     parser = Parser(tokens)
-#     ast = parser.parse()
+def test_parse_if_statement():
+    source_code = "if (a > b) { return a } else { return b }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    print(tokens)
+    parser = Parser(tokens)
+    ast = parser.parse()
 
-#     assert isinstance(ast[0], WhileStatement)
-#     assert isinstance(ast[0].condition, BinaryOp)
-#     assert len(ast[0].body) == 1
+    assert isinstance(ast[0], IfStatement)
+    assert isinstance(ast[0].condition, BinaryOp)
+    assert len(ast[0].then_body) == 1
+    assert len(ast[0].else_body) == 1
+
+
+def test_parse_multiline_if_statement():
+    source_code = """
+    if (a > b) {
+        return a
+    } else {
+        return b
+    }
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    ast = parser.parse()
+
+    assert isinstance(ast[0], IfStatement)
+    assert isinstance(ast[0].condition, BinaryOp)
+    assert len(ast[0].then_body) == 1
+    assert isinstance(ast[0].then_body[0], ReturnStatement)
+    assert len(ast[0].else_body) == 1
+    assert isinstance(ast[0].else_body[0], ReturnStatement)
+
+
+def test_parse_while_statement():
+    source_code = "while (a > b) { a = a - 1 }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    ast = parser.parse()
+
+    assert isinstance(ast[0], WhileStatement)
+    assert isinstance(ast[0].condition, BinaryOp)
+    assert len(ast[0].body) == 1
 
 
 # def test_parse_for_in_loop():
