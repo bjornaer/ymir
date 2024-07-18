@@ -118,10 +118,9 @@ class TypeChecker:
 
     def visit_assignment(self, node: Assignment):
         value_type = self.visit_expression(node.value)
-        if node.var_type and value_type != node.var_type:
-            raise TypeError(f"Type mismatch: expected {node.var_type}, got {value_type}")
+        if node.type and value_type != node.type:
+            raise TypeError(f"Type mismatch: expected {node.type}, got {value_type}")
         self.symbol_table[node.target] = value_type
-        return value_type
 
     def visit_function_call(self, node: FunctionCall):
         func = self.symbol_table.get(node.func_name)

@@ -293,12 +293,20 @@ class CodeGenerator:
             return self.builder.add(left, ir.Constant(ir.IntType(32), 1), name="inc")
         elif node.operator == "--":
             return self.builder.sub(left, ir.Constant(ir.IntType(32), 1), name="dec")
+        elif node.operator == "+=":
+            return self.builder.add(left, right, name="addtmp")
+        elif node.operator == "%":
+            return self.builder.srem(left, right, name="modtmp")
         else:
             raise ValueError(f"Unknown operator: {node.operator}")
 
     def visit_assignment(self, node: Assignment) -> ir.AllocaInstr:
         value = self.visit_expression(node.value)
-        var_address = self.builder.alloca(value.type, name=node.target)
+        if node.type:
+            var_type = self.get_ir_type(node.type)
+            var_address = self.builder.alloca(var_type, name=node.target)
+        else:
+            var_address = self.builder.alloca(value.type, name=node.target)
         self.builder.store(value, var_address)
         self.local_scope[node.target] = var_address
         return var_address

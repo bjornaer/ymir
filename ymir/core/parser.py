@@ -98,6 +98,8 @@ class Parser:
                 return self.parse_await_expression()
             elif token.value == "return":
                 return self.parse_return_statement()
+            elif token.value == "var":
+                return self.parse_variable_declaration()
         elif token.type == TokenType.IDENTIFIER:
             return self.parse_assignment_or_expression()
         elif token.type == TokenType.BRACE_OPEN:
@@ -241,18 +243,21 @@ class Parser:
         return methods, members
 
     def parse_if_statement(self) -> IfStatement:
-        self.advance()  # skip 'if'
-        self.skip_whitespace()
+        self.expect_token(TokenType.KEYWORD, "if")
         self.expect_token(TokenType.PAREN_OPEN)
         condition = self.parse_expression()
         self.expect_token(TokenType.PAREN_CLOSE)
+
         self.skip_whitespace()
-        then_body = self.parse_block()
+        then_body = self.parse_block()  # parse_block handles the braces
+
         self.skip_whitespace()
         else_body = None
-        if self.current_token().value == "else":
-            self.advance()  # skip 'else'
-            else_body = self.parse_block()
+        if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "else":
+            self.advance()
+            self.skip_whitespace()
+            else_body = self.parse_block()  # parse_block handles the braces
+
         return IfStatement(condition, then_body, else_body)
 
     def parse_while_statement(self) -> WhileStatement:
@@ -268,11 +273,20 @@ class Parser:
     def parse_assignment_or_expression(self) -> ASTNode:
         name = self.current_token().value
         self.advance()  # skip identifier
-        if self.current_token().type == TokenType.OPERATOR and self.current_token().value == "=":
-            self.advance()  # skip '='
-            value = self.parse_expression()
-            var_type = self.parse_type_annotation()
-            return Assignment(name, value, var_type)
+        if self.current_token().type == TokenType.OPERATOR:
+            if self.current_token().value == "=":
+                self.advance()  # skip '='
+                value = self.parse_expression()
+                var_type = self.parse_type_annotation()
+                return Assignment(name, value, var_type)
+            elif self.current_token().value == "++":
+                self.advance()  # skip '++'
+                return Assignment(name, BinaryOp(Expression(name), "+", Expression(1)))
+            elif self.current_token().value in {"+=", "-=", "*=", "/="}:
+                operator = self.current_token().value[0]  # get the operator part of '+=', '-=', etc.
+                self.advance()  # skip operator
+                value = self.parse_expression()
+                return Assignment(name, BinaryOp(Expression(name), operator, value))
         elif self.current_token().type == TokenType.PAREN_OPEN:
             self.advance()  # skip '('
             args = self.parse_arguments()
@@ -363,6 +377,24 @@ class Parser:
         return statements
 
     def parse_expression(self) -> ASTNode:
+        left = self.parse_primary()
+        while self.current_token().type in {TokenType.OPERATOR, TokenType.DOT}:
+            if self.current_token().type == TokenType.OPERATOR:
+                operator = self.current_token().value
+                self.advance()
+                right = self.parse_expression()
+                left = BinaryOp(left, operator, right)
+            elif self.current_token().type == TokenType.DOT:
+                self.advance()
+                method_name = self.current_token().value
+                self.expect_token(TokenType.IDENTIFIER)
+                self.expect_token(TokenType.PAREN_OPEN)
+                args = self.parse_arguments()
+                self.expect_token(TokenType.PAREN_CLOSE)
+                left = MethodCall(left, method_name, args)
+        return left
+
+    def parse_primary(self) -> ASTNode:
         self.skip_whitespace()
         token = self.current_token()
         if token.type == TokenType.LITERAL:
@@ -388,32 +420,19 @@ class Parser:
             identifier = token.value
             self.advance()
             self.skip_whitespace()
-            if self.current_token().type == TokenType.OPERATOR:
-                operator = self.current_token().value
-                self.advance()
-                self.skip_whitespace()
-                right = self.parse_expression()
-                return BinaryOp(identifier, operator, right)
-            elif self.current_token().type == TokenType.PAREN_OPEN:
+            if self.current_token().type == TokenType.PAREN_OPEN:
                 self.advance()  # skip '('
                 args = self.parse_arguments()
                 self.expect_token(TokenType.PAREN_CLOSE)
                 return FunctionCall(identifier, args)
-            elif self.current_token().type == TokenType.OPERATOR and self.current_token().value == ".":
-                self.advance()  # skip '.'
-                return self.parse_expression_with_prefix(identifier)
             return Expression(identifier)
-        else:
-            left = self.current_token().value
+        elif token.type == TokenType.PAREN_OPEN:
             self.advance()
-            self.skip_whitespace()
-            if self.current_token().type == TokenType.OPERATOR:
-                operator = self.current_token().value
-                self.advance()
-                self.skip_whitespace()
-                right = self.parse_expression()
-                return BinaryOp(left, operator, right)
-            return Expression(left)
+            expr = self.parse_expression()
+            self.expect_token(TokenType.PAREN_CLOSE)
+            return expr
+        else:
+            raise SyntaxError(f"Unexpected token: {token}")
 
     def parse_array_literal(self) -> ArrayLiteral:
         self.advance()  # skip '['
@@ -500,6 +519,7 @@ class Parser:
             isinstance(self.current_token().value, str)
             and self.current_token().type != TokenType.EOF
             and self.current_token().value.isspace()
+            or self.current_token().type == TokenType.NEWLINE
         ):
             self.advance()
 
@@ -516,3 +536,13 @@ class Parser:
                     return True
         self.pos = pos  # Reset position
         return False
+
+    def parse_variable_declaration(self) -> Assignment:
+        self.advance()  # Skip 'var'
+        name_token = self.current_token()
+        self.expect_token(TokenType.IDENTIFIER)
+        self.expect_token(TokenType.OPERATOR, ":")
+        var_type = self.parse_type_annotation()
+        self.expect_token(TokenType.OPERATOR, "=")
+        value = self.parse_expression()
+        return Assignment(name_token.value, value, var_type)

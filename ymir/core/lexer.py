@@ -22,6 +22,7 @@ class TokenType(Enum):
     COLON = auto()
     COMMA = auto()
     SEMICOLON = auto()
+    DOT = auto()  # Added to handle dot operator
 
 
 class Token:
@@ -76,12 +77,14 @@ class Lexer:
             "array",  # Type hint keywords
             "map",  # Type hint keywords
             "tuple",  # Type hint keywords
+            "var",
         }
         self.token_specification = [
             ("NUMBER", r"\d+(\.\d*)?"),
             ("ID", r"[A-Za-z_]\w*"),
             ("STRING", r"\".*?\""),
-            ("OP", r"[+\-*/=<>!]+"),
+            ("OP", r"(\+\+|\+=|[+\-*/%=<>!]+)"),  # Updated to include ++ and +=
+            ("DOT", r"\."),  # Added to handle dot operator
             ("BRACE_OPEN", r"\{"),
             ("BRACE_CLOSE", r"\}"),
             ("BRACKET_OPEN", r"\["),
