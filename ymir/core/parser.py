@@ -64,7 +64,8 @@ class Parser:
         self.pos += 1
 
     def parse_statement(self) -> ASTNode:
-        while self.current_token().type == TokenType.NEWLINE:
+        # Continuously skip newlines and comments
+        while self.current_token().type in {TokenType.NEWLINE, TokenType.COMMENT}:
             self.advance()
         token = self.current_token()
         if token.type == TokenType.EOF:
@@ -426,6 +427,16 @@ class Parser:
                 self.expect_token(TokenType.PAREN_CLOSE)
                 return FunctionCall(identifier, args)
             return Expression(identifier)
+        elif token.type == TokenType.KEYWORD:
+            identifier = token.value
+            self.advance()
+            self.skip_whitespace()
+            if self.current_token().type == TokenType.PAREN_OPEN:
+                self.advance()  # skip '('
+                args = self.parse_arguments()
+                self.expect_token(TokenType.PAREN_CLOSE)
+                return FunctionCall(identifier, args)
+            return Expression(identifier)
         elif token.type == TokenType.PAREN_OPEN:
             self.advance()
             expr = self.parse_expression()
@@ -541,7 +552,7 @@ class Parser:
         self.advance()  # Skip 'var'
         name_token = self.current_token()
         self.expect_token(TokenType.IDENTIFIER)
-        self.expect_token(TokenType.OPERATOR, ":")
+        self.expect_token(TokenType.COLON, ":")
         var_type = self.parse_type_annotation()
         self.expect_token(TokenType.OPERATOR, "=")
         value = self.parse_expression()
