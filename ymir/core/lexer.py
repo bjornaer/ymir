@@ -22,7 +22,7 @@ class TokenType(Enum):
     COLON = auto()
     COMMA = auto()
     SEMICOLON = auto()
-    DOT = auto()  # Added to handle dot operator
+    DOT = auto()
 
 
 class Token:

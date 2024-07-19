@@ -287,6 +287,10 @@ class Parser:
                 self.advance()  # skip operator
                 value = self.parse_expression()
                 return Assignment(name, BinaryOp(Expression(name), operator, value))
+            else:
+                # Handle binary operations
+                left = Expression(name)
+                return self.parse_binary_expression(left)
         elif self.current_token().type == TokenType.PAREN_OPEN:
             self.advance()  # skip '('
             args = self.parse_arguments()
@@ -304,10 +308,6 @@ class Parser:
         elif self.current_token().type == TokenType.NEWLINE:
             self.advance()  # skip newline
             return Expression(name)
-        elif self.current_token().type == TokenType.OPERATOR:
-            # Handle binary operations
-            left = Expression(name)
-            return self.parse_binary_expression(left)
         raise SyntaxError(f"Unexpected token: {self.current_token()} after identifier")
 
     def parse_binary_expression(self, left: ASTNode) -> ASTNode:
