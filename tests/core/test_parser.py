@@ -406,189 +406,201 @@ def test_parse_comments():
     assert ast[2].value.right.expression == "b"
 
 
-# def test_parse_binary_operators():
-#     source_code = """
-#     var a: int = 1
-#     var b: int = 2
-#     var c: int = a + b
-#     var d: int = a - b
-#     var e: int = a * b
-#     var f: int = a / b
-#     var g: int = a // b
-#     var h: int = a ** b
-#     var i: int = a % b
-#     var j: int = a == b
-#     var k: int = a != b
-#     var l: int = a += b
-#     var m: int = a -= b
-#     var n: int = a *= b
-#     var o: int = a /= b
-#     var p: int = a //= b
-#     var q: int = a **= b
-#     var r: int = a %= b
-#     var s: int = a++
-#     var t: int = a--
-#     """
-#     lexer = Lexer(source_code)
-#     tokens = lexer.tokenize()
-#     parser = Parser(tokens)
-#     ast = parser.parse()
+def test_parse_binary_operators():
+    source_code = """
+    var a: int = 1
+    var b: int = 2
+    var c: int = a + b
+    var d: int = a - b
+    var e: int = a * b
+    var f: int = a / b
+    var g: int = a // b
+    var h: int = a ** b
+    var i: int = a % b
+    var j: int = a == b
+    var k: int = a != b
+    var l: int = a += b
+    var m: int = a -= b
+    var n: int = a *= b
+    var o: int = a /= b
+    var p: int = a //= b
+    var q: int = a **= b
+    var r: int = a %= b
+    a++
+    var s: int = a
+    a--
+    var t: int = a
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    ast = parser.parse()
 
-#     assert isinstance(ast[0], Assignment)
-#     assert ast[0].name == "a"
-#     assert ast[0].var_type == IntType()
-#     assert isinstance(ast[0].value, Expression)
-#     assert ast[0].value.value == 1
+    assert isinstance(ast[0], Assignment)
+    assert ast[0].target == "a"
+    assert isinstance(ast[0].var_type, IntType)
+    assert isinstance(ast[0].value, Expression)
+    assert ast[0].value.expression == 1
 
-#     assert isinstance(ast[1], Assignment)
-#     assert ast[1].name == "b"
-#     assert ast[1].var_type == IntType()
-#     assert isinstance(ast[1].value, Expression)
-#     assert ast[1].value.value == 2
+    assert isinstance(ast[1], Assignment)
+    assert ast[1].target == "b"
+    assert isinstance(ast[1].var_type, IntType)
+    assert isinstance(ast[1].value, Expression)
+    assert ast[1].value.expression == 2
 
-#     assert isinstance(ast[2], Assignment)
-#     assert ast[2].name == "c"
-#     assert ast[2].var_type == IntType()
-#     assert isinstance(ast[2].value, BinaryOp)
-#     assert ast[2].value.operator == "+"
-#     assert ast[2].value.left.value == "a"
-#     assert ast[2].value.right.value == "b"
+    assert isinstance(ast[2], Assignment)
+    assert ast[2].target == "c"
+    assert isinstance(ast[2].var_type, IntType)
+    assert isinstance(ast[2].value, BinaryOp)
+    assert ast[2].value.operator == "+"
+    assert ast[2].value.left.expression == "a"
+    assert ast[2].value.right.expression == "b"
 
-#     assert isinstance(ast[3], Assignment)
-#     assert ast[3].name == "d"
-#     assert ast[3].var_type == IntType()
-#     assert isinstance(ast[3].value, BinaryOp)
-#     assert ast[3].value.operator == "-"
-#     assert ast[3].value.left.value == "a"
-#     assert ast[3].value.right.value == "b"
+    assert isinstance(ast[3], Assignment)
+    assert ast[3].target == "d"
+    assert isinstance(ast[3].var_type, IntType)
+    assert isinstance(ast[3].value, BinaryOp)
+    assert ast[3].value.operator == "-"
+    assert ast[3].value.left.expression == "a"
+    assert ast[3].value.right.expression == "b"
 
-#     assert isinstance(ast[4], Assignment)
-#     assert ast[4].name == "e"
-#     assert ast[4].var_type == IntType()
-#     assert isinstance(ast[4].value, BinaryOp)
-#     assert ast[4].value.operator == "*"
-#     assert ast[4].value.left.value == "a"
-#     assert ast[4].value.right.value == "b"
+    assert isinstance(ast[4], Assignment)
+    assert ast[4].target == "e"
+    assert isinstance(ast[4].var_type, IntType)
+    assert isinstance(ast[4].value, BinaryOp)
+    assert ast[4].value.operator == "*"
+    assert ast[4].value.left.expression == "a"
+    assert ast[4].value.right.expression == "b"
 
-#     assert isinstance(ast[5], Assignment)
-#     assert ast[5].name == "f"
-#     assert ast[5].var_type == IntType()
-#     assert isinstance(ast[5].value, BinaryOp)
-#     assert ast[5].value.operator == "/"
-#     assert ast[5].value.left.value == "a"
-#     assert ast[5].value.right.value == "b"
+    assert isinstance(ast[5], Assignment)
+    assert ast[5].target == "f"
+    assert isinstance(ast[5].var_type, IntType)
+    assert isinstance(ast[5].value, BinaryOp)
+    assert ast[5].value.operator == "/"
+    assert ast[5].value.left.expression == "a"
+    assert ast[5].value.right.expression == "b"
 
-#     assert isinstance(ast[6], Assignment)
-#     assert ast[6].name == "g"
-#     assert ast[6].var_type == IntType()
-#     assert isinstance(ast[6].value, BinaryOp)
-#     assert ast[6].value.operator == "//"
-#     assert ast[6].value.left.value == "a"
-#     assert ast[6].value.right.value == "b"
+    assert isinstance(ast[6], Assignment)
+    assert ast[6].target == "g"
+    assert isinstance(ast[6].var_type, IntType)
+    assert isinstance(ast[6].value, BinaryOp)
+    assert ast[6].value.operator == "//"
+    assert ast[6].value.left.expression == "a"
+    assert ast[6].value.right.expression == "b"
 
-#     assert isinstance(ast[7], Assignment)
-#     assert ast[7].name == "h"
-#     assert ast[7].var_type == IntType()
-#     assert isinstance(ast[7].value, BinaryOp)
-#     assert ast[7].value.operator == "**"
-#     assert ast[7].value.left.value == "a"
-#     assert ast[7].value.right.value == "b"
+    assert isinstance(ast[7], Assignment)
+    assert ast[7].target == "h"
+    assert isinstance(ast[7].var_type, IntType)
+    assert isinstance(ast[7].value, BinaryOp)
+    assert ast[7].value.operator == "**"
+    assert ast[7].value.left.expression == "a"
+    assert ast[7].value.right.expression == "b"
 
-#     assert isinstance(ast[8], Assignment)
-#     assert ast[8].name == "i"
-#     assert ast[8].var_type == IntType()
-#     assert isinstance(ast[8].value, BinaryOp)
-#     assert ast[8].value.operator == "%"
-#     assert ast[8].value.left.value == "a"
-#     assert ast[8].value.right.value == "b"
+    assert isinstance(ast[8], Assignment)
+    assert ast[8].target == "i"
+    assert isinstance(ast[8].var_type, IntType)
+    assert isinstance(ast[8].value, BinaryOp)
+    assert ast[8].value.operator == "%"
+    assert ast[8].value.left.expression == "a"
+    assert ast[8].value.right.expression == "b"
 
-#     assert isinstance(ast[9], Assignment)
-#     assert ast[9].name == "j"
-#     assert ast[9].var_type == IntType()
-#     assert isinstance(ast[9].value, BinaryOp)
-#     assert ast[9].value.operator == "=="
-#     assert ast[9].value.left.value == "a"
-#     assert ast[9].value.right.value == "b"
+    assert isinstance(ast[9], Assignment)
+    assert ast[9].target == "j"
+    assert isinstance(ast[9].var_type, IntType)
+    assert isinstance(ast[9].value, BinaryOp)
+    assert ast[9].value.operator == "=="
+    assert ast[9].value.left.expression == "a"
+    assert ast[9].value.right.expression == "b"
 
-#     assert isinstance(ast[10], Assignment)
-#     assert ast[10].name == "k"
-#     assert ast[10].var_type == IntType()
-#     assert isinstance(ast[10].value, BinaryOp)
-#     assert ast[10].value.operator == "!="
-#     assert ast[10].value.left.value == "a"
-#     assert ast[10].value.right.value == "b"
+    assert isinstance(ast[10], Assignment)
+    assert ast[10].target == "k"
+    assert isinstance(ast[10].var_type, IntType)
+    assert isinstance(ast[10].value, BinaryOp)
+    assert ast[10].value.operator == "!="
+    assert ast[10].value.left.expression == "a"
+    assert ast[10].value.right.expression == "b"
 
-#     assert isinstance(ast[11], Assignment)
-#     assert ast[11].name == "l"
-#     assert ast[11].var_type == IntType()
-#     assert isinstance(ast[11].value, BinaryOp)
-#     assert ast[11].value.operator == "+="
-#     assert ast[11].value.left.value == "a"
-#     assert ast[11].value.right.value == "b"
+    assert isinstance(ast[11], Assignment)
+    assert ast[11].target == "l"
+    assert isinstance(ast[11].var_type, IntType)
+    assert isinstance(ast[11].value, BinaryOp)
+    assert ast[11].value.operator == "+="
+    assert ast[11].value.left.expression == "a"
+    assert ast[11].value.right.expression == "b"
 
-#     assert isinstance(ast[12], Assignment)
-#     assert ast[12].name == "m"
-#     assert ast[12].var_type == IntType()
-#     assert isinstance(ast[12].value, BinaryOp)
-#     assert ast[12].value.operator == "-="
-#     assert ast[12].value.left.value == "a"
-#     assert ast[12].value.right.value == "b"
+    assert isinstance(ast[12], Assignment)
+    assert ast[12].target == "m"
+    assert isinstance(ast[12].var_type, IntType)
+    assert isinstance(ast[12].value, BinaryOp)
+    assert ast[12].value.operator == "-="
+    assert ast[12].value.left.expression == "a"
+    assert ast[12].value.right.expression == "b"
 
-#     assert isinstance(ast[13], Assignment)
-#     assert ast[13].name == "n"
-#     assert ast[13].var_type == IntType()
-#     assert isinstance(ast[13].value, BinaryOp)
-#     assert ast[13].value.operator == "*="
-#     assert ast[13].value.left.value == "a"
-#     assert ast[13].value.right.value == "b"
+    assert isinstance(ast[13], Assignment)
+    assert ast[13].target == "n"
+    assert isinstance(ast[13].var_type, IntType)
+    assert isinstance(ast[13].value, BinaryOp)
+    assert ast[13].value.operator == "*="
+    assert ast[13].value.left.expression == "a"
+    assert ast[13].value.right.expression == "b"
 
-#     assert isinstance(ast[14], Assignment)
-#     assert ast[14].name == "o"
-#     assert ast[14].var_type == IntType()
-#     assert isinstance(ast[14].value, BinaryOp)
-#     assert ast[14].value.operator == "/="
-#     assert ast[14].value.left.value == "a"
-#     assert ast[14].value.right.value == "b"
+    assert isinstance(ast[14], Assignment)
+    assert ast[14].target == "o"
+    assert isinstance(ast[14].var_type, IntType)
+    assert isinstance(ast[14].value, BinaryOp)
+    assert ast[14].value.operator == "/="
+    assert ast[14].value.left.expression == "a"
+    assert ast[14].value.right.expression == "b"
 
-#     assert isinstance(ast[15], Assignment)
-#     assert ast[15].name == "p"
-#     assert ast[15].var_type == IntType()
-#     assert isinstance(ast[15].value, BinaryOp)
-#     assert ast[15].value.operator == "//="
-#     assert ast[15].value.left.value == "a"
-#     assert ast[15].value.right.value == "b"
+    assert isinstance(ast[15], Assignment)
+    assert ast[15].target == "p"
+    assert isinstance(ast[15].var_type, IntType)
+    assert isinstance(ast[15].value, BinaryOp)
+    assert ast[15].value.operator == "//="
+    assert ast[15].value.left.expression == "a"
+    assert ast[15].value.right.expression == "b"
 
-#     assert isinstance(ast[16], Assignment)
-#     assert ast[16].name == "q"
-#     assert ast[16].var_type == IntType()
-#     assert isinstance(ast[16].value, BinaryOp)
-#     assert ast[16].value.operator == "**="
-#     assert ast[16].value.left.value == "a"
-#     assert ast[16].value.right.value == "b"
+    assert isinstance(ast[16], Assignment)
+    assert ast[16].target == "q"
+    assert isinstance(ast[16].var_type, IntType)
+    assert isinstance(ast[16].value, BinaryOp)
+    assert ast[16].value.operator == "**="
+    assert ast[16].value.left.expression == "a"
+    assert ast[16].value.right.expression == "b"
 
-#     assert isinstance(ast[17], Assignment)
-#     assert ast[17].name == "r"
-#     assert ast[17].var_type == IntType()
-#     assert isinstance(ast[17].value, BinaryOp)
-#     assert ast[17].value.operator == "%="
-#     assert ast[17].value.left.value == "a"
-#     assert ast[17].value.right.value == "b"
+    assert isinstance(ast[17], Assignment)
+    assert ast[17].target == "r"
+    assert isinstance(ast[17].var_type, IntType)
+    assert isinstance(ast[17].value, BinaryOp)
+    assert ast[17].value.operator == "%="
+    assert ast[17].value.left.expression == "a"
+    assert ast[17].value.right.expression == "b"
 
-#     assert isinstance(ast[18], Assignment)
-#     assert ast[18].name == "s"
-#     assert ast[18].var_type == IntType()
-#     assert isinstance(ast[18].value, BinaryOp)
-#     assert ast[18].value.operator == "++"
-#     assert ast[18].value.left.value == "a"
-#     assert ast[18].value.right.value == "1"
+    assert isinstance(ast[18], Assignment)
+    assert ast[18].target == "a"
+    assert ast[18].var_type is None  # ++ sets no explicit type
+    assert isinstance(ast[18].value, BinaryOp)
+    assert ast[18].value.operator == "+"  # ++ becomes a = a + 1
+    assert ast[18].value.left.expression == "a"
+    assert ast[18].value.right.expression == 1
 
-#     assert isinstance(ast[19], Assignment)
-#     assert ast[19].name == "t"
-#     assert ast[19].var_type == IntType()
-#     assert isinstance(ast[19].value, BinaryOp)
-#     assert ast[19].value.operator == "--"
-#     assert ast[19].value.left.value == "a"
-#     assert ast[19].value.right.value == "1"
+    assert isinstance(ast[19], Assignment)
+    assert ast[19].target == "s"
+    assert isinstance(ast[19].var_type, IntType)
+    assert ast[19].value.expression == "a"
+
+    assert isinstance(ast[20], Assignment)
+    assert ast[20].target == "a"
+    assert ast[20].var_type is None  # -- sets no explicit type
+    assert isinstance(ast[20].value, BinaryOp)
+    assert ast[20].value.operator == "-"  # -- becomes a = a - 1
+    assert ast[20].value.left.expression == "a"
+    assert ast[20].value.right.expression == 1
+
+    assert isinstance(ast[21], Assignment)
+    assert ast[21].target == "t"
+    assert isinstance(ast[21].var_type, IntType)
+    assert ast[21].value.expression == "a"
 
 
 # # def test_parse_complex_function_def():

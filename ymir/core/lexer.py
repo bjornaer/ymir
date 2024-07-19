@@ -113,7 +113,7 @@ class Lexer:
             type = match.lastgroup
             value = match.group(type)
             column = match.start() - line_start
-            print(f"Matched {type} with value {value} at line {line_number}, column {column}")  # Debug print
+            # print(f"Matched {type} with value {value} at line {line_number}, column {column}")  # Debug print
             if type == "NUMBER":
                 value = float(value) if "." in value else int(value)
                 token = Token(TokenType.LITERAL, value, line_number, column)

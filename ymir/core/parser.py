@@ -283,6 +283,9 @@ class Parser:
             elif self.current_token().value == "++":
                 self.advance()  # skip '++'
                 return Assignment(name, BinaryOp(Expression(name), "+", Expression(1)))
+            elif self.current_token().value == "--":
+                self.advance()  # skip '--'
+                return Assignment(name, BinaryOp(Expression(name), "-", Expression(1)))
             elif self.current_token().value in {"+=", "-=", "*=", "/="}:
                 operator = self.current_token().value[0]  # get the operator part of '+=', '-=', etc.
                 self.advance()  # skip operator
