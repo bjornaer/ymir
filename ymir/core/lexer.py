@@ -83,8 +83,8 @@ class Lexer:
             ("NUMBER", r"\d+(\.\d*)?"),
             ("ID", r"[A-Za-z_]\w*"),
             ("STRING", r"\".*?\""),
-            ("OP", r"(\+\+|\+=|[+\-*/%=<>!]+)"),  # Updated to include ++ and +=
-            ("DOT", r"\."),  # Added to handle dot operator
+            ("OP", r"(\+\+|\+=|[+\-*/%=<>!]+)"),
+            ("DOT", r"\."),
             ("BRACE_OPEN", r"\{"),
             ("BRACE_CLOSE", r"\}"),
             ("BRACKET_OPEN", r"\["),
@@ -136,6 +136,7 @@ class Lexer:
                 "COLON",
                 "COMMA",
                 "SEMICOLON",
+                "DOT",
             }:
                 token = Token(getattr(TokenType, type), value, line_number, column)
             elif type == "NEWLINE":

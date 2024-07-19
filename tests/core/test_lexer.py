@@ -188,7 +188,7 @@ def test_tokenize_operators():
 
 
 def test_tokenize_delimiters():
-    source_code = "{ } [ ] ( ) : ,"
+    source_code = "{ } [ ] ( ) : , ."
     lexer = Lexer(source_code)
     tokens = lexer.tokenize()
     expected_tokens = [
@@ -200,7 +200,8 @@ def test_tokenize_delimiters():
         Token(TokenType.PAREN_CLOSE, ")", 1, 10),
         Token(TokenType.COLON, ":", 1, 12),
         Token(TokenType.COMMA, ",", 1, 14),
-        Token(TokenType.EOF, "", 1, 15),
+        Token(TokenType.DOT, ".", 1, 16),
+        Token(TokenType.EOF, "", 1, 17),
     ]
     assert tokens == expected_tokens
 

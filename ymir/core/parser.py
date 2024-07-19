@@ -112,7 +112,7 @@ class Parser:
             return self.parse_expression()
         elif token.type == TokenType.PAREN_OPEN:
             return self.parse_expression()
-        raise SyntaxError(f"Unexpected token: {token}")
+        raise SyntaxError(f"Unexpected token: {token} value: '{token.value}' after identifier")
 
     def parse_module_def(self) -> ModuleDef:
         self.advance()  # Skip 'module'
@@ -274,6 +274,9 @@ class Parser:
     def parse_assignment_or_expression(self) -> ASTNode:
         name = self.current_token().value
         self.advance()  # skip identifier
+        if self.current_token().type == TokenType.DOT:
+            self.advance()  # skip '.'
+            return self.parse_expression_with_prefix(name)
         if self.current_token().type == TokenType.OPERATOR:
             if self.current_token().value == "=":
                 self.advance()  # skip '='
@@ -300,9 +303,6 @@ class Parser:
             args = self.parse_arguments()
             self.expect_token(TokenType.PAREN_CLOSE)
             return FunctionCall(name, args)
-        elif self.current_token().type == TokenType.OPERATOR and self.current_token().value == ".":
-            self.advance()  # skip '.'
-            return self.parse_expression_with_prefix(name)
         elif self.current_token().type == TokenType.BRACE_OPEN:
             # Check if it's a map literal or a block
             if self.lookahead_is_map_literal():
@@ -312,7 +312,9 @@ class Parser:
         elif self.current_token().type == TokenType.NEWLINE:
             self.advance()  # skip newline
             return Expression(name)
-        raise SyntaxError(f"Unexpected token: {self.current_token()} after identifier")
+        raise SyntaxError(
+            f"Unexpected token: {self.current_token()} value: '{self.current_token().value}' after identifier"
+        )
 
     def parse_binary_expression(self, left: ASTNode) -> ASTNode:
         operator = self.current_token().value
@@ -324,6 +326,7 @@ class Parser:
         if self.current_token().type == TokenType.IDENTIFIER:
             suffix = self.current_token().value
             self.advance()
+            print(">>>>>PARSE_EXPRESSION_WITH_PREFIX", self.current_token(), suffix)
             if self.current_token().type == TokenType.PAREN_OPEN:
                 self.advance()
                 args = self.parse_arguments()
@@ -446,7 +449,7 @@ class Parser:
             self.expect_token(TokenType.PAREN_CLOSE)
             return expr
         else:
-            raise SyntaxError(f"Unexpected token: {token}")
+            raise SyntaxError(f"Unexpected token: {token} value: '{token.value}' after identifier")
 
     def parse_array_literal(self) -> ArrayLiteral:
         self.advance()  # skip '['

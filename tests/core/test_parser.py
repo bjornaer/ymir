@@ -18,6 +18,7 @@ from ymir.core.ast import (  # StringLiteral,
     IfStatement,
     ImportDef,
     MapLiteral,
+    MethodCall,
     ModuleDef,
     ReturnStatement,
     TupleLiteral,
@@ -25,7 +26,7 @@ from ymir.core.ast import (  # StringLiteral,
 )
 from ymir.core.lexer import Lexer  # , Token, TokenType
 from ymir.core.parser import Parser
-from ymir.core.types import IntType, NilType
+from ymir.core.types import ArrayType, IntType, NilType
 
 
 def test_parse_module_def():
@@ -603,100 +604,243 @@ def test_parse_binary_operators():
     assert ast[21].value.expression == "a"
 
 
-# # def test_parse_complex_function_def():
-# #     source_code = """
-# # module ComplexFunctionModule
+def test_parse_nested_for_loops():
+    source_code = """
+    var a: int = 0
+    var b: int = 0
+    for (var i: int = 0; i < 5; i++) {
+        for (var j: int = 0; j < 5; j++) {
+            a += i
+            b += j
+        }
+    }
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    ast = parser.parse()
 
-# # func complex_function(a: int, b: str) -> str {
-# #     var c: int = 0
-# #     d: int = 1
-# #     c = c + d
-# #     while (c < a) {
-# #         if (c % 2 == 0) {
-# #             c++
-# #         } else {
-# #             c += 2
-# #         }
-# #     } # this is an inline comment
-# #     return b + " result: " + str(c ** 2)
-# # }
-# # result = complex_function(5, "hello")
-# # print(result)
-# #         """
-# #     lexer = Lexer(source_code)
-# #     tokens = lexer.tokenize()
-# #     parser = Parser(tokens)
-# #     ast = parser.parse()
+    assert isinstance(ast[0], Assignment)
+    assert ast[0].target == "a"
+    assert isinstance(ast[0].var_type, IntType)
+    assert isinstance(ast[0].value, Expression)
+    assert ast[0].value.expression == 0
 
-# #     assert isinstance(ast[0], FunctionDef)
-# #     assert ast[0].name == "complex_function"
-# #     assert len(ast[0].params) == 2
-# #     assert ast[0].params[0].name == "a"
-# #     assert ast[0].params[0].type == "int"
-# #     assert ast[0].params[1].name == "b"
-# #     assert ast[0].params[1].type == "str"
-# #     assert ast[0].return_type == "str"
+    assert isinstance(ast[1], Assignment)
+    assert ast[1].target == "b"
+    assert isinstance(ast[1].var_type, IntType)
+    assert isinstance(ast[1].value, Expression)
+    assert ast[1].value.expression == 0
 
-# #     body = ast[0].body
-# #     assert isinstance(body[0], Assignment)
-# #     assert body[0].name == "c"
-# #     assert body[0].type == "int"
-# #     assert isinstance(body[0].value, Expression)
-# #     assert body[0].value.value == 0
+    assert isinstance(ast[2], ForCStyleLoop)
+    assert isinstance(ast[2].init, Assignment)
+    assert ast[2].init.target == "i"
+    assert isinstance(ast[2].init.var_type, IntType)
+    assert isinstance(ast[2].init.value, Expression)
+    assert ast[2].init.value.expression == 0
 
-# #     assert isinstance(body[1], Assignment)
-# #     assert body[1].name == "d"
-# #     assert body[1].type == "int"
-# #     assert isinstance(body[1].value, Expression)
-# #     assert body[1].value.value == 1
+    assert isinstance(ast[2].condition, BinaryOp)
+    assert ast[2].condition.operator == "<"
+    assert ast[2].condition.left.expression == "i"
+    assert ast[2].condition.right.expression == 5
 
-# #     assert isinstance(body[2], Expression)
-# #     assert isinstance(body[2], BinaryOp)
-# #     assert body[2].operator == "+"
-# #     assert body[2].left.name == "c"
-# #     assert body[2].right.name == "d"
+    assert isinstance(ast[2].increment, Assignment)
+    assert ast[2].increment.target == "i"
+    assert isinstance(ast[2].increment.value, BinaryOp)
+    assert ast[2].increment.value.operator == "+"
+    assert ast[2].increment.value.left.expression == "i"
+    assert ast[2].increment.value.right.expression == 1
 
-# #     assert isinstance(body[3], WhileStatement)
-# #     assert isinstance(body[1].condition, BinaryOp)
-# #     assert body[1].condition.operator == "<"
-# #     assert body[1].condition.right.value == "a"
+    body = ast[2].body
+    assert isinstance(body[0], ForCStyleLoop)
+    assert isinstance(body[0].init, Assignment)
+    assert body[0].init.target == "j"
+    assert isinstance(body[0].init.var_type, IntType)
+    assert isinstance(body[0].init.value, Expression)
+    assert body[0].init.value.expression == 0
 
-# #     while_body = body[1].body
-# #     assert isinstance(while_body[0], IfStatement)
-# #     assert isinstance(while_body[0].condition, BinaryOp)
-# #     assert while_body[0].condition.operator == "%"
-# #     assert while_body[0].condition.right.value == 2
+    assert isinstance(body[0].condition, BinaryOp)
+    assert body[0].condition.operator == "<"
+    assert body[0].condition.left.expression == "j"
+    assert body[0].condition.right.expression == 5
 
-# #     if_body = while_body[0].then_body
-# #     assert isinstance(if_body[0], Expression)
-# #     assert if_body[0].value == "c++"
+    assert isinstance(body[0].increment, Assignment)
+    assert body[0].increment.target == "j"
+    assert isinstance(body[0].increment.value, BinaryOp)
+    assert body[0].increment.value.operator == "+"
+    assert body[0].increment.value.left.expression == "j"
+    assert body[0].increment.value.right.expression == 1
 
-# #     else_body = while_body[0].else_body
-# #     assert isinstance(else_body[0], BinaryOp)
-# #     assert else_body[0].operator == "+="
-# #     assert else_body[0].right.value == 2
+    inner_body = body[0].body
+    assert isinstance(inner_body[0], Assignment)
+    assert inner_body[0].target == "a"
+    assert isinstance(inner_body[0].value, BinaryOp)
+    assert inner_body[0].value.operator == "+"
+    assert inner_body[0].value.left.expression == "a"
+    assert inner_body[0].value.right.expression == "i"
 
-# #     assert isinstance(body[2], ReturnStatement)
-# #     assert isinstance(body[2].value, BinaryOp)
-# #     assert body[2].value.operator == "+"
-# #     assert isinstance(body[2].value.right, BinaryOp)
-# #     assert body[2].value.right.operator == "+"
-# #     assert isinstance(body[2].value.right.right, FunctionCall)
-# #     assert body[2].value.right.right.name == "toString"
-# #     assert isinstance(body[2].value.right.right.args[0], BinaryOp)
-# #     assert body[2].value.right.right.args[0].operator == "**"
-# #     assert body[2].value.right.right.args[0].right.value == 2
+    assert isinstance(inner_body[1], Assignment)
+    assert inner_body[1].target == "b"
+    assert isinstance(inner_body[1].value, BinaryOp)
+    assert inner_body[1].value.operator == "+"
+    assert inner_body[1].value.left.expression == "b"
+    assert inner_body[1].value.right.expression == "j"
 
-# #     # Additional assertions for result assignment and function call
-# #     assert isinstance(ast[1], Assignment)
-# #     assert ast[1].name == "result"
-# #     assert isinstance(ast[1].value, FunctionCall)
-# #     assert ast[1].value.name == "complex_function"
-# #     assert len(ast[1].value.args) == 2
-# #     assert ast[1].value.args[0].value == 5
-# #     assert ast[1].value.args[1].value == "hello"
 
-# #     assert isinstance(ast[2], FunctionCall)
-# #     assert ast[2].name == "print"
-# #     assert len(ast[2].args) == 1
-# #     assert ast[2].args[0].value == "result"
+def test_parse_for_in_loop_with_nested_if_else():
+    source_code = """
+    var numbers: array[int] = [1, 2, 3, 4, 5]
+    var result: array[int] = []
+    untyped_result = []
+    for number in numbers {
+        if (number % 2 == 0) {
+            result.append(number * 2)
+        } else {
+            result.append(number * 3)
+        }
+    }
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens)
+    ast = parser.parse()
+
+    assert isinstance(ast[0], Assignment)
+    assert ast[0].target == "numbers"
+    assert isinstance(ast[0].var_type, ArrayType)
+    assert isinstance(ast[0].value, ArrayLiteral)
+    assert len(ast[0].value.elements) == 5
+
+    assert isinstance(ast[1], Assignment)
+    assert ast[1].target == "result"
+    assert isinstance(ast[1].var_type, ArrayType)
+    assert isinstance(ast[1].value, ArrayLiteral)
+    assert len(ast[1].value.elements) == 0
+
+    assert isinstance(ast[2], ForInLoop)
+    assert ast[2].var == "number"
+    assert ast[2].iterable == "numbers"
+
+    body = ast[2].body
+    assert isinstance(body[0], IfStatement)
+    assert isinstance(body[0].condition, BinaryOp)
+    assert body[0].condition.operator == "%"
+    assert body[0].condition.left.expression == "number"
+    assert body[0].condition.right.expression == 2
+
+    then_body = body[0].then_body
+    assert isinstance(then_body[0], MethodCall)
+    assert then_body[0].instance == "result"
+    assert then_body[0].method_name == "append"
+    assert isinstance(then_body[0].args[0], BinaryOp)
+    assert then_body[0].args[0].operator == "*"
+    assert then_body[0].args[0].left.expression == "number"
+    assert then_body[0].args[0].right.expression == 2
+
+    else_body = body[0].else_body
+    assert isinstance(else_body[0], MethodCall)
+    assert else_body[0].instance == "result"
+    assert else_body[0].method_name == "append"
+    assert isinstance(else_body[0].args[0], BinaryOp)
+    assert else_body[0].args[0].operator == "*"
+    assert else_body[0].args[0].left.expression == "number"
+    assert else_body[0].args[0].right.expression == 3
+
+
+# def test_parse_complex_function_def():
+#     source_code = """
+# module ComplexFunctionModule
+
+# func complex_function(a: int, b: str) -> str {
+#     var c: int = 0
+#     d: int = 1
+#     c = c + d
+#     while (c < a) {
+#         if (c % 2 == 0) {
+#             c++
+#         } else {
+#             c += 2
+#         }
+#     } # this is an inline comment
+#     return b + " result: " + str(c ** 2)
+# }
+# result = complex_function(5, "hello")
+# print(result)
+#         """
+#     lexer = Lexer(source_code)
+#     tokens = lexer.tokenize()
+#     parser = Parser(tokens)
+#     ast = parser.parse()
+
+#     assert isinstance(ast[0], FunctionDef)
+#     assert ast[0].name == "complex_function"
+#     assert len(ast[0].params) == 2
+#     assert ast[0].params[0].name == "a"
+#     assert ast[0].params[0].type == "int"
+#     assert ast[0].params[1].name == "b"
+#     assert ast[0].params[1].type == "str"
+#     assert ast[0].return_type == "str"
+
+#     body = ast[0].body
+#     assert isinstance(body[0], Assignment)
+#     assert body[0].name == "c"
+#     assert body[0].type == "int"
+#     assert isinstance(body[0].value, Expression)
+#     assert body[0].value.value == 0
+
+#     assert isinstance(body[1], Assignment)
+#     assert body[1].name == "d"
+#     assert body[1].type == "int"
+#     assert isinstance(body[1].value, Expression)
+#     assert body[1].value.value == 1
+
+#     assert isinstance(body[2], Expression)
+#     assert isinstance(body[2], BinaryOp)
+#     assert body[2].operator == "+"
+#     assert body[2].left.name == "c"
+#     assert body[2].right.name == "d"
+
+#     assert isinstance(body[3], WhileStatement)
+#     assert isinstance(body[1].condition, BinaryOp)
+#     assert body[1].condition.operator == "<"
+#     assert body[1].condition.right.value == "a"
+
+#     while_body = body[1].body
+#     assert isinstance(while_body[0], IfStatement)
+#     assert isinstance(while_body[0].condition, BinaryOp)
+#     assert while_body[0].condition.operator == "%"
+#     assert while_body[0].condition.right.value == 2
+
+#     if_body = while_body[0].then_body
+#     assert isinstance(if_body[0], Expression)
+#     assert if_body[0].value == "c++"
+
+#     else_body = while_body[0].else_body
+#     assert isinstance(else_body[0], BinaryOp)
+#     assert else_body[0].operator == "+="
+#     assert else_body[0].right.value == 2
+
+#     assert isinstance(body[2], ReturnStatement)
+#     assert isinstance(body[2].value, BinaryOp)
+#     assert body[2].value.operator == "+"
+#     assert isinstance(body[2].value.right, BinaryOp)
+#     assert body[2].value.right.operator == "+"
+#     assert isinstance(body[2].value.right.right, FunctionCall)
+#     assert body[2].value.right.right.name == "toString"
+#     assert isinstance(body[2].value.right.right.args[0], BinaryOp)
+#     assert body[2].value.right.right.args[0].operator == "**"
+#     assert body[2].value.right.right.args[0].right.value == 2
+
+#     # Additional assertions for result assignment and function call
+#     assert isinstance(ast[1], Assignment)
+#     assert ast[1].name == "result"
+#     assert isinstance(ast[1].value, FunctionCall)
+#     assert ast[1].value.name == "complex_function"
+#     assert len(ast[1].value.args) == 2
+#     assert ast[1].value.args[0].value == 5
+#     assert ast[1].value.args[1].value == "hello"
+
+#     assert isinstance(ast[2], FunctionCall)
+#     assert ast[2].name == "print"
+#     assert len(ast[2].args) == 1
+#     assert ast[2].args[0].value == "result"
