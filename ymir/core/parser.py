@@ -38,19 +38,21 @@ from ymir.core.types import (
     TupleType,
     Type,
 )
+from ymir.logging import get_logger
 
 
 class Parser:
-    def __init__(self, tokens):
+    def __init__(self, tokens, verbosity="INFO"):
         self.tokens = tokens
         self.pos = 0
+        self.logger = get_logger("ymir", verbosity)
 
     def parse(self) -> List[ASTNode]:
         statements = []
         while self.current_token().type != TokenType.EOF:
             while self.current_token().type == TokenType.NEWLINE:
                 self.advance()
-            print(f"Parsing statement: {self.current_token()}")  # Debug print
+            self.logger.debug(f"Parsing statement: {self.current_token()}")
             statements.append(self.parse_statement())
         return statements
 
@@ -60,7 +62,7 @@ class Parser:
         return self.tokens[self.pos]
 
     def advance(self):
-        print(f"Advancing from {self.current_token()}")  # Debug print
+        self.logger.debug(f"Advancing from {self.current_token()}")
         self.pos += 1
 
     def parse_statement(self) -> ASTNode:
@@ -326,7 +328,6 @@ class Parser:
         if self.current_token().type == TokenType.IDENTIFIER:
             suffix = self.current_token().value
             self.advance()
-            print(">>>>>PARSE_EXPRESSION_WITH_PREFIX", self.current_token(), suffix)
             if self.current_token().type == TokenType.PAREN_OPEN:
                 self.advance()
                 args = self.parse_arguments()

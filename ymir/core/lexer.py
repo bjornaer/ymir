@@ -2,6 +2,8 @@ import re
 from enum import Enum, auto
 from typing import List
 
+from ymir.logging import get_logger
+
 
 class TokenType(Enum):
     KEYWORD = auto()
@@ -47,8 +49,9 @@ class Token:
 
 
 class Lexer:
-    def __init__(self, source_code):
+    def __init__(self, source_code, verbosity="INFO"):
         self.source_code = source_code
+        self.logger = get_logger("ymir", verbosity)
         self.tokens: List[Token] = []
         self.keywords = {
             "func",
