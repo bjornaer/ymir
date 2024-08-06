@@ -328,3 +328,33 @@ def test_tokenize_cstyle_for_loop():
         Token(TokenType.EOF, "", 1, 44),
     ]
     assert tokens == expected_tokens
+
+
+def test_tokenize_logical_operators():
+    source_code = "if (x > 0 && y < 10) || (z == 5) { return true }"
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    expected_tokens = [
+        Token(TokenType.KEYWORD, "if", 1, 0),
+        Token(TokenType.PAREN_OPEN, "(", 1, 3),
+        Token(TokenType.IDENTIFIER, "x", 1, 4),
+        Token(TokenType.OPERATOR, ">", 1, 6),
+        Token(TokenType.LITERAL, 0, 1, 8),
+        Token(TokenType.OPERATOR, "&&", 1, 10),
+        Token(TokenType.IDENTIFIER, "y", 1, 13),
+        Token(TokenType.OPERATOR, "<", 1, 15),
+        Token(TokenType.LITERAL, 10, 1, 17),
+        Token(TokenType.PAREN_CLOSE, ")", 1, 19),
+        Token(TokenType.OPERATOR, "||", 1, 21),
+        Token(TokenType.PAREN_OPEN, "(", 1, 24),
+        Token(TokenType.IDENTIFIER, "z", 1, 25),
+        Token(TokenType.OPERATOR, "==", 1, 27),
+        Token(TokenType.LITERAL, 5, 1, 30),
+        Token(TokenType.PAREN_CLOSE, ")", 1, 31),
+        Token(TokenType.BRACE_OPEN, "{", 1, 33),
+        Token(TokenType.KEYWORD, "return", 1, 35),
+        Token(TokenType.KEYWORD, "true", 1, 42),
+        Token(TokenType.BRACE_CLOSE, "}", 1, 47),
+        Token(TokenType.EOF, "", 1, 48),
+    ]
+    assert tokens == expected_tokens

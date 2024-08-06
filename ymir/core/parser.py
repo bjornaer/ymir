@@ -104,6 +104,7 @@ class Parser:
             elif token.value == "var":
                 return self.parse_variable_declaration()
         elif token.type == TokenType.IDENTIFIER:
+            self.logger.debug(f"Parsing statement starting with identifier: {token.value}")
             return self.parse_assignment_or_expression()
         elif token.type == TokenType.BRACE_OPEN:
             if self.lookahead_is_map_literal():
@@ -384,23 +385,59 @@ class Parser:
         self.expect_token(TokenType.BRACE_CLOSE)
         return statements
 
-    def parse_expression(self) -> ASTNode:
+    def parse_expression(self, min_precedence=0) -> ASTNode:
+        self.logger.debug(f"parse_expression.Entering parse_expression with min_precedence: {min_precedence}")
         left = self.parse_primary()
-        while self.current_token().type in {TokenType.OPERATOR, TokenType.DOT}:
-            if self.current_token().type == TokenType.OPERATOR:
-                operator = self.current_token().value
-                self.advance()
-                right = self.parse_expression()
-                left = BinaryOp(left, operator, right)
-            elif self.current_token().type == TokenType.DOT:
-                self.advance()
-                method_name = self.current_token().value
-                self.expect_token(TokenType.IDENTIFIER)
-                self.expect_token(TokenType.PAREN_OPEN)
-                args = self.parse_arguments()
-                self.expect_token(TokenType.PAREN_CLOSE)
-                left = MethodCall(left, method_name, args)
+        self.logger.debug(f"parse_expression.After parse_primary, left: {left}")
+
+        while self.current_token().type == TokenType.OPERATOR:
+            operator = self.current_token().value
+            precedence = self.get_operator_precedence(operator)
+            self.logger.debug(f"parse_expression.Operator: {operator}, Precedence: {precedence}")
+
+            if precedence < min_precedence:
+                self.logger.debug(f"parse_expression.Exiting parse_expression with left: {left}")
+                break
+
+            self.advance()  # Consume the operator
+            right = self.parse_expression(precedence + 1)
+            self.logger.debug(f"parse_expression.After parse_expression, right: {right}")
+            left = BinaryOp(left, operator, right)
+            self.logger.debug(f"parse_expression.After BinaryOp, left: {left}")
+
         return left
+
+    def get_operator_precedence(self, operator: str) -> int:
+        precedences = {
+            "||": 1,
+            "&&": 2,
+            "not": 3,
+            "in": 4,
+            "not in": 4,
+            "is": 4,
+            "is not": 4,
+            "<": 4,
+            "<=": 4,
+            ">": 4,
+            ">=": 4,
+            "!=": 4,
+            "==": 4,
+            "|": 5,
+            "^": 6,
+            "&": 7,
+            "<<": 8,
+            ">>": 8,
+            "+": 9,
+            "-": 9,
+            "*": 10,
+            "@": 10,
+            "/": 10,
+            "//": 10,
+            "%": 10,
+            "~": 11,
+            "**": 12,
+        }
+        return precedences.get(operator, 0)
 
     def parse_primary(self) -> ASTNode:
         self.skip_whitespace()
