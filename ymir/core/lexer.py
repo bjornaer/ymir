@@ -76,6 +76,7 @@ class Lexer:
             "int",  # Type hint keywords
             "float",  # Type hint keywords
             "str",  # Type hint keywords
+            "string",  # Type hint keywords
             "bool",  # Type hint keywords
             "array",  # Type hint keywords
             "map",  # Type hint keywords

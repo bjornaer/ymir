@@ -54,7 +54,8 @@ class Parser:
                 self.advance()
             self.logger.debug(f"Parsing statement: {self.current_token()}")
             statements.append(self.parse_statement())
-        return statements
+
+        return [s for s in statements if s is not None]
 
     def current_token(self) -> Token:
         if self.pos >= len(self.tokens):
@@ -126,7 +127,18 @@ class Parser:
         while self.current_token().type != TokenType.EOF:
             if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "module":
                 break
-            body.append(self.parse_statement())
+            self.logger.debug(f"Parsing module statement: {self.current_token()}")
+            try:
+                statement = self.parse_statement()
+                body.append(statement)
+                self.logger.debug(f"Successfully parsed statement: {type(statement).__name__}")
+            except SyntaxError as e:
+                self.logger.error(f"Error parsing statement: {e}")
+                # Attempt to recover by skipping to the next newline
+                while self.current_token().type not in {TokenType.NEWLINE, TokenType.EOF}:
+                    self.advance()
+                if self.current_token().type == TokenType.NEWLINE:
+                    self.advance()
         return ModuleDef(name_token.value, body)
 
     def parse_import_def(self) -> ImportDef:
@@ -183,24 +195,31 @@ class Parser:
         return NilType()
 
     def parse_function_def(self, as_async=False) -> FunctionDef:
+        self.logger.debug("Entering parse_function_def")
         self.expect_token(TokenType.KEYWORD, "func")
         self.skip_whitespace()
         name = self.current_token().value
+        self.logger.debug(f"Function name: {name}")
         self.advance()  # skip function name
         self.skip_whitespace()
         params, param_types = self.parse_parameters()
+        self.logger.debug(f"Parsed parameters: {params}")
+        self.logger.debug(f"Parsed parameter types: {param_types}")
         self.skip_whitespace()
+        return_type = None
         if self.current_token().type == TokenType.OPERATOR and self.current_token().value == "->":
             self.advance()  # skip '->'
             return_type = self.parse_type_annotation()
-        else:
-            return_type = None
-        body = self.parse_block()
-        return (
+            self.logger.debug(f"Parsed return type: {return_type}")
+        body = self.parse_block()  # consumes both {}
+        self.logger.debug(f"Parsed function body: {body}")
+        func_def = (
             AsyncFunctionDef(name, params, param_types, return_type, body)
             if as_async
             else FunctionDef(name, params, param_types, return_type, body)
         )
+        self.logger.debug(f"Created function definition: {func_def}")
+        return func_def
 
     def parse_async_function_def(self) -> AsyncFunctionDef:
         self.expect_token(TokenType.KEYWORD, "async")
@@ -341,6 +360,7 @@ class Parser:
         raise SyntaxError(f"Expected identifier after '.', got {self.current_token()}")
 
     def parse_parameters(self) -> Tuple[List[str], List[Type]]:
+        self.logger.debug("Entering parse_parameters")
         params = []
         param_types = []
         self.skip_whitespace()
@@ -349,11 +369,13 @@ class Parser:
             while self.current_token().type != TokenType.PAREN_CLOSE:
                 self.skip_whitespace()
                 param_name = self.current_token().value
+                self.logger.debug(f"Parsed parameter name: {param_name}")
                 self.advance()  # Skip parameter name
                 self.skip_whitespace()
-                self.advance()  # Skip ':'
+                self.expect_token(TokenType.COLON)
                 self.skip_whitespace()
                 param_type = self.parse_type_annotation()
+                self.logger.debug(f"Parsed parameter type: {param_type}")
                 params.append(param_name)
                 param_types.append(param_type)
                 self.skip_whitespace()
@@ -363,6 +385,8 @@ class Parser:
             self.advance()  # Skip ')'
         else:
             raise SyntaxError(f"Expected TokenType.PAREN_OPEN, got {self.current_token()}")
+        self.logger.debug(f"Parsed parameters: {params}")
+        self.logger.debug(f"Parsed parameter types: {param_types}")
         return params, param_types
 
     def parse_arguments(self) -> List[ASTNode]:
@@ -382,6 +406,7 @@ class Parser:
             statements.append(self.parse_statement())
             while self.current_token().type == TokenType.NEWLINE:
                 self.advance()
+            self.skip_whitespace()
         self.expect_token(TokenType.BRACE_CLOSE)
         return statements
 
@@ -525,33 +550,28 @@ class Parser:
 
     def parse_type_annotation(self) -> Optional[Type]:
         if self.current_token().type == TokenType.KEYWORD:
-            if self.current_token().value == "int":
-                self.advance()
+            type_name = self.current_token().value
+            self.advance()
+            if type_name == "int":
                 return IntType()
-            elif self.current_token().value == "float":
-                self.advance()
+            elif type_name == "float":
                 return FloatType()
-            elif self.current_token().value == "string":
-                self.advance()
+            elif type_name == "string" or type_name == "str":
                 return StringType()
-            elif self.current_token().value == "bool":
-                self.advance()
+            elif type_name == "bool":
                 return BoolType()
-            elif self.current_token().value == "array":
-                self.advance()
+            elif type_name == "array":
                 self.expect_token(TokenType.BRACKET_OPEN, "[")
                 element_type = self.parse_type_annotation()
                 self.expect_token(TokenType.BRACKET_CLOSE, "]")
                 return ArrayType(element_type)
-            elif self.current_token().value == "map":
-                self.advance()
+            elif type_name == "map":
                 self.expect_token(TokenType.BRACKET_OPEN, "[")
                 key_type = self.parse_type_annotation()
                 self.expect_token(TokenType.BRACKET_CLOSE, "]")
                 value_type = self.parse_type_annotation()
                 return MapType(key_type, value_type)
-            elif self.current_token().value == "tuple":
-                self.advance()
+            elif type_name == "tuple":
                 self.expect_token(TokenType.BRACKET_OPEN, "[")
                 element_types = []
                 while self.current_token().type != TokenType.BRACKET_CLOSE:
