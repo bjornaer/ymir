@@ -460,7 +460,9 @@ class Parser:
         elif token.type == TokenType.BRACE_OPEN:
             return self.parse_map_literal()
         elif token.type == TokenType.PAREN_OPEN:
-            return self.parse_tuple_literal()
+            return (
+                self.parse_tuple_literal()
+            )  # this should return tuple literal OR whatever was originally in the parenthesis if not a tuple
         elif token.type == TokenType.IDENTIFIER:
             identifier = token.value
             self.advance()
@@ -481,11 +483,6 @@ class Parser:
                 self.expect_token(TokenType.PAREN_CLOSE)
                 return FunctionCall(identifier, args)
             return Expression(identifier)
-        elif token.type == TokenType.PAREN_OPEN:
-            self.advance()
-            expr = self.parse_expression()
-            self.expect_token(TokenType.PAREN_CLOSE)
-            return expr
         else:
             raise SyntaxError(f"Unexpected token: {token} value: '{token.value}' after identifier")
 
@@ -519,8 +516,12 @@ class Parser:
             elements.append(self.parse_expression())
             if self.current_token().type == TokenType.COMMA:
                 self.advance()
+            else:
+                break  # If there's no comma, it's not a tuple
         self.expect_token(TokenType.PAREN_CLOSE)
-        return TupleLiteral(elements)
+        return (
+            TupleLiteral(elements) if len(elements) > 1 or self.current_token().type == TokenType.COMMA else elements[0]
+        )
 
     def parse_type_annotation(self) -> Optional[Type]:
         if self.current_token().type == TokenType.KEYWORD:

@@ -25,7 +25,7 @@ from ymir.core.ast import (  # StringLiteral,
 )
 from ymir.core.lexer import Lexer  # , Token, TokenType
 from ymir.core.parser import Parser
-from ymir.core.types import IntType, NilType
+from ymir.core.types import BoolType, IntType, NilType
 
 
 def test_parse_module_def():
@@ -686,10 +686,90 @@ def test_parse_nested_for_loops():
     assert inner_body[1].value.right.expression == "j"
 
 
+def test_binary_operator_precedence():
+    source_code = """
+    var result: int = 2 + 3 * 4 - 6 / 2
+    var complex_result: bool = 10 > 5 && 3 < 4 || 7 == 7
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, verbosity="DEBUG")
+    ast = parser.parse()
+
+    # Test arithmetic precedence
+    assert isinstance(ast[0], Assignment)
+    assert ast[0].target == "result"
+    assert isinstance(ast[0].var_type, IntType)
+    assert isinstance(ast[0].value, BinaryOp)
+
+    # The expression should be parsed as: (2 + (3 * 4)) - (6 / 2)
+    assert ast[0].value.operator == "-"
+    assert isinstance(ast[0].value.left, BinaryOp)
+    assert isinstance(ast[0].value.right, BinaryOp)
+
+    addition = ast[0].value.left
+    assert addition.operator == "+"
+    assert isinstance(addition.left, Expression)
+    assert addition.left.expression == 2
+    assert isinstance(addition.right, BinaryOp)
+
+    multiplication = addition.right
+    assert multiplication.operator == "*"
+    assert isinstance(multiplication.left, Expression)
+    assert multiplication.left.expression == 3
+    assert isinstance(multiplication.right, Expression)
+    assert multiplication.right.expression == 4
+
+    division = ast[0].value.right
+    assert division.operator == "/"
+    assert isinstance(division.left, Expression)
+    assert division.left.expression == 6
+    assert isinstance(division.right, Expression)
+    assert division.right.expression == 2
+
+    # Test logical operator precedence
+    assert isinstance(ast[1], Assignment)
+    assert ast[1].target == "complex_result"
+    assert isinstance(ast[1].var_type, BoolType)
+    assert isinstance(ast[1].value, BinaryOp)
+
+    # The expression should be parsed as: ((10 > 5) && (3 < 4)) || (7 == 7)
+    or_op = ast[1].value
+    assert or_op.operator == "||"
+    assert isinstance(or_op.left, BinaryOp)
+    assert isinstance(or_op.right, BinaryOp)
+
+    and_op = or_op.left
+    assert and_op.operator == "&&"
+    assert isinstance(and_op.left, BinaryOp)
+    assert isinstance(and_op.right, BinaryOp)
+
+    greater_than = and_op.left
+    assert greater_than.operator == ">"
+    assert isinstance(greater_than.left, Expression)
+    assert greater_than.left.expression == 10
+    assert isinstance(greater_than.right, Expression)
+    assert greater_than.right.expression == 5
+
+    less_than = and_op.right
+    assert less_than.operator == "<"
+    assert isinstance(less_than.left, Expression)
+    assert less_than.left.expression == 3
+    assert isinstance(less_than.right, Expression)
+    assert less_than.right.expression == 4
+
+    equals = or_op.right
+    assert equals.operator == "=="
+    assert isinstance(equals.left, Expression)
+    assert equals.left.expression == 7
+    assert isinstance(equals.right, Expression)
+    assert equals.right.expression == 7
+
+
 def test_multiple_op_expression():
     source_code = """
     var number: int = 10
-    number % 2 == 0
+    (number % 2) == 0
     """
     lexer = Lexer(source_code)
     tokens = lexer.tokenize()
