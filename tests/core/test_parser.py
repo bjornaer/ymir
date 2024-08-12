@@ -18,6 +18,7 @@ from ymir.core.ast import (  # StringLiteral,
     IfStatement,
     ImportDef,
     MapLiteral,
+    MethodCall,
     ModuleDef,
     ReturnStatement,
     TupleLiteral,
@@ -25,7 +26,7 @@ from ymir.core.ast import (  # StringLiteral,
 )
 from ymir.core.lexer import Lexer  # , Token, TokenType
 from ymir.core.parser import Parser
-from ymir.core.types import BoolType, IntType, NilType
+from ymir.core.types import ArrayType, BoolType, IntType, NilType
 
 
 def test_parse_module_def():
@@ -794,71 +795,79 @@ def test_multiple_op_expression():
     assert ast[1].right.expression == 0
 
 
-# def test_parse_for_in_loop_with_nested_if_else():
-#     source_code = """
-#     var numbers: array[int] = [1, 2, 3, 4, 5]
-#     var result: array[int] = []
-#     untyped_result = []
-#     for number in numbers {
-#         if (number % 2 == 0) {
-#             result.append(number * 2)
-#         } else {
-#             result.append(number * 3)
-#         }
-#     }
-#     """
-#     lexer = Lexer(source_code)
-#     tokens = lexer.tokenize()
-#     parser = Parser(tokens, verbosity="DEBUG")
-#     ast = parser.parse()
+def test_parse_for_in_loop_with_nested_if_else():
+    source_code = """
+    var numbers: array[int] = [1, 2, 3, 4, 5]
+    var result: array[int] = []
+    untyped_result = []
+    for number in numbers {
+        if ((number % 2) == 0) {
+            result.append(number * 2)
+        } else {
+            result.append(number * 3)
+        }
+    }
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, verbosity="DEBUG")
+    ast = parser.parse()
 
-#     assert isinstance(ast[0], Assignment)
-#     assert ast[0].target == "numbers"
-#     assert isinstance(ast[0].var_type, ArrayType)
-#     assert isinstance(ast[0].value, ArrayLiteral)
-#     assert len(ast[0].value.elements) == 5
+    assert isinstance(ast[0], Assignment)
+    assert ast[0].target == "numbers"
+    assert isinstance(ast[0].var_type, ArrayType)
+    assert isinstance(ast[0].value, ArrayLiteral)
+    assert len(ast[0].value.elements) == 5
 
-#     assert isinstance(ast[1], Assignment)
-#     assert ast[1].target == "result"
-#     assert isinstance(ast[1].var_type, ArrayType)
-#     assert isinstance(ast[1].value, ArrayLiteral)
-#     assert len(ast[1].value.elements) == 0
+    assert isinstance(ast[1], Assignment)
+    assert ast[1].target == "result"
+    assert isinstance(ast[1].var_type, ArrayType)
+    assert isinstance(ast[1].value, ArrayLiteral)
+    assert len(ast[1].value.elements) == 0
 
-#     assert isinstance(ast[2], Assignment)
-#     assert ast[2].target == "untyped_result"
-#     assert ast[2].var_type is None
-#     assert isinstance(ast[2].value, ArrayLiteral)
-#     assert len(ast[2].value.elements) == 0
+    assert isinstance(ast[2], Assignment)
+    assert ast[2].target == "untyped_result"
+    assert ast[2].var_type is None
+    assert isinstance(ast[2].value, ArrayLiteral)
+    assert len(ast[2].value.elements) == 0
 
-#     assert isinstance(ast[3], ForInLoop)
-#     assert ast[3].var == "number"
-#     assert isinstance(ast[3].iterable, Expression)
-#     assert ast[3].iterable.expression == "numbers"
+    assert isinstance(ast[3], ForInLoop)
+    assert ast[3].var == "number"
+    assert isinstance(ast[3].iterable, Expression)
+    assert ast[3].iterable.expression == "numbers"
 
-#     body = ast[3].body
-#     assert isinstance(body[0], IfStatement)
-#     assert isinstance(body[0].condition, BinaryOp)
-#     assert body[0].condition.operator == "%"
-#     assert body[0].condition.left.expression == "number"
-#     assert body[0].condition.right.expression == 2
+    body = ast[3].body
+    assert isinstance(body[0], IfStatement)
+    assert isinstance(body[0].condition, BinaryOp)
 
-#     then_body = body[0].then_body
-#     assert isinstance(then_body[0], MethodCall)
-#     assert then_body[0].instance == "result"
-#     assert then_body[0].method_name == "append"
-#     assert isinstance(then_body[0].args[0], BinaryOp)
-#     assert then_body[0].args[0].operator == "*"
-#     assert then_body[0].args[0].left.expression == "number"
-#     assert then_body[0].args[0].right.expression == 2
+    cond = body[0].condition
+    assert cond.operator == "=="
+    assert isinstance(cond.left, BinaryOp)
+    assert cond.left.operator == "%"
+    assert isinstance(cond.left.left, Expression)
+    assert cond.left.left.expression == "number"
+    assert isinstance(cond.left.right, Expression)
+    assert cond.left.right.expression == 2
+    assert isinstance(cond.right, Expression)
+    assert cond.right.expression == 0
 
-#     else_body = body[0].else_body
-#     assert isinstance(else_body[0], MethodCall)
-#     assert else_body[0].instance == "result"
-#     assert else_body[0].method_name == "append"
-#     assert isinstance(else_body[0].args[0], BinaryOp)
-#     assert else_body[0].args[0].operator == "*"
-#     assert else_body[0].args[0].left.expression == "number"
-#     assert else_body[0].args[0].right.expression == 3
+    then_body = body[0].then_body
+    assert isinstance(then_body[0], MethodCall)
+    assert then_body[0].instance == "result"
+    assert then_body[0].method_name == "append"
+    assert isinstance(then_body[0].args[0], BinaryOp)
+    assert then_body[0].args[0].operator == "*"
+    assert then_body[0].args[0].left.expression == "number"
+    assert then_body[0].args[0].right.expression == 2
+
+    else_body = body[0].else_body
+    assert isinstance(else_body[0], MethodCall)
+    assert else_body[0].instance == "result"
+    assert else_body[0].method_name == "append"
+    assert isinstance(else_body[0].args[0], BinaryOp)
+    assert else_body[0].args[0].operator == "*"
+    assert else_body[0].args[0].left.expression == "number"
+    assert else_body[0].args[0].right.expression == 3
 
 
 # def test_parse_complex_function_def():
@@ -870,7 +879,7 @@ def test_multiple_op_expression():
 #     d: int = 1
 #     c = c + d
 #     while (c < a) {
-#         if (c % 2 == 0) {
+#         if ((c % 2) == 0) {
 #             c++
 #         } else {
 #             c += 2
