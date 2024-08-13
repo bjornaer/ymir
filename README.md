@@ -14,9 +14,9 @@ Ymir is a modern programming language inspired by Norse mythology, designed to b
 - **Interoperability:** Seamless integration with existing libraries and tools, supporting the latest Python versions.
 - **Cross-Platform:** Build and run Ymir scripts on Linux, macOS, and Windows.
 
-## Installation
+## Development
 
-To install Ymir, use the package manager [Poetry](https://python-poetry.org/):
+To develop Ymir, use the package manager [Poetry](https://python-poetry.org/):
 
 ```bash
 pip install poetry

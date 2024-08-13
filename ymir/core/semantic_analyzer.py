@@ -16,11 +16,13 @@ from ymir.core.ast import (
     WhileStatement,
 )
 from ymir.core.symbol_table import SymbolTable
+from ymir.logging import get_logger
 
 
 class SemanticAnalyzer:
-    def __init__(self):
+    def __init__(self, verbosity: str = "INFO"):
         self.symbol_table = SymbolTable()
+        self.logger = get_logger("ymir.core", verbosity)
 
     def analyze(self, ast: List[ASTNode]) -> None:
         for node in ast:

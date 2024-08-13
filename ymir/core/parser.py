@@ -45,7 +45,7 @@ class Parser:
     def __init__(self, tokens, verbosity="INFO"):
         self.tokens = tokens
         self.pos = 0
-        self.logger = get_logger("ymir", verbosity)
+        self.logger = get_logger("ymir.core", verbosity)
 
     def parse(self) -> List[ASTNode]:
         statements = []
@@ -119,9 +119,20 @@ class Parser:
         raise SyntaxError(f"Unexpected token: {token} value: '{token.value}' after identifier")
 
     def parse_module_def(self) -> ModuleDef:
-        self.advance()  # Skip 'module'
+        self.expect_token(TokenType.KEYWORD, "module")
         name_token = self.current_token()
+        module_name = name_token.value
         self.expect_token(TokenType.IDENTIFIER)
+        # Handle dotted module names
+        self.logger.debug(f">> current token: {self.current_token()}")
+        while self.current_token().type == TokenType.DOT:
+            self.advance()
+            if self.current_token().type != TokenType.IDENTIFIER:
+                raise SyntaxError(f"Expected identifier after dot in module name, got {self.current_token()}")
+            module_name += "." + self.current_token().value
+            self.logger.debug(f">> module_name: {module_name}")
+            self.expect_token(TokenType.IDENTIFIER)
+
         self.expect_token(TokenType.NEWLINE)
         body = []
         while self.current_token().type != TokenType.EOF:
@@ -130,8 +141,9 @@ class Parser:
             self.logger.debug(f"Parsing module statement: {self.current_token()}")
             try:
                 statement = self.parse_statement()
-                body.append(statement)
-                self.logger.debug(f"Successfully parsed statement: {type(statement).__name__}")
+                if statement is not None:
+                    body.append(statement)
+                    self.logger.debug(f"Successfully parsed statement: {type(statement).__name__}")
             except SyntaxError as e:
                 self.logger.error(f"Error parsing statement: {e}")
                 # Attempt to recover by skipping to the next newline
@@ -139,7 +151,7 @@ class Parser:
                     self.advance()
                 if self.current_token().type == TokenType.NEWLINE:
                     self.advance()
-        return ModuleDef(name_token.value, body)
+        return ModuleDef(module_name, body)
 
     def parse_import_def(self) -> ImportDef:
         self.advance()  # Skip 'import'
@@ -149,12 +161,17 @@ class Parser:
 
     def parse_export_def(self) -> ExportDef:
         self.advance()  # Skip 'export'
-        name_token = self.current_token()
-        self.expect_token(TokenType.IDENTIFIER)
-        self.expect_token(TokenType.OPERATOR, "=")
-        value = self.parse_expression()
-        self.expect_token(TokenType.NEWLINE)
-        return ExportDef(name_token.value, value)
+        if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "func":
+            function_def = self.parse_function_def()
+            function_def.is_export = True
+            return ExportDef(function_def.name, function_def)
+        else:
+            name_token = self.current_token()
+            self.expect_token(TokenType.IDENTIFIER)
+            self.expect_token(TokenType.OPERATOR, "=")
+            value = self.parse_expression()
+            self.expect_token(TokenType.NEWLINE)
+            return ExportDef(name_token.value, value)
 
     def parse_for_loop(self) -> ASTNode:
         self.advance()  # Skip 'for'

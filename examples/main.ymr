@@ -1,6 +1,6 @@
 module main
 
-import "example.ymr"
+import example
 
 def main() {
     print(example.public)

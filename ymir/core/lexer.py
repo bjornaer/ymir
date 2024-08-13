@@ -51,7 +51,7 @@ class Token:
 class Lexer:
     def __init__(self, source_code, verbosity="INFO"):
         self.source_code = source_code
-        self.logger = get_logger("ymir", verbosity)
+        self.logger = get_logger("ymir.core", verbosity)
         self.tokens: List[Token] = []
         self.keywords = {
             "func",

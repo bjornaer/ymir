@@ -16,10 +16,11 @@ def cli():
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
-def run(file):
+@click.option("--verbosity", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="INFO")
+def run(file, verbosity):
     """Run a Ymir script."""
     try:
-        interpreter = YmirInterpreter()
+        interpreter = YmirInterpreter(verbosity=verbosity)
         interpreter.run_ymir_script(file)
     except Exception as e:
         click.echo(f"Error running {file}: {e}")

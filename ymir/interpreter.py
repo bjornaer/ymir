@@ -25,15 +25,18 @@ from ymir.core.lexer import Lexer
 from ymir.core.parser import Parser
 from ymir.core.semantic_analyzer import SemanticAnalyzer
 from ymir.core.type_checker import TypeChecker
+from ymir.logging import get_logger
 from ymir.tools.codegen import CodeGenerator
 
 
 class YmirInterpreter:
-    def __init__(self):
+    def __init__(self, verbosity: str = "INFO"):
         self.global_scope: Dict[str, Any] = {}
         self.local_scope: Dict[str, Any] = {}
         self.module_cache: Dict[str, ModuleDef] = {}
         self.standard_library_path = os.path.join(os.path.dirname(__file__), "stdlib")
+        self.verbosity = verbosity
+        self.logger = get_logger("ymir", verbosity)
 
     def execute(self, llvm_ir: str) -> None:
         binding.initialize()
@@ -80,6 +83,7 @@ class YmirInterpreter:
             return cfunc(*cargs)
 
     def run_ymir_script(self, file_path: str) -> None:
+        self.logger.debug(f"Running Ymir script: {file_path}")
         self.load_standard_library()
         project_root = os.path.dirname(os.path.abspath(file_path))
         main_module = self.load_module(file_path, project_root, is_entry_point=True)
@@ -90,20 +94,27 @@ class YmirInterpreter:
         self.execute(llvm_ir)
 
     def load_module(self, file_path: str, project_root: str, is_entry_point: bool = False) -> ModuleDef:
+        self.logger.debug(f"Loading module: {file_path}")
         with open(file_path, "r") as file:
             source_code = file.read()
+        self.logger.debug(f"Source code: {source_code}")
 
-        lexer = Lexer(source_code)
+        lexer = Lexer(source_code, verbosity=self.verbosity)
         tokens = lexer.tokenize()
+        self.logger.debug(f"Tokens: {tokens}")
 
-        parser = Parser(tokens)
+        parser = Parser(tokens, verbosity=self.verbosity)
         ast = parser.parse()
+        self.logger.debug(f"AST: {ast}")
 
-        semantic_analyzer = SemanticAnalyzer()
+        semantic_analyzer = SemanticAnalyzer(verbosity=self.verbosity)
         semantic_analyzer.analyze(ast)
+        self.logger.debug("Semantic analysis complete")
 
-        type_checker = TypeChecker()
+        type_checker = TypeChecker(verbosity=self.verbosity)
         type_checker.check(ast)
+        self.logger.debug("Type checking complete")
+
         module_name = None
 
         for node in ast:
@@ -114,8 +125,11 @@ class YmirInterpreter:
         if module_name is None:
             raise SyntaxError(f"Module name not defined in {file_path}")
 
+        self.logger.debug(f"Module name: {module_name}")
+
         module = ModuleDef(module_name, ast)
         self.module_cache[module_name] = module
+        self.logger.debug(f"Module: {module}")
         for node in ast:
             if isinstance(node, ImportDef):
                 import_path = self.resolve_import(node.module_name)

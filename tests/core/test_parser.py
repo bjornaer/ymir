@@ -940,13 +940,63 @@ def test_parse_complex_function_def():
     assert func_def.body[1].value.expression == 1
 
 
+def test_parse_module_with_dotted_name():
+    source_code = """
+    module stdlib.http
+
+    func http_get(url: string) -> string {
+        # Placeholder for actual HTTP GET logic
+        return ""
+    }
+
+    export func http_post(url: string, data: string) -> string {
+        # Placeholder for actual HTTP POST logic
+        return ""
+    }
+    """
+    lexer = Lexer(source_code)
+    tokens = lexer.tokenize()
+    parser = Parser(tokens, verbosity="DEBUG")
+    ast = parser.parse()
+
+    assert len(ast) == 1, "Expected one top-level AST node"
+    assert isinstance(ast[0], ModuleDef), "Expected a ModuleDef node"
+    module_def = ast[0]
+
+    assert module_def.name == "stdlib.http", f"Expected module name 'stdlib.http', got '{module_def.name}'"
+    assert len(module_def.body) == 2, f"Expected 2 function definitions, got {len(module_def.body)}"
+    # Check http_get function
+    assert isinstance(module_def.body[0], FunctionDef), "Expected first item to be a FunctionDef"
+    http_get = module_def.body[0]
+    assert http_get.name == "http_get", f"Expected function name 'http_get', got '{http_get.name}'"
+    # assert http_get.is_export == True, "Expected http_get to be exported"
+    assert len(http_get.params) == 1, f"Expected 1 parameter, got {len(http_get.params)}"
+    assert http_get.params[0] == "url", f"Expected parameter name 'url', got '{http_get.params[0]}'"
+    assert isinstance(http_get.param_types[0], StringType), "Expected parameter type to be StringType"
+    assert isinstance(http_get.return_type, StringType), "Expected return type to be StringType"
+
+    # Check http_post function
+    assert isinstance(module_def.body[1], ExportDef), "Expected second item to be a FunctionDef"
+    http_post_export = module_def.body[1]
+    assert http_post_export.name == "http_post", f"Expected function name 'http_post', got '{http_post_export.name}'"
+    # assert http_post.is_export == True, "Expected http_post to be exported"
+    http_post = http_post_export.value
+    assert isinstance(http_post, FunctionDef), "Expected http_post to be a FunctionDef"
+    assert len(http_post.params) == 2, f"Expected 2 parameters, got {len(http_post.params)}"
+    assert http_post.params == ["url", "data"], f"Expected parameters ['url', 'data'], got {http_post.params}"
+    assert all(
+        isinstance(param_type, StringType) for param_type in http_post.param_types
+    ), "Expected all parameter types to be StringType"
+    assert isinstance(http_post.return_type, StringType), "Expected return type to be StringType"
+
+
 # def test_parse_complex_module_function_def():
 #     source_code = """
 # module ComplexFunctionModule
 
 # func complex_function(a: int, b: str) -> str {
 #     var c: int = 0
-#     d: int = 1
+#     var d: int = 1
 #     c = c + d
 #     while (c < a) {
 #         if ((c % 2) == 0) {

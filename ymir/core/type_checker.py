@@ -25,11 +25,13 @@ from ymir.core.types import (
     TupleType,
     Type,
 )
+from ymir.logging import get_logger
 
 
 class TypeChecker:
-    def __init__(self):
+    def __init__(self, verbosity: str = "INFO"):
         self.symbol_table = {}
+        self.logger = get_logger("ymir.core", verbosity)
 
     def check(self, ast):
         for node in ast:
