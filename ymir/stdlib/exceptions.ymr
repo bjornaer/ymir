@@ -1,0 +1,71 @@
+module exceptions
+
+# Base Exception class
+exception Exception {
+    func __init__(message: string) {
+        self.message = message
+    }
+
+    func __str__() -> string {
+        return self.message
+    }
+}
+
+# Type-related errors
+exception TypeError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "TypeError: Invalid type")
+    }
+}
+
+# Value-related errors
+exception ValueError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "ValueError: Invalid value")
+    }
+}
+
+# Index-related errors
+exception IndexError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "IndexError: Index out of range")
+    }
+}
+
+# Key-related errors
+exception KeyError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "KeyError: Key not found")
+    }
+}
+
+# IO-related errors
+exception IOError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "IOError: Input/output error")
+    }
+}
+
+# Not implemented errors
+exception NotImplementedError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "NotImplementedError: Feature not implemented")
+    }
+}
+
+# Runtime errors
+exception RuntimeError: Exception {
+    func __init__(message: string) {
+        super.__init__(message || "RuntimeError: Runtime error occurred")
+    }
+}
+
+# Export the exception classes
+export Exception = Exception
+export TypeError = TypeError
+export ValueError = ValueError
+export IndexError = IndexError
+export KeyError = KeyError
+export IOError = IOError
+export NotImplementedError = NotImplementedError
+export RuntimeError = RuntimeError

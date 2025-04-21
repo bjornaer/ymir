@@ -14,6 +14,7 @@ from ymir.core.ast import (
     ClassDef,
     ClassInstance,
     Continue,
+    ExceptionDef,
     Expression,
     ForCStyleLoop,
     ForInLoop,
@@ -25,6 +26,8 @@ from ymir.core.ast import (
     MethodCall,
     ModuleDef,
     StringLiteral,
+    ThrowStatement,
+    TryExceptStatement,
     TupleLiteral,
     WhileStatement,
 )
@@ -44,6 +47,11 @@ class CodeGenerator:
         self.builtins = create_builtin_functions(self.module)
         self.networking = create_networking_functions(self.module)
         self.async_support = AsyncSupport()
+
+        # Add exception handling tracking
+        self.exception_handlers = []  # Stack of exception handlers
+        self.current_try_block = None
+        self.current_landing_pad = None
 
     def generate_code(self, ast: List[Any]) -> str:
         for node in ast:
@@ -94,6 +102,12 @@ class CodeGenerator:
             return self.visit_method_call(node)
         elif isinstance(node, NilType):
             return self.visit_nil(node)
+        elif isinstance(node, TryExceptStatement):
+            return self.visit_try_except_statement(node)
+        elif isinstance(node, ThrowStatement):
+            return self.visit_throw_statement(node)
+        elif isinstance(node, ExceptionDef):
+            return self.visit_exception_def(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -436,3 +450,141 @@ class CodeGenerator:
 
     def visit_module_def(self, _: ModuleDef):
         pass  # Handled during the module loading phase
+
+    def visit_try_except_statement(self, node: TryExceptStatement):
+        """Generate LLVM IR for try-except-finally statements."""
+        # Create basic blocks for the try, except clauses, finally, and continuation
+        try_block = self.function.append_basic_block(name="try")
+        except_blocks = []
+        for _ in node.except_clauses:
+            except_blocks.append(self.function.append_basic_block(name="except"))
+        finally_block = None
+        if node.finally_clause:
+            finally_block = self.function.append_basic_block(name="finally")
+        cont_block = self.function.append_basic_block(name="try_cont")
+
+        # Save current exception handlers
+        prev_handlers = self.exception_handlers
+
+        # Set up exception handlers for this try block
+        landing_pad = self.function.append_basic_block(name="landing_pad")
+        self.exception_handlers.append(
+            {
+                "landing_pad": landing_pad,
+                "except_blocks": except_blocks,
+                "finally_block": finally_block,
+                "except_clauses": node.except_clauses,
+            }
+        )
+
+        # Branch to try block
+        self.builder.branch(try_block)
+
+        # Generate code for try block
+        self.builder.position_at_end(try_block)
+        self.current_try_block = try_block
+        for stmt in node.try_block:
+            self.visit(stmt)
+
+        # If we get here normally (no exceptions), go to finally or cont
+        if finally_block:
+            self.builder.branch(finally_block)
+        else:
+            self.builder.branch(cont_block)
+
+        # Set up landing pad for exception handling
+        self.builder.position_at_end(landing_pad)
+        # NOTE(@bjornaer): In a robust (TODO) implementation,
+        # I plan to use LLVM's exception handling intrinsics
+        # For simplicity, I'll just create a phi node to handle different exception types
+        exception_var = self.builder.phi(ir.PointerType(ir.IntType(8)), name="exception")
+
+        # Generate code for except blocks
+        for i, (except_block, except_clause) in enumerate(zip(except_blocks, node.except_clauses)):
+            self.builder.position_at_end(except_block)
+
+            # Bind exception variable if needed
+            if except_clause.exception_var:
+                var_ptr = self.builder.alloca(ir.PointerType(ir.IntType(8)), name=except_clause.exception_var)
+                self.builder.store(exception_var, var_ptr)
+                self.local_scope[except_clause.exception_var] = var_ptr
+
+            # Generate code for the except block
+            for stmt in except_clause.except_block:
+                self.visit(stmt)
+
+            # Branch to finally or continuation
+            if finally_block:
+                self.builder.branch(finally_block)
+            else:
+                self.builder.branch(cont_block)
+
+        # Generate code for finally block if present
+        if finally_block:
+            self.builder.position_at_end(finally_block)
+            for stmt in node.finally_clause.finally_block:
+                self.visit(stmt)
+            self.builder.branch(cont_block)
+
+        # Restore previous exception handlers
+        self.exception_handlers = prev_handlers
+
+        # Position at continuation block
+        self.builder.position_at_end(cont_block)
+
+    def visit_throw_statement(self, node: ThrowStatement):
+        """Generate LLVM IR for throw statements."""
+        # Generate the exception value
+        exception_value = self.visit_expression(node.expression)
+
+        # Call runtime function to handle throwing
+        throw_func = self.module.get_global("throw_exception")
+        if not throw_func:
+            # Define the throw_exception function if not already defined
+            throw_type = ir.FunctionType(ir.VoidType(), [ir.PointerType(ir.IntType(8))])
+            throw_func = ir.Function(self.module, throw_type, name="throw_exception")
+
+        # Call the throw function with the exception value
+        self.builder.call(throw_func, [exception_value])
+
+        # Branch to the nearest exception handler's landing pad
+        if self.exception_handlers:
+            handler = self.exception_handlers[-1]
+            self.builder.branch(handler["landing_pad"])
+        else:
+            # If no handler, call panic
+            panic_func = self.builtins.get("panic")
+            if panic_func:
+                self.builder.call(panic_func, [exception_value])
+            # Unreachable code after throw with no handler
+            self.builder.unreachable()
+
+    def visit_exception_def(self, node: ExceptionDef):
+        """Generate LLVM IR for exception class definitions."""
+        # Create a struct type for the exception
+        exception_struct = ir.global_context.get_identified_type(node.name)
+
+        # If there's a base class, include its fields
+        member_types = []
+        if node.base_class:
+            base_class = self.global_scope.get(node.base_class)
+            if isinstance(base_class, ir.Type):
+                # Get fields from base class if possible
+                for field in base_class.elements:
+                    member_types.append(field)
+
+        # Add fields from this exception
+        for member in node.members:
+            if isinstance(member, dict) and "type" in member:
+                member_type = self.get_ir_type(member["type"])
+                member_types.append(member_type)
+
+        # Set the body of the struct type
+        exception_struct.set_body(*member_types)
+
+        # Store the type in global scope
+        self.global_scope[node.name] = exception_struct
+
+        # Generate code for methods
+        for method in node.methods:
+            self.visit(method)

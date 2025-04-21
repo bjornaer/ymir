@@ -146,3 +146,47 @@ class AwaitExpression(Expression):
 class ImportDef(ASTNode):
     def __init__(self, module_name: str):
         self.module_name = module_name
+
+
+class TryExceptStatement(ASTNode):
+    def __init__(
+        self,
+        try_block: List[ASTNode],
+        except_clauses: List["ExceptClause"],
+        finally_clause: Optional["FinallyClause"] = None,
+    ):
+        self.try_block = try_block
+        self.except_clauses = except_clauses
+        self.finally_clause = finally_clause
+
+
+class ExceptClause(ASTNode):
+    def __init__(
+        self,
+        except_block: List[ASTNode],
+        exception_type: Optional[Expression] = None,
+        exception_var: Optional[str] = None,
+    ):
+        self.except_block = except_block
+        self.exception_type = exception_type
+        self.exception_var = exception_var
+
+
+class FinallyClause(ASTNode):
+    def __init__(self, finally_block: List[ASTNode]):
+        self.finally_block = finally_block
+
+
+class ThrowStatement(ASTNode):
+    def __init__(self, expression: Expression):
+        self.expression = expression
+
+
+class ExceptionDef(ASTNode):
+    def __init__(
+        self, name: str, methods: List[FunctionDef], members: List[Dict[str, str]], base_class: Optional[str] = None
+    ):
+        self.name = name
+        self.base_class = base_class
+        self.methods = methods
+        self.members = members

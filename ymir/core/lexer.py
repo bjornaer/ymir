@@ -82,6 +82,13 @@ class Lexer:
             "map",  # Type hint keywords
             "tuple",  # Type hint keywords
             "var",
+            # Exception handling keywords
+            "try",
+            "except",
+            "finally",
+            "throw",
+            "exception",
+            "as",
         }
         self.token_specification = [
             ("NUMBER", r"\d+(\.\d*)?"),

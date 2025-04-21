@@ -162,3 +162,10 @@ cython_debug/
 #.idea/
 .DS_Store
 assets/.DS_Store
+.ruff_cache/
+roadmap.md
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/

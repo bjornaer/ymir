@@ -4,6 +4,7 @@ from ymir.core.ast import (
     BinaryOp,
     ClassDef,
     ClassInstance,
+    ExceptionDef,
     Expression,
     FunctionCall,
     FunctionDef,
@@ -11,6 +12,8 @@ from ymir.core.ast import (
     MapLiteral,
     MethodCall,
     StringLiteral,
+    ThrowStatement,
+    TryExceptStatement,
     TupleLiteral,
     WhileStatement,
 )
@@ -66,6 +69,12 @@ class TypeChecker:
             return self.visit_tuple_literal(node)
         elif isinstance(node, MapLiteral):
             return self.visit_dictionary_literal(node)
+        elif isinstance(node, TryExceptStatement):
+            return self.visit_try_except_statement(node)
+        elif isinstance(node, ThrowStatement):
+            return self.visit_throw_statement(node)
+        elif isinstance(node, ExceptionDef):
+            return self.visit_exception_def(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -200,3 +209,74 @@ class TypeChecker:
             param_types = [self.visit_type_annotation(t) for t in node.param_types]
             return FunctionType(param_types, self.visit_type_annotation(node.return_type))
         return None
+
+    def visit_try_except_statement(self, node: TryExceptStatement):
+        # Type check the try block
+        for statement in node.try_block:
+            self.visit(statement)
+
+        # Type check each except clause
+        for except_clause in node.except_clauses:
+            if except_clause.exception_type:
+                exception_type = self.visit_expression(except_clause.exception_type)
+
+                # Verify the exception type is a valid exception class
+                if exception_type not in self.symbol_table or not self.is_exception_type(exception_type):
+                    raise TypeError(f"Invalid exception type: {exception_type}")
+
+            # Type check the except block
+            for statement in except_clause.except_block:
+                self.visit(statement)
+
+        # Type check the finally clause if present
+        if node.finally_clause:
+            for statement in node.finally_clause.finally_block:
+                self.visit(statement)
+
+    def visit_throw_statement(self, node: ThrowStatement):
+        # Type check the expression being thrown
+        expr_type = self.visit_expression(node.expression)
+
+        # Verify the expression is an exception or can be converted to one
+        if not self.is_exception_type(expr_type) and not self.can_convert_to_exception(expr_type):
+            raise TypeError(f"Cannot throw non-exception type: {expr_type}")
+
+    def visit_exception_def(self, node: ExceptionDef):
+        # Register exception in the symbol table
+        self.symbol_table[node.name] = node
+
+        # If there's a base class, verify it's a valid exception
+        if node.base_class:
+            base_class = self.symbol_table.get(node.base_class)
+            if not base_class:
+                raise NameError(f"Undefined base exception: {node.base_class}")
+            if not self.is_exception_type(base_class):
+                raise TypeError(f"{node.base_class} is not an exception class")
+
+        # Type check methods and member initializations
+        for method in node.methods:
+            self.visit(method)
+
+    def is_exception_type(self, type_obj):
+        """Check if a type is an exception or inherits from Exception."""
+        if isinstance(type_obj, ExceptionDef):
+            return True
+
+        # Check inheritance chain
+        current = type_obj
+        while hasattr(current, "base_class") and current.base_class:
+            base_name = current.base_class
+            base = self.symbol_table.get(base_name)
+            if not base:
+                return False
+            if isinstance(base, ExceptionDef):
+                return True
+            current = base
+
+        return False
+
+    def can_convert_to_exception(self, type_obj):
+        """Check if a type can be converted to an exception (e.g., string)."""
+        # For now, let's just allow strings to be automatically wrapped in exceptions
+        # This could be extended to support more types in the future
+        return type_obj == StringType()

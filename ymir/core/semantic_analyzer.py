@@ -6,12 +6,17 @@ from ymir.core.ast import (
     ASTNode,
     BinaryOp,
     ClassDef,
+    ExceptClause,
+    ExceptionDef,
     Expression,
+    FinallyClause,
     FunctionCall,
     FunctionDef,
     IfStatement,
     MapLiteral,
     StringLiteral,
+    ThrowStatement,
+    TryExceptStatement,
     TupleLiteral,
     WhileStatement,
 )
@@ -49,6 +54,16 @@ class SemanticAnalyzer:
             self.visit_tuple_literal(node)
         elif isinstance(node, MapLiteral):
             self.visit_dictionary_literal(node)
+        elif isinstance(node, TryExceptStatement):
+            self.visit_try_except_statement(node)
+        elif isinstance(node, ThrowStatement):
+            self.visit_throw_statement(node)
+        elif isinstance(node, ExceptionDef):
+            self.visit_exception_def(node)
+        elif isinstance(node, FinallyClause):
+            self.visit_finally_clause(node)
+        elif isinstance(node, ExceptClause):
+            self.visit_except_clause(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -122,3 +137,48 @@ class SemanticAnalyzer:
 
     def visit_dictionary_literal(self, node: MapLiteral) -> dict:
         return {self.visit_expression(key): self.visit_expression(value) for key, value in node.pairs.items()}
+
+    def visit_try_except_statement(self, node: TryExceptStatement) -> None:
+        self.symbol_table.enter_scope()
+        for statement in node.try_block:
+            self.visit(statement)
+        self.symbol_table.exit_scope()
+
+        for except_clause in node.except_clauses:
+            if except_clause.exception_type:
+                self.visit_expression(except_clause.exception_type)
+
+            self.symbol_table.enter_scope()
+            if except_clause.exception_var:
+                self.symbol_table.define(except_clause.exception_var, "exception")
+
+            for statement in except_clause.except_block:
+                self.visit(statement)
+            self.symbol_table.exit_scope()
+
+        if node.finally_clause:
+            self.symbol_table.enter_scope()
+            for statement in node.finally_clause.finally_block:
+                self.visit(statement)
+            self.symbol_table.exit_scope()
+
+    def visit_throw_statement(self, node: ThrowStatement) -> None:
+        self.visit_expression(node.expression)
+
+    def visit_exception_def(self, node: ExceptionDef) -> None:
+        self.symbol_table.define(node.name, "exception")
+
+        self.symbol_table.enter_scope()
+
+        for method in node.methods:
+            self.visit(method)
+
+        self.symbol_table.exit_scope()
+
+    def visit_finally_clause(self, node: FinallyClause) -> None:
+        for statement in node.finally_block:
+            self.visit(statement)
+
+    def visit_except_clause(self, node: ExceptClause) -> None:
+        for statement in node.except_block:
+            self.visit(statement)
