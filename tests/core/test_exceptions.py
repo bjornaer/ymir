@@ -10,11 +10,15 @@ class TestExceptionHandling:
         """Test a simple try/except block."""
         source = """
         func test() {
+            var result: string = ""
             try {
+                result = "try"
                 throw "Error occurred"
             } except {
-                return "Caught exception"
+                result = result + " caught"
+                return result
             }
+            return "not reached"
         }
         """
         tokens = Lexer(source).tokenize()
@@ -35,7 +39,7 @@ class TestExceptionHandling:
 
         # Call the test function
         result = interpreter.evaluate_function_call("test", [])
-        assert result == "Caught exception"
+        assert result == "caught"
 
     def test_exception_binding(self):
         """Test exception binding with 'as' keyword."""

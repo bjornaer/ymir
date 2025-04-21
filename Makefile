@@ -6,6 +6,8 @@ install:
 test:
 	poetry run pytest tests/
 
+tests: test
+
 lint:
 	poetry run ruff check .
 	poetry run black --check .

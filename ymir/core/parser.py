@@ -29,6 +29,7 @@ from ymir.core.ast import (
     ThrowStatement,
     TryExceptStatement,
     TupleLiteral,
+    UnaryOp,
     WhileStatement,
 )
 from ymir.core.lexer import Token, TokenType
@@ -77,8 +78,14 @@ class Parser:
             self.advance()
         token = self.current_token()
         self.logger.debug(f"parse_statement: Current token: {token}")
+
         if token.type == TokenType.EOF:
             return None  # Gracefully handle EOF
+
+        # Handle closing braces - they should be handled by the parse_block method
+        if token.type == TokenType.BRACE_CLOSE:
+            return None  # Let the calling parse_block method handle this
+
         if token.type == TokenType.KEYWORD:
             if token.value == "module":
                 return self.parse_module_def()
@@ -145,39 +152,42 @@ class Parser:
         return WhileStatement(condition, body)
 
     def parse_module_def(self) -> ModuleDef:
-        self.expect_token(TokenType.KEYWORD, "module")
-        name_token = self.current_token()
-        module_name = name_token.value
-        self.expect_token(TokenType.IDENTIFIER)
-        # Handle dotted module names
-        self.logger.debug(f">> current token: {self.current_token()}")
+        """Parse a module definition."""
+        self.advance()  # Skip 'module'
+        self.skip_whitespace()
+
+        if self.current_token().type != TokenType.IDENTIFIER:
+            raise SyntaxError(f"Expected module name, got {self.current_token()}")
+
+        name = self.current_token().value
+        self.advance()  # Skip identifier
+
+        # Handle dotted module names (e.g., module a.b.c)
         while self.current_token().type == TokenType.DOT:
-            self.advance()
+            self.advance()  # Skip the dot
             if self.current_token().type != TokenType.IDENTIFIER:
                 raise SyntaxError(f"Expected identifier after dot in module name, got {self.current_token()}")
-            module_name += "." + self.current_token().value
-            self.logger.debug(f">> module_name: {module_name}")
-            self.expect_token(TokenType.IDENTIFIER)
+            name += "." + self.current_token().value
+            self.advance()  # Skip identifier
 
-        self.expect_token(TokenType.NEWLINE)
+        # Make sure we consume the newline after the module declaration
+        if self.current_token().type == TokenType.NEWLINE:
+            self.advance()
+
+        # Parse the module body
         body = []
         while self.current_token().type != TokenType.EOF:
             if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "module":
+                # Stop when we reach another module definition
                 break
-            self.logger.debug(f"Parsing module statement: {self.current_token()}")
-            try:
-                statement = self.parse_statement()
-                if statement is not None:
-                    body.append(statement)
-                    self.logger.debug(f"Successfully parsed statement: {type(statement).__name__}")
-            except SyntaxError as e:
-                self.logger.error(f"Error parsing statement: {e}")
-                # Attempt to recover by skipping to the next newline
-                while self.current_token().type not in {TokenType.NEWLINE, TokenType.EOF}:
-                    self.advance()
-                if self.current_token().type == TokenType.NEWLINE:
-                    self.advance()
-        return ModuleDef(module_name, body)
+
+            statement = self.parse_statement()
+            if statement:
+                body.append(statement)
+                self.logger.debug(f"Added statement to module body: {type(statement).__name__}")
+
+        self.logger.debug(f"Final module body count: {len(body)}")
+        return ModuleDef(name, body)
 
     def parse_import_def(self) -> ImportDef:
         self.advance()  # Skip 'import'
@@ -186,36 +196,83 @@ class Parser:
         return ImportDef(module_name)
 
     def parse_export_def(self) -> ExportDef:
+        """Parse an export definition."""
         self.advance()  # Skip 'export'
+
+        # Check if we're exporting a function
         if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "func":
             function_def = self.parse_function_def()
             function_def.is_export = True
             return ExportDef(function_def.name, function_def)
-        else:
-            name_token = self.current_token()
-            self.expect_token(TokenType.IDENTIFIER)
-            self.expect_token(TokenType.OPERATOR, "=")
-            value = self.parse_expression()
-            self.expect_token(TokenType.NEWLINE)
-            return ExportDef(name_token.value, value)
+
+        # Otherwise, it's a simple export assignment
+        name = self.current_token().value
+        self.expect_token(TokenType.IDENTIFIER)
+        self.expect_token(TokenType.OPERATOR, "=")
+        value = self.parse_expression()
+
+        # Consume the newline if present
+        if self.current_token().type == TokenType.NEWLINE:
+            self.advance()
+
+        return ExportDef(name, value)
 
     def parse_for_loop(self) -> ASTNode:
+        """Parse a for loop, which can be a for-in loop or a C-style for loop."""
         self.advance()  # Skip 'for'
+        self.skip_whitespace()
+
+        # Check for C-style for loop (with parentheses)
         if self.current_token().type == TokenType.PAREN_OPEN:
             return self.parse_cstyle_for_loop()
-        else:
-            var_token = self.current_token()
-            self.expect_token(TokenType.IDENTIFIER)
-            return self.parse_python_style_for_loop(var_token)
+
+        # It's a for-in loop
+        var = self.current_token().value
+        self.advance()  # Skip variable name
+
+        self.skip_whitespace()
+        self.expect_token(TokenType.KEYWORD, "in")
+        self.skip_whitespace()
+
+        iterable = self.parse_expression()
+        body = self.parse_block()
+
+        return ForInLoop(var, iterable, body)
 
     def parse_cstyle_for_loop(self) -> ForCStyleLoop:
-        self.expect_token(TokenType.PAREN_OPEN)
-        init = self.parse_statement()
+        """Parse a C-style for loop."""
+        self.advance()  # Skip opening parenthesis
+
+        # Parse initialization - might be an assignment or an expression
+        # Try to handle both syntax forms "for (i = 0; ...)" and "for (var i = 0; ...)"
+        if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "var":
+            init = self.parse_variable_declaration()
+        else:
+            init = self.parse_assignment_or_expression()
+
         self.expect_token(TokenType.SEMICOLON)
+
+        # Parse condition
         condition = self.parse_expression()
         self.expect_token(TokenType.SEMICOLON)
-        increment = self.parse_statement()
+
+        # Parse increment - handle special case for i++ and i--
+        if (
+            self.current_token().type == TokenType.IDENTIFIER
+            and self.pos + 1 < len(self.tokens)
+            and self.tokens[self.pos + 1].type == TokenType.OPERATOR
+            and self.tokens[self.pos + 1].value in ("++", "--")
+        ):
+            identifier = self.current_token().value
+            self.advance()  # Skip identifier
+            op = self.current_token().value
+            self.advance()  # Skip operator
+            increment = UnaryOp(op, Expression(identifier), postfix=True)
+        else:
+            increment = self.parse_assignment_or_expression()
+
         self.expect_token(TokenType.PAREN_CLOSE)
+
         body = self.parse_block()
         return ForCStyleLoop(init, condition, increment, body)
 
@@ -237,37 +294,59 @@ class Parser:
         self.advance()  # Skip 'nil'
         return NilType()
 
-    def parse_function_def(self, as_async=False) -> FunctionDef:
+    def parse_function_def(self) -> FunctionDef:
+        """Parse a function definition."""
         self.logger.debug("Entering parse_function_def")
-        self.expect_token(TokenType.KEYWORD, "func")
-        self.skip_whitespace()
-        name = self.current_token().value
-        self.logger.debug(f"Function name: {name}")
-        self.advance()  # skip function name
-        self.skip_whitespace()
+        self.advance()  # Skip 'func'
+
+        # Parse function name
+        if self.current_token().type != TokenType.IDENTIFIER:
+            raise SyntaxError(f"Expected function name, got {self.current_token()}")
+
+        function_name = self.current_token().value
+        self.logger.debug(f"Function name: {function_name}")
+        self.advance()  # Skip function name
+
+        # Parse parameters
         params, param_types = self.parse_parameters()
         self.logger.debug(f"Parsed parameters: {params}")
         self.logger.debug(f"Parsed parameter types: {param_types}")
-        self.skip_whitespace()
+
+        # Parse return type if present
         return_type = None
         if self.current_token().type == TokenType.OPERATOR and self.current_token().value == "->":
-            self.advance()  # skip '->'
+            self.advance()  # Skip '->'
             return_type = self.parse_type_annotation()
             self.logger.debug(f"Parsed return type: {return_type}")
-        body = self.parse_block()  # consumes both {}
+
+        # Parse function body
+        body = self.parse_block()
         self.logger.debug(f"Parsed function body: {body}")
-        func_def = (
-            AsyncFunctionDef(name, params, param_types, return_type, body)
-            if as_async
-            else FunctionDef(name, params, param_types, return_type, body)
+
+        # Create and return the function definition - fix parameter order!
+        function_def = FunctionDef(
+            name=function_name, params=params, param_types=param_types, return_type=return_type, body=body
         )
-        self.logger.debug(f"Created function definition: {func_def}")
-        return func_def
+        self.logger.debug(f"Created function definition: {function_def}")
+        return function_def
 
     def parse_async_function_def(self) -> AsyncFunctionDef:
         self.expect_token(TokenType.KEYWORD, "async")
         self.skip_whitespace()
-        return self.parse_function_def(as_async=True)
+
+        # Parse as a regular function but then convert to async
+        func_def = self.parse_function_def()
+
+        # Convert to AsyncFunctionDef
+        async_func = AsyncFunctionDef(
+            name=func_def.name,
+            params=func_def.params,
+            param_types=func_def.param_types,
+            return_type=func_def.return_type,
+            body=func_def.body,
+        )
+
+        return async_func
 
     def parse_await_expression(self) -> AwaitExpression:
         self.advance()  # Skip 'await'
@@ -327,27 +406,51 @@ class Parser:
         return IfStatement(condition, then_body, else_body)
 
     def parse_assignment_or_expression(self) -> ASTNode:
-        self.logger.debug(f"Entering parse_assignment_or_expression with current token: {self.current_token()}")
-        left = self.parse_expression()
-        self.logger.debug(f"After parsing left side: {left}")
+        """Parse an assignment or expression statement."""
+        start_pos = self.pos
+        token = self.current_token()
 
-        if self.current_token().type == TokenType.OPERATOR and self.current_token().value in {
-            "=",
-            "+=",
-            "-=",
-            "*=",
-            "/=",
-            "%=",
-        }:
-            operator = self.current_token().value
-            self.logger.debug(f"Found assignment operator: {operator}")
-            self.advance()
-            right = self.parse_expression()
-            self.logger.debug(f"After parsing right side: {right}")
-            return Assignment(left, right, operator)
-        else:
-            self.logger.debug("No assignment operator found, returning expression")
-            return left
+        # Handle special increment/decrement operators like a++ and a--
+        if (
+            token.type == TokenType.IDENTIFIER
+            and self.pos + 1 < len(self.tokens)
+            and self.tokens[self.pos + 1].type == TokenType.OPERATOR
+            and self.tokens[self.pos + 1].value in ("++", "--")
+        ):
+            identifier = token.value
+            self.advance()  # Skip identifier
+            op = self.current_token().value
+            self.advance()  # Skip operator
+            return UnaryOp(op, Expression(identifier), postfix=True)
+
+        # Reset position and try normal assignment
+        self.pos = start_pos
+
+        # Try to parse as an assignment
+        if token.type == TokenType.IDENTIFIER:
+            identifier = token.value
+            self.advance()  # Skip the identifier
+
+            if self.current_token().type == TokenType.OPERATOR:
+                op = self.current_token().value
+                if op in ("=", "+=", "-=", "*=", "/=", "%=", "**=", "//="):
+                    self.advance()  # Skip the operator
+                    value = self.parse_expression()
+
+                    # For simple assignment
+                    if op == "=":
+                        return Assignment(identifier, value)
+
+                    # For compound assignments (+=, -=, etc.)
+                    # Convert a += b to a = a + b
+                    binary_op = op[:-1]  # Remove the = part
+                    # Make sure parameters are correct: operator, left, right
+                    new_value = BinaryOp(operator=binary_op, left=Expression(identifier), right=value)
+                    return Assignment(identifier, new_value)
+
+        # If not an assignment, backtrack and parse as an expression
+        self.pos = start_pos
+        return self.parse_expression()
 
     def parse_binary_expression(self, left: ASTNode) -> ASTNode:
         operator = self.current_token().value
@@ -401,47 +504,94 @@ class Parser:
         return params, param_types
 
     def parse_arguments(self) -> List[ASTNode]:
+        """Parse function call arguments."""
         args = []
-        while self.current_token().type != TokenType.PAREN_CLOSE:
+
+        # Parse arguments if any
+        if self.current_token().type != TokenType.PAREN_CLOSE:
             args.append(self.parse_expression())
-            if self.current_token().type == TokenType.COMMA:
-                self.advance()
+            while self.current_token().type == TokenType.COMMA:
+                self.advance()  # Skip comma
+                args.append(self.parse_expression())
+
         return args
 
     def parse_block(self) -> List[ASTNode]:
-        statements = []
+        """Parse a block of statements enclosed in braces."""
         self.expect_token(TokenType.BRACE_OPEN)
-        while self.current_token().type != TokenType.BRACE_CLOSE:
-            if self.current_token().type == TokenType.EOF:
-                break
-            statements.append(self.parse_statement())
-            while self.current_token().type == TokenType.NEWLINE:
+
+        statements = []
+        nesting_level = 1  # Track braces nesting
+
+        # Skip any initial newlines after the opening brace
+        while self.current_token().type == TokenType.NEWLINE:
+            self.advance()
+
+        while self.current_token().type != TokenType.EOF:
+            # Track nesting depth of braces
+            if self.current_token().type == TokenType.BRACE_OPEN:
+                # If we're already inside a block, we need to parse nested blocks as part of statements
+                if nesting_level > 1:
+                    statement = self.parse_statement()
+                    if statement:
+                        statements.append(statement)
+                else:
+                    nesting_level += 1
+                    self.advance()
+
+            elif self.current_token().type == TokenType.BRACE_CLOSE:
+                nesting_level -= 1
+                if nesting_level == 0:
+                    self.advance()  # Consume closing brace
+                    break
+                else:
+                    # This closing brace belongs to a nested block
+                    self.advance()
+
+            # Skip newlines
+            elif self.current_token().type == TokenType.NEWLINE:
                 self.advance()
-            self.skip_whitespace()
-        self.expect_token(TokenType.BRACE_CLOSE)
+
+            # Parse regular statements
+            else:
+                statement = self.parse_statement()
+                if statement:
+                    statements.append(statement)
+
         return statements
 
-    def parse_expression(self, min_precedence=0) -> ASTNode:
-        self.logger.debug(f"parse_expression.Entering parse_expression with min_precedence: {min_precedence}")
-        left = self.parse_primary()
-        self.logger.debug(f"parse_expression.After parse_primary, left: {left}")
+    def parse_expression(self, min_precedence=0) -> Expression:
+        """Parse an expression using precedence climbing."""
+        self.logger.debug(f"Entering parse_expression with min_precedence: {min_precedence}")
 
+        # Parse the leftmost term first
+        left = self.parse_primary()
+        self.logger.debug(f"After parse_primary, left: {left}")
+
+        # Then handle any operators that follow
         while self.current_token().type == TokenType.OPERATOR:
-            operator = self.current_token().value
-            precedence = self.get_operator_precedence(operator)
-            self.logger.debug(f"parse_expression.Operator: {operator}, Precedence: {precedence}")
+            current_token = self.current_token()
+            op = current_token.value
+
+            # Get operator precedence
+            precedence = self.get_operator_precedence(op)
+            self.logger.debug(f"Operator: {op}, Precedence: {precedence}")
 
             if precedence < min_precedence:
-                self.logger.debug(f"parse_expression.Exiting parse_expression with left: {left}")
-                break
+                break  # This operator has lower precedence than the current min
 
-            self.advance()  # Consume the operator
+            self.advance()  # Move past the operator
+
+            # Parse the right operand with higher precedence to ensure correct associativity
             right = self.parse_expression(precedence + 1)
-            self.logger.debug(f"parse_expression.After parse_expression, right: {right}")
-            left = BinaryOp(left, operator, right)
-            self.logger.debug(f"parse_expression.After BinaryOp, left: {left}")
+            self.logger.debug(f"After parse_expression, right: {right}")
 
-        self.logger.debug(f"parse_expression: Returning expression: {left}")
+            # Create a binary operation node with the left operand, operator, and right operand
+            # Use named parameters to ensure correct order
+            left = BinaryOp(operator=op, left=left, right=right)
+            self.logger.debug(f"After BinaryOp, left: {left}")
+
+        self.logger.debug(f"Returning expression: {left}")
         return left
 
     def get_operator_precedence(self, operator: str) -> int:
@@ -476,7 +626,8 @@ class Parser:
         }
         return precedences.get(operator, 0)
 
-    def parse_primary(self) -> ASTNode:
+    def parse_primary(self) -> Expression:
+        """Parse a primary expression (an atom)."""
         self.skip_whitespace()
         token = self.current_token()
         if token.type == TokenType.LITERAL:
@@ -509,6 +660,9 @@ class Parser:
                 args = self.parse_arguments()
                 self.expect_token(TokenType.PAREN_CLOSE)
                 return FunctionCall(identifier, args)
+            # Handle property access (dot notation)
+            if self.current_token().type == TokenType.DOT:
+                return self.parse_property_access(Expression(identifier))
             return Expression(identifier)
         elif token.type == TokenType.KEYWORD:
             identifier = token.value
@@ -522,6 +676,29 @@ class Parser:
             return Expression(identifier)
         else:
             raise SyntaxError(f"Unexpected token: {token} value: '{token.value}' after identifier")
+
+    def parse_property_access(self, left: Expression) -> Expression:
+        """Parse property access using dot notation."""
+        while self.current_token().type == TokenType.DOT:
+            self.advance()  # Skip the dot
+
+            if self.current_token().type != TokenType.IDENTIFIER:
+                raise SyntaxError(f"Expected property name after '.', got {self.current_token()}")
+
+            property_name = self.current_token().value
+            self.advance()  # Skip property name
+
+            # Check if this is a method call
+            if self.current_token().type == TokenType.PAREN_OPEN:
+                self.advance()  # Skip opening parenthesis
+                args = self.parse_arguments()
+                self.expect_token(TokenType.PAREN_CLOSE)
+                left = Expression(MethodCall(left, property_name, args))
+            else:
+                # It's a property access
+                left = Expression(MethodCall(left, property_name, []))
+
+        return left
 
     def parse_array_literal(self) -> ArrayLiteral:
         self.advance()  # skip '['
@@ -660,6 +837,7 @@ class Parser:
                     self.advance()  # Skip 'as'
                     self.skip_whitespace()
 
+                    # Ensure we have an identifier for the exception variable
                     if self.current_token().type != TokenType.IDENTIFIER:
                         raise SyntaxError(f"Expected identifier after 'as', got {self.current_token()}")
 
@@ -667,6 +845,8 @@ class Parser:
                     self.advance()  # Skip identifier
                     self.skip_whitespace()
 
+            # Now expect the opening brace for the except block
+            self.expect_token(TokenType.BRACE_OPEN)
             except_block = self.parse_block()
             except_clauses.append(ExceptClause(except_block, exception_type, exception_var))
 
@@ -716,3 +896,41 @@ class Parser:
         self.expect_token(TokenType.BRACE_CLOSE)
 
         return ExceptionDef(name, methods, members, base_class)
+
+    def parse_function_call(self, function_name: str) -> FunctionCall:
+        """Parse a function call expression."""
+        self.advance()  # Skip opening parenthesis
+        args = []
+
+        # Parse arguments if any
+        if self.current_token().type != TokenType.PAREN_CLOSE:
+            args.append(self.parse_expression())
+            while self.current_token().type == TokenType.COMMA:
+                self.advance()  # Skip comma
+                args.append(self.parse_expression())
+
+        self.expect_token(TokenType.PAREN_CLOSE)
+        return FunctionCall(function_name, args)
+
+    def parse_binary_operators(self, token):
+        """Parse binary operators with precedence."""
+        self.skip_whitespace()
+
+        # Handle type annotations which might look like binary operators
+        if token.type == TokenType.COLON:
+            self.advance()  # Skip colon
+            return self.parse_type_annotation()
+
+        # Handle normal binary operators
+        if token.type == TokenType.OPERATOR:
+            # Get operator precedence
+            precedence = self.get_operator_precedence(token.value)
+            # Continue with binary operator parsing
+            return precedence
+
+        return None  # Not a binary operator
+
+    def peek_token(self) -> Token:
+        if self.pos + 1 >= len(self.tokens):
+            return Token(TokenType.EOF, "", line=-1, column=-1)
+        return self.tokens[self.pos + 1]

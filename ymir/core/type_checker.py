@@ -11,6 +11,7 @@ from ymir.core.ast import (
     IfStatement,
     MapLiteral,
     MethodCall,
+    ReturnStatement,
     StringLiteral,
     ThrowStatement,
     TryExceptStatement,
@@ -75,6 +76,8 @@ class TypeChecker:
             return self.visit_throw_statement(node)
         elif isinstance(node, ExceptionDef):
             return self.visit_exception_def(node)
+        elif isinstance(node, ReturnStatement):
+            return self.visit_return_statement(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -280,3 +283,11 @@ class TypeChecker:
         # For now, let's just allow strings to be automatically wrapped in exceptions
         # This could be extended to support more types in the future
         return type_obj == StringType()
+
+    def visit_return_statement(self, node: ReturnStatement):
+        """Type check a return statement."""
+        if node.expression:
+            return_type = self.visit_expression(node.expression)
+            # Here you would check if return type matches function's return type
+            return return_type
+        return None

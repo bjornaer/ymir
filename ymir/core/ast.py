@@ -8,12 +8,15 @@ class ASTNode:
 
 
 class FunctionDef(ASTNode):
-    def __init__(self, name: str, params: List[str], param_types: List[Type], return_type: Type, body: List[ASTNode]):
+    def __init__(
+        self, name: str, params: List[str], param_types: List[Type], return_type: Optional[Type], body: List[ASTNode]
+    ):
         self.name = name
         self.params = params
         self.param_types = param_types
         self.return_type = return_type
         self.body = body
+        self.is_export = False
 
 
 class ReturnStatement(ASTNode):
@@ -48,9 +51,9 @@ class Expression(ASTNode):
 
 
 class BinaryOp(ASTNode):
-    def __init__(self, left: ASTNode, operator: str, right: ASTNode):
-        self.left = left
+    def __init__(self, operator: str, left: ASTNode, right: ASTNode):
         self.operator = operator
+        self.left = left
         self.right = right
 
 
@@ -190,3 +193,18 @@ class ExceptionDef(ASTNode):
         self.base_class = base_class
         self.methods = methods
         self.members = members
+
+
+class UnaryOp(ASTNode):
+    """AST node for unary operations like ++, --, !, etc."""
+
+    def __init__(self, operator: str, operand: Expression, postfix=False):
+        self.operator = operator  # The operator (e.g., "++", "--", "!")
+        self.operand = operand  # The operand expression
+        self.postfix = postfix  # Whether this is a prefix (i++) or postfix (++i) operator
+
+    def __str__(self):
+        if self.postfix:
+            return f"{self.operand}{self.operator}"
+        else:
+            return f"{self.operator}{self.operand}"

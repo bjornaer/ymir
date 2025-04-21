@@ -405,7 +405,11 @@ class YmirInterpreter:
 
     def evaluate_throw_statement(self, node: ThrowStatement) -> None:
         """Evaluate a throw statement."""
-        exception = self.evaluate_expression(node.expression)
+        # Check if node.expression is already a value type (like StringLiteral)
+        if hasattr(node.expression, "value"):
+            exception = node.expression.value
+        else:
+            exception = self.evaluate_expression(node.expression)
         raise exception
 
     def evaluate_exception_def(self, node: ExceptionDef) -> None:
