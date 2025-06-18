@@ -272,7 +272,7 @@ class TypeChecker:
         # Comparison operators return boolean
         comparison_operators = ["==", "!=", "<", "<=", ">", ">="]
         if node.operator in comparison_operators:
-            if type(left_type) != type(right_type):
+            if type(left_type) is not type(right_type):
                 raise TypeError(f"Type mismatch in comparison: {left_type} {node.operator} {right_type}")
             print(f"[DEBUG] visit_binary_op: returning BoolType for operator {node.operator}")
             return BoolType()
@@ -305,7 +305,7 @@ class TypeChecker:
             )
 
         # Fallback: require exact type match
-        if type(left_type) != type(right_type):
+        if type(left_type) is not type(right_type):
             raise TypeError(f"Type mismatch: {left_type} {node.operator} {right_type}")
         print(f"[DEBUG] visit_binary_op: returning {left_type} for operator {node.operator}")
         return left_type
@@ -355,7 +355,7 @@ class TypeChecker:
             arg_type = self.visit_expression(arg)
             if param_type == "any":
                 continue
-            if type(arg_type) != type(param_type):
+            if type(arg_type) is not type(param_type):
                 raise TypeError(f"Argument type mismatch: expected {param_type}, got {arg_type}")
         return func.return_type
 
