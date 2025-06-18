@@ -83,7 +83,47 @@ class TypeChecker:
         elif isinstance(node, ModuleDef):
             return self.visit_module_def(node)
         elif type(node).__name__ == "ImportDef":
-            # No-op for import statements
+            # Handle import of standard library modules
+            import_name = getattr(node, "module_name", None)
+            if import_name:
+                import os
+
+                from ymir.core.lexer import Lexer
+                from ymir.core.parser import Parser
+
+                stdlib_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "stdlib")
+                module_path = os.path.join(stdlib_path, *import_name.split(".")) + ".ymr"
+                if os.path.exists(module_path):
+                    with open(module_path, "r") as f:
+                        source = f.read()
+                    tokens = Lexer(source).tokenize()
+                    ast = Parser(tokens).parse()
+                    # Build a namespace dict for the module's exports
+                    module_namespace = {}
+                    for mod_node in ast:
+                        if isinstance(mod_node, ModuleDef):
+                            for stmt in mod_node.body:
+                                if isinstance(stmt, ExportDef):
+                                    export_value = stmt.value if hasattr(stmt, "value") else stmt
+                                    # If the export is a class or exception, build a method namespace
+                                    if isinstance(export_value, (ClassDef, ExceptionDef)):
+                                        method_namespace = {}
+                                        for method in getattr(export_value, "methods", []):
+                                            # Register the method as a FunctionType
+                                            param_types = [
+                                                self.visit_type_annotation(t)
+                                                for t in getattr(method, "param_types", [])
+                                            ]
+                                            return_type = self.visit_type_annotation(
+                                                getattr(method, "return_type", None)
+                                            )
+                                            method_namespace[method.name] = FunctionType(param_types, return_type)
+                                        module_namespace[stmt.name] = method_namespace
+                                    else:
+                                        module_namespace[stmt.name] = export_value
+                                    # Also visit the export to register types/classes
+                                    self.visit(stmt)
+                    self.symbol_table[import_name] = module_namespace
             return None
         elif isinstance(node, ExportDef):
             return self.visit_export_def(node)
@@ -130,12 +170,15 @@ class TypeChecker:
             if isinstance(node.expression, int):
                 return IntType()
             elif isinstance(node.expression, str):
-                # Handle attribute access like e.message
+                # Handle attribute access like e.message or exceptions.ValueError
                 if "." in node.expression:
                     var, attr = node.expression.split(".", 1)
                     print(f"DEBUG: Attribute access - var: {var}, attr: {attr}")
                     if var in self.symbol_table:
                         obj = self.symbol_table[var]
+                        # If obj is a module namespace, look up attr inside it
+                        if isinstance(obj, dict) and attr in obj:
+                            return obj[attr]
                         if hasattr(obj, attr):
                             return StringType()
                     # If attribute is 'message', assume it's a string for exception classes
@@ -250,21 +293,32 @@ class TypeChecker:
         return class_def
 
     def visit_method_call(self, node: MethodCall):
-        # Handle case where instance is an Expression object
         if isinstance(node.instance, Expression):
             instance_name = node.instance.expression
         else:
             instance_name = node.instance
 
         instance = self.symbol_table.get(instance_name)
+        if instance is None and "." in instance_name:
+            var, attr = instance_name.split(".", 1)
+            if var in self.symbol_table:
+                obj = self.symbol_table[var]
+                if isinstance(obj, dict) and attr in obj:
+                    instance = obj[attr]
         if not instance:
             raise NameError(f"Undefined instance: {instance_name}")
 
-        # Special handling for 'self.message' in exception classes
         if instance_name == "self" and node.method_name == "message":
             return StringType()
 
-        method = instance.get(node.method_name)
+        # If instance is a dummy with _ymir_type, use that for method lookup
+        method_namespace = getattr(instance, "_ymir_type", None)
+        if method_namespace and isinstance(method_namespace, dict):
+            method = method_namespace.get(node.method_name)
+        elif isinstance(instance, dict):
+            method = instance.get(node.method_name)
+        else:
+            method = getattr(instance, node.method_name, None) if hasattr(instance, node.method_name) else None
         if not method:
             raise NameError(f"Undefined method: {node.method_name}")
         if not isinstance(method, FunctionType):
@@ -301,16 +355,54 @@ class TypeChecker:
         for stmt in node.try_block:
             self.visit(stmt)
         for except_clause in node.except_clauses:
-            # Always add a dummy exception object with a 'message' attribute for the exception variable
             if hasattr(except_clause, "exception_var") and except_clause.exception_var:
+                exception_type = None
+                if except_clause.exception_type is not None:
+                    et = except_clause.exception_type
+                    # Handle FunctionCall, Expression, or string
+                    if hasattr(et, "expression"):
+                        expr = et.expression
+                        if isinstance(expr, str):
+                            type_expr = expr
+                        elif hasattr(expr, "func_name"):
+                            type_expr = expr.func_name
+                        else:
+                            type_expr = str(expr)
+                    elif hasattr(et, "func_name"):
+                        type_expr = et.func_name
+                    elif isinstance(et, str):
+                        type_expr = et
+                    else:
+                        type_expr = str(et)
+                    if "." in type_expr:
+                        var, attr = type_expr.split(".", 1)
+                        if var in self.symbol_table:
+                            mod = self.symbol_table[var]
+                            if isinstance(mod, dict) and attr in mod:
+                                exception_type = mod[attr]
+                    else:
+                        exception_type = self.symbol_table.get(type_expr)
+                if isinstance(exception_type, dict):
 
-                class DummyException:
-                    message = ""
+                    class DummyInstance:
+                        def __init__(self):
+                            self._ymir_type = exception_type
 
-                    def __str__(self):
-                        return self.message
+                        message = ""
 
-                self.symbol_table[except_clause.exception_var] = DummyException()
+                        def __str__(self):
+                            return self.message
+
+                    self.symbol_table[except_clause.exception_var] = DummyInstance()
+                else:
+
+                    class DummyException:
+                        message = ""
+
+                        def __str__(self):
+                            return self.message
+
+                    self.symbol_table[except_clause.exception_var] = DummyException()
                 for stmt in except_clause.except_block:
                     self.visit(stmt)
                 del self.symbol_table[except_clause.exception_var]

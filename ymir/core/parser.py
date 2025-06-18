@@ -165,10 +165,13 @@ class Parser:
         # Handle dotted module names (e.g., module a.b.c)
         while self.current_token().type == TokenType.DOT:
             self.advance()  # Skip the dot
-            if self.current_token().type != TokenType.IDENTIFIER:
-                raise SyntaxError(f"Expected identifier after dot in module name, got {self.current_token()}")
+            # Allow both identifiers and keywords as module name components
+            if self.current_token().type not in [TokenType.IDENTIFIER, TokenType.KEYWORD]:
+                raise SyntaxError(
+                    f"Expected identifier or keyword after dot in module name, got {self.current_token()}"
+                )
             name += "." + self.current_token().value
-            self.advance()  # Skip identifier
+            self.advance()  # Skip identifier/keyword
 
         # Make sure we consume the newline after the module declaration
         if self.current_token().type == TokenType.NEWLINE:
@@ -706,6 +709,14 @@ class Parser:
         """Parse a primary expression (an atom)."""
         self.skip_whitespace()
         token = self.current_token()
+
+        # Handle unary operators
+        if token.type == TokenType.OPERATOR and token.value in ["-", "+"]:
+            op = token.value
+            self.advance()  # Skip the unary operator
+            operand = self.parse_primary()  # Parse the operand
+            return UnaryOp(operator=op, operand=operand)
+
         if token.type == TokenType.LITERAL:
             self.advance()
             return Expression(token.value)
@@ -764,17 +775,42 @@ class Parser:
             property_name = self.current_token().value
             self.advance()  # Skip property name
 
-            # Check if this is a method call
+            # Check if this is a method call or function call
             if self.current_token().type == TokenType.PAREN_OPEN:
                 self.advance()  # Skip opening parenthesis
                 args = self.parse_arguments()
                 self.expect_token(TokenType.PAREN_CLOSE)
-                left = Expression(MethodCall(left, property_name, args))
+
+                # If left is a simple identifier or Expression, treat as MethodCall
+                if isinstance(left, Expression) and isinstance(left.expression, str):
+                    left = Expression(MethodCall(left, property_name, args))
+                else:
+                    # Otherwise, build full dotted name for FunctionCall
+                    full_name = self._build_dotted_name_from_expression(left) + "." + property_name
+                    left = Expression(FunctionCall(full_name, args))
             else:
                 # It's a property access
                 left = Expression(MethodCall(left, property_name, []))
 
         return left
+
+    def _build_dotted_name_from_expression(self, expr: Expression) -> str:
+        """Build a dotted name from an Expression that may contain MethodCalls."""
+        if isinstance(expr.expression, str):
+            return expr.expression
+        elif isinstance(expr.expression, MethodCall):
+            return self._build_dotted_name(expr.expression)
+        else:
+            return str(expr.expression)
+
+    def _build_dotted_name(self, method_call: MethodCall) -> str:
+        """Recursively build a dotted name from a chain of MethodCalls."""
+        if isinstance(method_call.instance, Expression):
+            if isinstance(method_call.instance.expression, str):
+                return method_call.instance.expression + "." + method_call.method_name
+            elif isinstance(method_call.instance.expression, MethodCall):
+                return self._build_dotted_name(method_call.instance.expression) + "." + method_call.method_name
+        return method_call.method_name
 
     def parse_array_literal(self) -> ArrayLiteral:
         self.advance()  # skip '['

@@ -1,4 +1,5 @@
 import ctypes
+import logging
 import os
 import platform
 import subprocess
@@ -35,12 +36,14 @@ from ymir.tools.codegen import CodeGenerator
 
 class YmirInterpreter:
     def __init__(self, verbosity: str = "INFO"):
-        self.global_scope: Dict[str, Any] = {}
-        self.local_scope: Dict[str, Any] = {}
-        self.module_cache: Dict[str, ModuleDef] = {}
-        self.standard_library_path = os.path.join(os.path.dirname(__file__), "stdlib")
         self.verbosity = verbosity
         self.logger = get_logger("ymir", verbosity)
+        self.logger.setLevel(getattr(logging, verbosity))
+        self.global_scope = {}
+        self.local_scope = {}
+        self.module_cache: Dict[str, ModuleDef] = {}
+        self.standard_library_path = os.path.join(os.path.dirname(__file__), "stdlib")
+        self.load_standard_library()
 
     def execute(self, llvm_ir: str) -> None:
         """Execute LLVM IR code by JIT compiling and running it.
@@ -158,8 +161,8 @@ class YmirInterpreter:
         self.logger.debug("Type checking complete")
         module = None
         module_body = ast
+        module_name = None
         for node in ast:
-            self.logger.debug(f"[load_module] Top-level AST node: {type(node)} - {repr(node)}")
             if isinstance(node, ModuleDef):
                 module = node
                 module_body = node.body
@@ -171,8 +174,16 @@ class YmirInterpreter:
         module = ModuleDef(module_name, module_body)
         self.module_cache[module_name] = module
         self.logger.debug(f"Module: {module}")
+        # First pass: register all classes and functions
         for node in module_body:
-            self.logger.debug(f"[load_module] Evaluating node in module body: {type(node)} - {repr(node)}")
+            if isinstance(node, (ClassDef, ExceptionDef)):
+                self.logger.debug(f"[load_module] Registering class: {node.name}")
+                self.global_scope[node.name] = self.evaluate_exception_def(node)
+            elif isinstance(node, FunctionDef):
+                self.logger.debug(f"[load_module] Registering function: {node.name}")
+                self.global_scope[node.name] = node
+        # Second pass: process imports and exports
+        for node in module_body:
             if isinstance(node, ModuleDef):
                 self.logger.debug("[load_module] Skipping ModuleDef node in module body evaluation loop.")
                 continue
@@ -182,7 +193,12 @@ class YmirInterpreter:
                 self.load_module(import_path, project_root)
             if isinstance(node, ExportDef):
                 self.logger.debug(f"[load_module] Exporting: {node.name}")
-                self.global_scope[node.name] = self.evaluate(node.value)
+                value = self.evaluate(node.value)
+                if isinstance(value, str) and value in self.global_scope:
+                    value = self.global_scope[value]
+                self.global_scope[node.name] = value
+                fq_name = f"{module_name}.{node.name}"
+                self.global_scope[fq_name] = value
             elif is_entry_point:
                 self.logger.debug(f"[load_module] Evaluating (entry point): {type(node)} - {repr(node)}")
                 self.evaluate(node)
@@ -198,11 +214,11 @@ class YmirInterpreter:
             self.global_scope[node.name] = node
         elif isinstance(node, Expression):
             value = self.evaluate_expression(node)
-            self.logger.error(f"[evaluate] Evaluating expression: {repr(node)} -> {value}")
+            self.logger.debug(f"[evaluate] Evaluating expression: {repr(node)} -> {value}")
             return value
         elif isinstance(node, Assignment):
             value = self.evaluate_expression(node.value)
-            self.logger.error(f"[evaluate] Assignment: {node.target} = {value}")
+            self.logger.debug(f"[evaluate] Assignment: {node.target} = {value}")
             self.global_scope[node.target] = value
         elif isinstance(node, ExportDef):
             self.logger.debug(f"[evaluate] Exporting: {node.name}")
@@ -230,16 +246,23 @@ class YmirInterpreter:
             self.logger.debug(f"[evaluate] Handling ReturnStatement: {repr(node)}")
             value = self.evaluate_expression(node.expression)
             raise ReturnSignal(value)
-        elif hasattr(node, "instance") and hasattr(node, "method_name") and hasattr(node, "arguments"):
+        elif hasattr(node, "instance") and hasattr(node, "method_name") and hasattr(node, "args"):
             # MethodCall node (for property access like e.message)
             instance = self.evaluate_expression(node.instance)
-            if not node.arguments:  # Property access
+            if not node.args:  # Property access
                 if hasattr(instance, node.method_name):
-                    return getattr(instance, node.method_name)
+                    attr = getattr(instance, node.method_name)
+                    if callable(attr):
+                        import inspect
+
+                        sig = inspect.signature(attr)
+                        if len(sig.parameters) == 0:
+                            return attr()
+                    return attr
                 else:
                     raise AttributeError(f"'{type(instance).__name__}' object has no attribute '{node.method_name}'")
             else:  # Method call with arguments
-                args = [self.evaluate_expression(arg) for arg in node.arguments]
+                args = [self.evaluate_expression(arg) for arg in node.args]
                 if hasattr(instance, node.method_name):
                     method = getattr(instance, node.method_name)
                     if callable(method):
@@ -248,65 +271,62 @@ class YmirInterpreter:
                         return method
                 else:
                     raise AttributeError(f"'{type(instance).__name__}' object has no method '{node.method_name}'")
-        elif hasattr(node, "function_name") and hasattr(node, "arguments"):
-            # FunctionCall node
-            func_name = node.function_name
-            args = [self.evaluate_expression(arg) for arg in node.arguments]
-            self.logger.error(f"[FunctionCall] Instantiating {func_name} with args: {args}")
-            # Check if this is an exception class
-            if func_name in self.global_scope:
-                obj = self.global_scope[func_name]
-                if isinstance(obj, type) and issubclass(obj, BaseException):
-                    # For exception classes, automatically set the message attribute
-                    if len(args) == 1:
-                        message = args[0]
-                        self.logger.error(
-                            f"[FunctionCall] Creating exception instance of {func_name} with message: {message}"
-                        )
-                        try:
-                            instance = obj(message)
-                            instance.message = message  # Explicitly set message attribute
-                            self.logger.error(
-                                f"[FunctionCall] Created instance: {instance}, "
-                                f"message: {getattr(instance, 'message', None)}"
-                            )
-                            self.logger.error(f"[FunctionCall] Instance class: {instance.__class__}")
-                            self.logger.error(f"[FunctionCall] Instance MRO: {instance.__class__.__mro__}")
-                            self.logger.error(f"[FunctionCall] Instance __init__: {instance.__class__.__init__}")
-                        except Exception as e:
-                            self.logger.error(f"[FunctionCall] Exception during instantiation: {e}")
-                            raise
-                        return instance
-                    else:
-                        raise ValueError(f"Exception constructor expects exactly 1 argument (message), got {len(args)}")
-                elif callable(obj):
-                    return obj(*args)
-            raise NameError(f"Undefined function or class: {func_name}")
+        elif type(node).__name__ == "ImportDef":
+            # No-op for import statements (already handled by load_standard_library)
+            return None
         else:
             self.logger.debug(f"[evaluate] Unknown node type: {type(node)} - {repr(node)}")
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
     def evaluate_expression(self, node: ASTNode) -> Any:
-        self.logger.error(f"[evaluate_expression] Node type: {type(node)} - {repr(node)}")
+        self.logger.debug(f"[evaluate_expression] ENTRY: node={node}, type={type(node)}")
+        self.logger.debug(f"[evaluate_expression] Node type: {type(node)} - {repr(node)}")
         if isinstance(node, int):
             return node
         elif isinstance(node, str):
             if node in self.local_scope:
                 value = self.local_scope[node]
-                # If the value is an exception, convert to string for return/concat
-                if isinstance(value, BaseException):
-                    value = str(value)
-                self.logger.error(f"[evaluate_expression] Variable '{node}' in local_scope -> {value}")
+                self.logger.debug(f"[evaluate_expression] Variable '{node}' in local_scope -> {value}")
                 return value
             elif node in self.global_scope:
                 value = self.global_scope[node]
-                if isinstance(value, BaseException):
-                    value = str(value)
-                self.logger.error(f"[evaluate_expression] Variable '{node}' in global_scope -> {value}")
+                self.logger.debug(f"[evaluate_expression] Variable '{node}' in global_scope -> {value}")
                 return value
             # If not a variable, treat as string literal
-            self.logger.error(f"[evaluate_expression] String literal: {node}")
+            self.logger.debug(f"[evaluate_expression] String literal: {node}")
             return node
+        elif hasattr(node, "func_name") and hasattr(node, "args"):
+            # FunctionCall node (for exception instantiation like ChildError("message"))
+            func_name = node.func_name
+            args = [self.evaluate_expression(arg) for arg in node.args]
+            self.logger.debug(f"[FunctionCall] func_name: {repr(func_name)}")
+            if func_name in self.global_scope:
+                obj = self.global_scope[func_name]
+                self.logger.debug(f"[FunctionCall] Retrieved obj for {func_name}: {obj}, type: {type(obj)}")
+                if isinstance(obj, type) and issubclass(obj, BaseException):
+                    # It's an exception class, instantiate it
+                    if len(args) == 1:
+                        message = args[0]
+                        # If it's a quoted string, strip the quotes
+                        if isinstance(message, str) and len(message) >= 2 and message[0] == '"' and message[-1] == '"':
+                            message = message[1:-1]
+                        try:
+                            instance = obj(message)
+                            instance.message = message  # Explicitly set message attribute
+                            self.logger.error(
+                                f"[FunctionCall] Created exception instance: {instance}, "
+                                f"type: {type(instance)}, message: {getattr(instance, 'message', None)}"
+                            )
+                            return instance
+                        except Exception as e:
+                            self.logger.error(f"[FunctionCall] Exception during instantiation: {e}")
+                            raise
+                    else:
+                        raise ValueError(f"Exception constructor expects exactly 1 argument (message), got {len(args)}")
+                elif callable(obj):
+                    # It's a regular function
+                    return obj(*args)
+            raise NameError(f"Undefined function or class: {func_name}")
         elif hasattr(node, "expression"):
             # Expression node
             if isinstance(node.expression, int):
@@ -314,42 +334,37 @@ class YmirInterpreter:
             elif isinstance(node.expression, str):
                 if node.expression in self.local_scope:
                     value = self.local_scope[node.expression]
-                    # If the value is an exception, convert to string for return/concat
-                    if isinstance(value, BaseException):
-                        value = str(value)
-                    self.logger.error(f"[evaluate_expression] Variable '{node.expression}' in local_scope -> {value}")
+                    self.logger.debug(f"[evaluate_expression] Variable '{node.expression}' in local_scope -> {value}")
                     return value
                 elif node.expression in self.global_scope:
                     value = self.global_scope[node.expression]
-                    if isinstance(value, BaseException):
-                        value = str(value)
-                    self.logger.error(f"[evaluate_expression] Variable '{node.expression}' in global_scope -> {value}")
+                    self.logger.debug(f"[evaluate_expression] Variable '{node.expression}' in global_scope -> {value}")
                     return value
                 # If not a variable, treat as string literal
-                self.logger.error(f"[evaluate_expression] String literal: {node.expression}")
+                self.logger.debug(f"[evaluate_expression] String literal: {node.expression}")
                 return node.expression
             elif (
                 hasattr(node.expression, "instance")
                 and hasattr(node.expression, "method_name")
-                and hasattr(node.expression, "arguments")
+                and hasattr(node.expression, "args")
             ):
                 # MethodCall wrapped in Expression
                 return self.evaluate_expression(node.expression)
             else:
                 # Other expression types
                 value = self.evaluate_expression(node.expression)
-                self.logger.error(f"[evaluate_expression] Expression node: {repr(node.expression)} -> {value}")
+                self.logger.debug(f"[evaluate_expression] Expression node: {repr(node.expression)} -> {value}")
                 return value
         elif hasattr(node, "left") and hasattr(node, "right") and hasattr(node, "operator"):
             # BinaryOp node
             left = self.evaluate_expression(node.left)
             right = self.evaluate_expression(node.right)
-            # If either side is an exception, convert to string
-            if isinstance(left, BaseException):
-                left = str(left)
-            if isinstance(right, BaseException):
-                right = str(right)
             if node.operator == "+":
+                # If either side is an exception, convert to string for concatenation
+                if isinstance(left, BaseException):
+                    left = str(left)
+                if isinstance(right, BaseException):
+                    right = str(right)
                 result = left + right
             elif node.operator == "-":
                 result = left - right
@@ -381,9 +396,20 @@ class YmirInterpreter:
                 result = left or right
             else:
                 raise ValueError(f"Unsupported binary operator: {node.operator}")
-            self.logger.error(
+            self.logger.debug(
                 f"[evaluate_expression] BinaryOp {node.operator}: {left} {node.operator} {right} = {result}"
             )
+            return result
+        elif hasattr(node, "operand") and hasattr(node, "operator") and not hasattr(node, "left"):
+            # UnaryOp node
+            operand = self.evaluate_expression(node.operand)
+            if node.operator == "-":
+                result = -operand
+            elif node.operator == "+":
+                result = +operand
+            else:
+                raise ValueError(f"Unsupported unary operator: {node.operator}")
+            self.logger.debug(f"[evaluate_expression] UnaryOp {node.operator}: {node.operator}{operand} = {result}")
             return result
         elif hasattr(node, "value") and type(node).__name__ == "StringLiteral":
             # Strip leading and trailing quotes from the string literal
@@ -392,18 +418,25 @@ class YmirInterpreter:
                 value = raw[1:-1]
             else:
                 value = raw
-            self.logger.error(f"[evaluate_expression] StringLiteral node: {value}")
+            self.logger.debug(f"[evaluate_expression] StringLiteral node: {value}")
             return value
-        elif hasattr(node, "instance") and hasattr(node, "method_name") and hasattr(node, "arguments"):
+        elif hasattr(node, "instance") and hasattr(node, "method_name") and hasattr(node, "args"):
             # MethodCall node (for property access like e.message)
             instance = self.evaluate_expression(node.instance)
-            if not node.arguments:  # Property access
+            if not node.args:  # Property access
                 if hasattr(instance, node.method_name):
-                    return getattr(instance, node.method_name)
+                    attr = getattr(instance, node.method_name)
+                    if callable(attr):
+                        import inspect
+
+                        sig = inspect.signature(attr)
+                        if len(sig.parameters) == 0:
+                            return attr()
+                    return attr
                 else:
                     raise AttributeError(f"'{type(instance).__name__}' object has no attribute '{node.method_name}'")
             else:  # Method call with arguments
-                args = [self.evaluate_expression(arg) for arg in node.arguments]
+                args = [self.evaluate_expression(arg) for arg in node.args]
                 if hasattr(instance, node.method_name):
                     method = getattr(instance, node.method_name)
                     if callable(method):
@@ -425,13 +458,16 @@ class YmirInterpreter:
             self.local_scope[param] = arg
         try:
             for stmt in func.body:
-                self.logger.error(f"[evaluate_function_call] Evaluating stmt: {type(stmt)} - {repr(stmt)}")
+                self.logger.debug(f"[evaluate_function_call] Evaluating stmt: {type(stmt)} - {repr(stmt)}")
                 self.evaluate(stmt)
         except ReturnSignal as ret:
-            self.logger.error(f"[evaluate_function_call] Caught ReturnSignal with value: {ret.value}")
+            self.logger.debug(f"[evaluate_function_call] Caught ReturnSignal with value: {ret.value}")
             self.local_scope = prev_local_scope
+            # If the return value is an exception, convert to string
+            if isinstance(ret.value, BaseException):
+                return str(ret.value)
             return ret.value
-        self.logger.error("[evaluate_function_call] No return encountered, returning None")
+        self.logger.debug("[evaluate_function_call] No return encountered, returning None")
         self.local_scope = prev_local_scope
         return None
 
@@ -562,33 +598,40 @@ class YmirInterpreter:
                 result = self.evaluate(stmt)
             return result
         except BaseException as exc:
-            self.logger.error(
+            self.logger.debug(
                 f"[TryExcept] Caught exception: {exc}, type: {type(exc)}, message: {getattr(exc, 'message', None)}"
             )
             for except_clause in node.except_clauses:
-                if except_clause.exception_type is None or (
-                    except_clause.exception_type in self.global_scope
-                    and isinstance(exc, self.global_scope[except_clause.exception_type])
+                # Extract exception type name from Expression node
+                exception_type_name = None
+                if except_clause.exception_type is not None:
+                    if isinstance(except_clause.exception_type, Expression):
+                        exception_type_name = except_clause.exception_type.expression
+                    else:
+                        exception_type_name = str(except_clause.exception_type)
+
+                if exception_type_name is None or (
+                    exception_type_name in self.global_scope and isinstance(exc, self.global_scope[exception_type_name])
                 ):
                     if except_clause.exception_var:
                         self.local_scope[except_clause.exception_var] = exc
-                        self.logger.error(
+                        self.logger.debug(
                             f"[TryExcept] Bound variable '{except_clause.exception_var}' "
                             f"to exception: {exc}, message: {getattr(exc, 'message', None)}"
                         )
-                    for stmt in except_clause.body:
+                    for stmt in except_clause.except_block:
                         result = self.evaluate(stmt)
                     return result
             raise
         finally:
             if node.finally_clause:
-                for stmt in node.finally_clause:
+                for stmt in node.finally_clause.finally_block:
                     self.evaluate(stmt)
 
     def evaluate_throw_statement(self, node: ThrowStatement) -> None:
         """Evaluate a throw statement."""
         # Evaluate the expression to get the exception value
-        self.logger.error(
+        self.logger.debug(
             f"[ThrowStatement] node.expression type: {type(node.expression)}, value: {repr(node.expression)}"
         )
         if hasattr(node.expression, "value"):
@@ -603,7 +646,7 @@ class YmirInterpreter:
             exception = YmirException(exception)
         raise exception
 
-    def evaluate_exception_def(self, node: ExceptionDef) -> None:
+    def evaluate_exception_def(self, node: ExceptionDef) -> type:
         """Evaluate an exception class definition."""
         # Create a new exception class
         base_exception = Exception
@@ -613,20 +656,30 @@ class YmirInterpreter:
         # Always inject an __init__ that sets self.message
         def exception_init(self, message):
             self.message = message
-            # Correct super() usage for proper chaining
-            super().__init__(message)
+            base_exception.__init__(self, message)
 
         class_dict = {"__init__": exception_init}
+        # If this is the base Exception class, inject a __str__ method
+        if node.name == "Exception":
+
+            def exception_str(self):
+                return f"{self.__class__.__name__}: {self.message}"
+
+            class_dict["__str__"] = exception_str
         # Add any custom methods (but ignore __init__ since we provide our own)
         for method in node.methods:
             if method.name != "__init__":
-                class_dict[method.name] = method
+                pass  # Do not add custom methods for now
 
         # Define the new exception class
         exception_class = type(node.name, (base_exception,), class_dict)
+        # Attach interpreter reference for method execution
+        exception_class._interpreter = self
 
         # Register the exception class
         self.global_scope[node.name] = exception_class
+        self.logger.debug(f"[ExceptionDef] Registered exception class: {node.name} in global_scope")
+        return exception_class
 
     def is_instance_of_exception(self, exception, exception_class):
         """Check if an exception is an instance of a specified exception class."""

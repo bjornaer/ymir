@@ -327,10 +327,10 @@ class TestExceptionHandling:
 
         func test() {
             try {
-                throw exceptions.ValueError("Invalid value")
-            } except exceptions.ValueError as e {
+                throw ValueError("Invalid value")
+            } except ValueError as e {
                 return "Caught ValueError: " + e.__str__()
-            } except exceptions.Exception {
+            } except Exception {
                 return "Caught generic exception"
             }
         }
