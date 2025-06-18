@@ -39,6 +39,32 @@ class TypeChecker:
         self.symbol_table = {}
         self.logger = get_logger("ymir.core", verbosity)
 
+        # Register builtin functions
+        self._register_builtin_functions()
+
+    def _register_builtin_functions(self):
+        """Register common builtin functions in the symbol table."""
+        # print function: takes any number of arguments, returns void
+        self.symbol_table["print"] = FunctionType(["any"], None)  # special case: 'any' and variadic
+
+        # str function: takes one argument of any type, returns string
+        self.symbol_table["str"] = FunctionType(["any"], StringType())
+
+        # len function: takes array/string, returns int
+        self.symbol_table["len"] = FunctionType(["any"], IntType())
+
+        # Common math functions
+        self.symbol_table["sqrt"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["sin"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["cos"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["tan"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["pow"] = FunctionType([FloatType(), FloatType()], FloatType())
+
+        # String functions
+        self.symbol_table["strlen"] = FunctionType([StringType()], IntType())
+        self.symbol_table["strcmp"] = FunctionType([StringType(), StringType()], IntType())
+        self.symbol_table["strcat"] = FunctionType([StringType(), StringType()], StringType())
+
     def check(self, ast):
         for node in ast:
             self.visit(node)
@@ -131,11 +157,21 @@ class TypeChecker:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
     def visit_function_def(self, node: FunctionDef):
+        # Register the function in the symbol table first
         param_types = [self.visit_type_annotation(t) for t in node.param_types]
-        return_type = self.visit_type_annotation(node.return_type)
+        return_type = self.visit_type_annotation(node.return_type) if node.return_type else None
         self.symbol_table[node.name] = FunctionType(param_types, return_type)
+
+        # Save current symbol table to restore after checking
+        prev_symbol_table = self.symbol_table.copy()
+        # Add parameters to symbol table
+        for param, param_type in zip(node.params, node.param_types):
+            self.symbol_table[param] = param_type
+        # Type check the body
         for statement in node.body:
             self.visit(statement)
+        # Restore previous symbol table
+        self.symbol_table = prev_symbol_table
 
     def visit_class_def(self, node: ClassDef):
         self.symbol_table[node.name] = node
@@ -148,7 +184,7 @@ class TypeChecker:
 
     def visit_if_statement(self, node: IfStatement):
         condition_type = self.visit_expression(node.condition)
-        if condition_type != BoolType():
+        if not isinstance(condition_type, BoolType):
             raise TypeError(f"Condition must be a boolean, got {condition_type}")
         for statement in node.then_body:
             self.visit(statement)
@@ -158,15 +194,16 @@ class TypeChecker:
 
     def visit_while_statement(self, node: WhileStatement):
         condition_type = self.visit_expression(node.condition)
-        if condition_type != BoolType():
+        if not isinstance(condition_type, BoolType):
             raise TypeError(f"Condition must be a boolean, got {condition_type}")
         for statement in node.body:
             self.visit(statement)
 
     def visit_expression(self, node):
+        print(f"[DEBUG] visit_expression: node={node}, type={type(node)}")
         # Handle Expression node
         if isinstance(node, Expression):
-            print(f"DEBUG: visit_expression - node.expression: {node.expression}, type: {type(node.expression)}")
+            print(f"[DEBUG] visit_expression - node.expression: {node.expression}, type: {type(node.expression)}")
             if isinstance(node.expression, int):
                 return IntType()
             elif isinstance(node.expression, str):
@@ -210,6 +247,9 @@ class TypeChecker:
         # Handle StringLiteral node
         elif isinstance(node, StringLiteral):
             return StringType()
+        elif isinstance(node, BinaryOp):
+            print(f"[DEBUG] visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
+            return self.visit_binary_op(node)
         # Handle other literal types (add as needed)
         # elif isinstance(node, IntLiteral):
         #     return IntType()
@@ -221,14 +261,53 @@ class TypeChecker:
         return None
 
     def visit_binary_op(self, node: BinaryOp):
+        print(f"[DEBUG] visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
         # Only type check valid binary operators, not assignment
         if node.operator == "=":
             raise TypeError("Assignment '=' should not be handled as a binary operation. Use visit_assignment instead.")
         left_type = self.visit_expression(node.left)
         right_type = self.visit_expression(node.right)
-        print(f"DEBUG: BinaryOp {node.operator} - left: {left_type} ({node.left}), right: {right_type} ({node.right})")
-        if left_type != right_type:
+        print(f"DEBUG: BinaryOp {node.operator} - left: {left_type} ({node.left}), right: {right_type} ({node.right}))")
+
+        # Comparison operators return boolean
+        comparison_operators = ["==", "!=", "<", "<=", ">", ">="]
+        if node.operator in comparison_operators:
+            if type(left_type) != type(right_type):
+                raise TypeError(f"Type mismatch in comparison: {left_type} {node.operator} {right_type}")
+            print(f"[DEBUG] visit_binary_op: returning BoolType for operator {node.operator}")
+            return BoolType()
+
+        # Arithmetic operators
+        arithmetic_operators = ["+", "-", "*", "/"]
+        if node.operator in arithmetic_operators:
+            # Allow string concatenation for '+'
+            if node.operator == "+" and isinstance(left_type, StringType):
+                # Allow string + string
+                if isinstance(right_type, StringType):
+                    return StringType()
+                # Allow string + exception object (which can be converted to string)
+                if hasattr(right_type, "message") or (
+                    hasattr(right_type, "__str__") and callable(getattr(right_type, "__str__"))
+                ):
+                    return StringType()
+            # Allow int/float arithmetic
+            if isinstance(left_type, IntType) and isinstance(right_type, IntType):
+                return IntType()
+            if isinstance(left_type, FloatType) and isinstance(right_type, FloatType):
+                return FloatType()
+            # Optionally allow int + float or float + int to return float
+            if (isinstance(left_type, IntType) and isinstance(right_type, FloatType)) or (
+                isinstance(left_type, FloatType) and isinstance(right_type, IntType)
+            ):
+                return FloatType()
+            raise TypeError(
+                f"Type mismatch for arithmetic operator '{node.operator}': {left_type} {node.operator} {right_type}"
+            )
+
+        # Fallback: require exact type match
+        if type(left_type) != type(right_type):
             raise TypeError(f"Type mismatch: {left_type} {node.operator} {right_type}")
+        print(f"[DEBUG] visit_binary_op: returning {left_type} for operator {node.operator}")
         return left_type
 
     def visit_assignment(self, node: Assignment):
@@ -258,11 +337,25 @@ class TypeChecker:
             raise NameError(f"Undefined function: {node.func_name}")
         if not isinstance(func, FunctionType):
             raise TypeError(f"{node.func_name} is not a function")
+        # Special handling for variadic/any builtins
+        if node.func_name == "print":
+            # Accept any number of arguments of any type
+            return None
+        if node.func_name == "str":
+            if len(node.args) != 1:
+                raise TypeError(f"str() takes exactly one argument ({len(node.args)} given)")
+            return StringType()
+        if node.func_name == "len":
+            if len(node.args) != 1:
+                raise TypeError(f"len() takes exactly one argument ({len(node.args)} given)")
+            return IntType()
         if len(func.param_types) != len(node.args):
             raise TypeError(f"Argument count mismatch: expected {len(func.param_types)}, got {len(node.args)}")
         for arg, param_type in zip(node.args, func.param_types):
             arg_type = self.visit_expression(arg)
-            if arg_type != param_type:
+            if param_type == "any":
+                continue
+            if type(arg_type) != type(param_type):
                 raise TypeError(f"Argument type mismatch: expected {param_type}, got {arg_type}")
         return func.return_type
 
@@ -308,7 +401,10 @@ class TypeChecker:
         if not instance:
             raise NameError(f"Undefined instance: {instance_name}")
 
-        if instance_name == "self" and node.method_name == "message":
+        # Handle exception objects - they have a message property and __str__ method
+        if hasattr(instance, "message") and node.method_name == "message":
+            return StringType()
+        if hasattr(instance, "__str__") and node.method_name == "__str__":
             return StringType()
 
         # If instance is a dummy with _ymir_type, use that for method lookup
