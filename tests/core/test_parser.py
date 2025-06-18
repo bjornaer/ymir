@@ -436,13 +436,13 @@ def test_parse_binary_operators():
     var i: int = a % b
     var j: int = a == b
     var k: int = a != b
-    var l: int = a += b
-    var m: int = a -= b
-    var n: int = a *= b
-    var o: int = a /= b
-    var p: int = a //= b
-    var q: int = a **= b
-    var r: int = a %= b
+    a += b
+    a -= b
+    a *= b
+    a /= b
+    a //= b
+    a **= b
+    a %= b
     a++
     var s: int = a
     a--
@@ -537,61 +537,15 @@ def test_parse_binary_operators():
     assert ast[10].value.left.expression == "a"
     assert ast[10].value.right.expression == "b"
 
-    assert isinstance(ast[11], Assignment)
-    assert ast[11].target == "l"
-    assert ast[11].var_type, IntType
-    assert isinstance(ast[11].value, BinaryOp)
-    assert ast[11].value.operator == "+="
-    assert ast[11].value.left.expression == "a"
-    assert ast[11].value.right.expression == "b"
-
-    assert isinstance(ast[12], Assignment)
-    assert ast[12].target == "m"
-    assert ast[12].var_type, IntType
-    assert isinstance(ast[12].value, BinaryOp)
-    assert ast[12].value.operator == "-="
-    assert ast[12].value.left.expression == "a"
-    assert ast[12].value.right.expression == "b"
-
-    assert isinstance(ast[13], Assignment)
-    assert ast[13].target == "n"
-    assert ast[13].var_type, IntType
-    assert isinstance(ast[13].value, BinaryOp)
-    assert ast[13].value.operator == "*="
-    assert ast[13].value.left.expression == "a"
-    assert ast[13].value.right.expression == "b"
-
-    assert isinstance(ast[14], Assignment)
-    assert ast[14].target == "o"
-    assert ast[14].var_type, IntType
-    assert isinstance(ast[14].value, BinaryOp)
-    assert ast[14].value.operator == "/="
-    assert ast[14].value.left.expression == "a"
-    assert ast[14].value.right.expression == "b"
-
-    assert isinstance(ast[15], Assignment)
-    assert ast[15].target == "p"
-    assert ast[15].var_type, IntType
-    assert isinstance(ast[15].value, BinaryOp)
-    assert ast[15].value.operator == "//="
-    assert ast[15].value.left.expression == "a"
-    assert ast[15].value.right.expression == "b"
-
-    assert isinstance(ast[16], Assignment)
-    assert ast[16].target == "q"
-    assert ast[16].var_type, IntType
-    assert isinstance(ast[16].value, BinaryOp)
-    assert ast[16].value.operator == "**="
-    assert ast[16].value.left.expression == "a"
-    assert ast[16].value.right.expression == "b"
-
-    assert isinstance(ast[17], Assignment)
-    assert ast[17].target == "r"
-    assert ast[17].var_type, IntType
-    assert isinstance(ast[17].value, BinaryOp)
-    assert ast[17].value.operator == "%="
-    assert ast[17].value.left.expression == "a"
-    assert ast[17].value.right.expression == "b"
+    # Compound assignments as standalone statements
+    for idx, op in enumerate(["+=", "-=", "*=", "/=", "//=", "**=", "%="]):
+        stmt = ast[11 + idx]
+        assert isinstance(stmt, Assignment)
+        assert stmt.target == "a"
+        assert isinstance(stmt.value, BinaryOp)
+        assert stmt.value.operator == op[:-1]  # '+=' -> '+'
+        assert stmt.value.left.expression == "a"
+        assert stmt.value.right.expression == "b"
 
     assert isinstance(ast[18], UnaryOp)
     assert ast[18].operator == "++"

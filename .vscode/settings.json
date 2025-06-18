@@ -9,5 +9,6 @@
         }
     },
     "editor.formatOnSave": true,
-    "python.analysis.typeCheckingMode": "off"
+    "python.analysis.typeCheckingMode": "off",
+    "makefile.configureOnOpen": false
 }

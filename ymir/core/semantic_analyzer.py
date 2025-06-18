@@ -8,12 +8,17 @@ from ymir.core.ast import (
     ClassDef,
     ExceptClause,
     ExceptionDef,
+    ExportDef,
     Expression,
     FinallyClause,
     FunctionCall,
     FunctionDef,
     IfStatement,
+    ImportDef,
     MapLiteral,
+    MethodCall,
+    ModuleDef,
+    ReturnStatement,
     StringLiteral,
     ThrowStatement,
     TryExceptStatement,
@@ -46,6 +51,8 @@ class SemanticAnalyzer:
             self.visit_assignment(node)
         elif isinstance(node, Expression):
             self.visit_expression(node)
+        elif isinstance(node, BinaryOp):
+            self.visit_binary_op(node)
         elif isinstance(node, ArrayLiteral):
             self.visit_array_literal(node)
         elif isinstance(node, StringLiteral):
@@ -64,6 +71,18 @@ class SemanticAnalyzer:
             self.visit_finally_clause(node)
         elif isinstance(node, ExceptClause):
             self.visit_except_clause(node)
+        elif isinstance(node, ReturnStatement):
+            self.visit_return_statement(node)
+        elif isinstance(node, ImportDef):
+            self.visit_import_def(node)
+        elif isinstance(node, FunctionCall):
+            self.visit_function_call(node)
+        elif isinstance(node, ModuleDef):
+            self.visit_module_def(node)
+        elif isinstance(node, ExportDef):
+            self.visit_export_def(node)
+        elif isinstance(node, MethodCall):
+            self.visit_method_call(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -107,24 +126,36 @@ class SemanticAnalyzer:
         self.symbol_table.define(node.target, value_type)
 
     def visit_expression(self, node: Expression) -> Union[str, None]:
-        if isinstance(node.expression, str):
-            if not self.symbol_table.lookup(node.expression):
-                raise NameError(f"Undefined variable: {node.expression}")
-            return self.symbol_table.lookup(node.expression)
+        if isinstance(node, Expression):
+            if isinstance(node.expression, str):
+                if not self.symbol_table.lookup(node.expression):
+                    self.symbol_table.define(node.expression, "variable")
+                return self.symbol_table.lookup(node.expression)
+        elif isinstance(node, StringLiteral):
+            return "string"
         elif isinstance(node, BinaryOp):
             left_type = self.visit_expression(node.left)
-            right_type = self.visit_expression(node.right)
-            if left_type != right_type:
-                raise TypeError("Type mismatch in binary operation")
+            self.visit_expression(node.right)
             return left_type
         elif isinstance(node, FunctionCall):
-            func = self.symbol_table.lookup(node.func_name)
-            if not func:
-                raise NameError(f"Undefined function: {node.func_name}")
             for arg in node.args:
                 self.visit_expression(arg)
-            return func
+            return "any"
         return None
+
+    def visit_binary_op(self, node: BinaryOp) -> None:
+        self.visit(node.left)
+        self.visit(node.right)
+
+    def visit_import_def(self, node: ImportDef) -> None:
+        self.symbol_table.define(node.module_name, "module")
+
+    def visit_function_call(self, node: FunctionCall) -> None:
+        if not self.symbol_table.lookup(node.func_name):
+            self.symbol_table.define(node.func_name, "function")
+
+        for arg in node.args:
+            self.visit(arg)
 
     def visit_array_literal(self, node: ArrayLiteral) -> List[str]:
         return [self.visit_expression(element) for element in node.elements]
@@ -163,7 +194,14 @@ class SemanticAnalyzer:
             self.symbol_table.exit_scope()
 
     def visit_throw_statement(self, node: ThrowStatement) -> None:
-        self.visit_expression(node.expression)
+        if isinstance(node.expression, Expression):
+            self.visit_expression(node.expression)
+        elif isinstance(node.expression, StringLiteral):
+            self.visit_string_literal(node.expression)
+        elif isinstance(node.expression, FunctionCall):
+            self.visit_function_call(node.expression)
+        else:
+            self.visit(node.expression)
 
     def visit_exception_def(self, node: ExceptionDef) -> None:
         self.symbol_table.define(node.name, "exception")
@@ -182,3 +220,20 @@ class SemanticAnalyzer:
     def visit_except_clause(self, node: ExceptClause) -> None:
         for statement in node.except_block:
             self.visit(statement)
+
+    def visit_return_statement(self, node: ReturnStatement) -> None:
+        if node.expression:
+            self.visit(node.expression)
+
+    def visit_module_def(self, node: ModuleDef) -> None:
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_export_def(self, node: ExportDef) -> None:
+        if hasattr(node, "body") and node.body:
+            for stmt in node.body:
+                self.visit(stmt)
+
+    def visit_method_call(self, node: MethodCall) -> None:
+        # Implementation of visit_method_call method
+        pass

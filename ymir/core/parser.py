@@ -191,8 +191,25 @@ class Parser:
 
     def parse_import_def(self) -> ImportDef:
         self.advance()  # Skip 'import'
-        module_name = self.current_token().value.strip('"')
-        self.expect_token(TokenType.STRING)
+
+        # Check if the import is a string literal or an identifier
+        if self.current_token().type == TokenType.STRING:
+            module_name = self.current_token().value.strip('"')
+            self.advance()  # Skip string literal
+        elif self.current_token().type == TokenType.IDENTIFIER:
+            module_name = self.current_token().value
+            self.advance()  # Skip identifier
+
+            # Handle dotted import names (e.g., import a.b.c)
+            while self.current_token().type == TokenType.DOT:
+                self.advance()  # Skip the dot
+                if self.current_token().type != TokenType.IDENTIFIER:
+                    raise SyntaxError(f"Expected identifier after dot in import name, got {self.current_token()}")
+                module_name += "." + self.current_token().value
+                self.advance()  # Skip identifier
+        else:
+            raise SyntaxError(f"Expected string or identifier for import, got {self.current_token()}")
+
         return ImportDef(module_name)
 
     def parse_export_def(self) -> ExportDef:
@@ -409,6 +426,7 @@ class Parser:
         """Parse an assignment or expression statement."""
         start_pos = self.pos
         token = self.current_token()
+        self.logger.debug(f"parse_assignment_or_expression: Starting with token: {token}")
 
         # Handle special increment/decrement operators like a++ and a--
         if (
@@ -426,29 +444,78 @@ class Parser:
         # Reset position and try normal assignment
         self.pos = start_pos
 
-        # Try to parse as an assignment
-        if token.type == TokenType.IDENTIFIER:
-            identifier = token.value
-            self.advance()  # Skip the identifier
+        # Try to parse as an assignment (identifier or property access)
+        lhs = self.parse_expression()
+        self.logger.debug(f"parse_assignment_or_expression: Parsed LHS: {lhs}")
 
-            if self.current_token().type == TokenType.OPERATOR:
-                op = self.current_token().value
-                if op in ("=", "+=", "-=", "*=", "/=", "%=", "**=", "//="):
-                    self.advance()  # Skip the operator
+        # Check if this is an assignment (simple or compound)
+        if self.current_token().type == TokenType.OPERATOR and self.current_token().value in (
+            "=",
+            "+=",
+            "-=",
+            "*=",
+            "/=",
+            "%=",
+            "**=",
+            "//=",
+        ):
+            operator = self.current_token().value
+            self.advance()  # Skip the operator
+
+            # Check if lhs is a valid assignment target
+            if isinstance(lhs, Expression) and isinstance(lhs.expression, str):
+                if "." not in lhs.expression:  # Simple identifier assignment
+                    target = lhs.expression  # Use the string identifier
                     value = self.parse_expression()
 
-                    # For simple assignment
-                    if op == "=":
-                        return Assignment(identifier, value)
+                    # Handle compound assignment operators by desugaring
+                    if operator != "=":
+                        # Convert += to +, -= to -, etc.
+                        base_operator = operator[:-1]  # Remove the '=' from '+=', '-=', etc.
+                        value = BinaryOp(operator=base_operator, left=lhs, right=value)
 
-                    # For compound assignments (+=, -=, etc.)
-                    # Convert a += b to a = a + b
-                    binary_op = op[:-1]  # Remove the = part
-                    # Make sure parameters are correct: operator, left, right
-                    new_value = BinaryOp(operator=binary_op, left=Expression(identifier), right=value)
-                    return Assignment(identifier, new_value)
+                    return Assignment(target, value)
+                else:  # Property access assignment (e.g., self.message = value)
+                    target = lhs  # Use the Expression object
+                    value = self.parse_expression()
+
+                    # Handle compound assignment operators by desugaring
+                    if operator != "=":
+                        # Convert += to +, -= to -, etc.
+                        base_operator = operator[:-1]  # Remove the '=' from '+=', '-=', etc.
+                        value = BinaryOp(operator=base_operator, left=lhs, right=value)
+
+                    return Assignment(target, value)
+            elif isinstance(lhs, MethodCall):  # Property access via MethodCall
+                target = lhs  # Use the MethodCall object
+                value = self.parse_expression()
+
+                # Handle compound assignment operators by desugaring
+                if operator != "=":
+                    # Convert += to +, -= to -, etc.
+                    base_operator = operator[:-1]  # Remove the '=' from '+=', '-=', etc.
+                    value = BinaryOp(operator=base_operator, left=lhs, right=value)
+
+                return Assignment(target, value)
+            elif isinstance(lhs, Expression) and isinstance(
+                lhs.expression, MethodCall
+            ):  # Expression containing MethodCall
+                target = lhs  # Use the Expression object containing MethodCall
+                value = self.parse_expression()
+
+                # Handle compound assignment operators by desugaring
+                if operator != "=":
+                    # Convert += to +, -= to -, etc.
+                    base_operator = operator[:-1]  # Remove the '=' from '+=', '-=', etc.
+                    value = BinaryOp(operator=base_operator, left=lhs, right=value)
+
+                return Assignment(target, value)
+            else:
+                # Not a valid assignment target, treat as expression
+                pass
 
         # If not an assignment, backtrack and parse as an expression
+        self.logger.debug("parse_assignment_or_expression: Not an assignment, parsing as expression")
         self.pos = start_pos
         return self.parse_expression()
 
@@ -569,7 +636,12 @@ class Parser:
         self.logger.debug(f"After parse_primary, left: {left}")
 
         # Then handle any operators that follow
-        while self.current_token().type == TokenType.OPERATOR:
+        while (
+            self.pos < len(self.tokens)
+            and self.current_token().type == TokenType.OPERATOR
+            and self.get_operator_precedence(self.current_token().value) >= min_precedence
+            and self.get_operator_precedence(self.current_token().value) > 0  # Skip assignment operators
+        ):
             current_token = self.current_token()
             op = current_token.value
 
@@ -595,6 +667,10 @@ class Parser:
         return left
 
     def get_operator_precedence(self, operator: str) -> int:
+        # Assignment operators should have lowest precedence (0) so they're not handled by precedence climbing
+        if operator in ("=", "+=", "-=", "*=", "/=", "%=", "**=", "//="):
+            return 0
+
         precedences = {
             "||": 1,
             "&&": 2,
@@ -829,24 +905,24 @@ class Parser:
             exception_var = None
 
             # Check if there's an exception type specified
-            if self.current_token().type != TokenType.BRACE_OPEN:
+            if self.current_token().type != TokenType.BRACE_OPEN and self.current_token().type != TokenType.KEYWORD:
                 exception_type = self.parse_expression()
+                self.skip_whitespace()
 
-                # Check if there's an exception variable binding with 'as'
-                if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "as":
-                    self.advance()  # Skip 'as'
-                    self.skip_whitespace()
+            # Check for 'as' keyword to bind exception to a variable
+            if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "as":
+                self.advance()  # Skip 'as'
+                self.skip_whitespace()
 
-                    # Ensure we have an identifier for the exception variable
-                    if self.current_token().type != TokenType.IDENTIFIER:
-                        raise SyntaxError(f"Expected identifier after 'as', got {self.current_token()}")
+                # Ensure we have an identifier for the exception variable
+                if self.current_token().type != TokenType.IDENTIFIER:
+                    raise SyntaxError(f"Expected identifier after 'as', got {self.current_token()}")
 
-                    exception_var = self.current_token().value
-                    self.advance()  # Skip identifier
-                    self.skip_whitespace()
+                exception_var = self.current_token().value
+                self.advance()  # Skip identifier
+                self.skip_whitespace()
 
             # Now expect the opening brace for the except block
-            self.expect_token(TokenType.BRACE_OPEN)
             except_block = self.parse_block()
             except_clauses.append(ExceptClause(except_block, exception_type, exception_var))
 

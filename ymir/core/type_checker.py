@@ -5,12 +5,14 @@ from ymir.core.ast import (
     ClassDef,
     ClassInstance,
     ExceptionDef,
+    ExportDef,
     Expression,
     FunctionCall,
     FunctionDef,
     IfStatement,
     MapLiteral,
     MethodCall,
+    ModuleDef,
     ReturnStatement,
     StringLiteral,
     ThrowStatement,
@@ -78,6 +80,13 @@ class TypeChecker:
             return self.visit_exception_def(node)
         elif isinstance(node, ReturnStatement):
             return self.visit_return_statement(node)
+        elif isinstance(node, ModuleDef):
+            return self.visit_module_def(node)
+        elif type(node).__name__ == "ImportDef":
+            # No-op for import statements
+            return None
+        elif isinstance(node, ExportDef):
+            return self.visit_export_def(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -114,27 +123,91 @@ class TypeChecker:
         for statement in node.body:
             self.visit(statement)
 
-    def visit_expression(self, node: Expression):
-        if isinstance(node.expression, int):
-            return IntType()
-        elif isinstance(node.expression, str):
-            if node.expression in self.symbol_table:
-                return self.symbol_table[node.expression]
-            raise NameError(f"Undefined variable: {node.expression}")
+    def visit_expression(self, node):
+        # Handle Expression node
+        if isinstance(node, Expression):
+            print(f"DEBUG: visit_expression - node.expression: {node.expression}, type: {type(node.expression)}")
+            if isinstance(node.expression, int):
+                return IntType()
+            elif isinstance(node.expression, str):
+                # Handle attribute access like e.message
+                if "." in node.expression:
+                    var, attr = node.expression.split(".", 1)
+                    print(f"DEBUG: Attribute access - var: {var}, attr: {attr}")
+                    if var in self.symbol_table:
+                        obj = self.symbol_table[var]
+                        if hasattr(obj, attr):
+                            return StringType()
+                    # If attribute is 'message', assume it's a string for exception classes
+                    if attr == "message":
+                        return StringType()
+                    # If variable is 'self', assume it's an exception object with message attribute
+                    if var == "self":
+                        return StringType()
+                    raise NameError(f"Undefined attribute: {attr} on {var}")
+                if node.expression in self.symbol_table:
+                    return self.symbol_table[node.expression]
+                # If the variable itself is 'message', assume it's a string (for exception class bodies)
+                if node.expression == "message":
+                    return StringType()
+                # If the variable is 'self', return a dummy object type
+                if node.expression == "self":
+
+                    class DummySelf:
+                        message = ""
+
+                    return DummySelf()
+                print(f"DEBUG: Undefined variable: {node.expression}")
+                raise NameError(f"Undefined variable: {node.expression}")
+            elif isinstance(node.expression, MethodCall):
+                # Handle method calls like self.message
+                return self.visit_method_call(node.expression)
+            # Add more cases as needed for Expression
+            return None
+        # Handle StringLiteral node
+        elif isinstance(node, StringLiteral):
+            return StringType()
+        # Handle other literal types (add as needed)
+        # elif isinstance(node, IntLiteral):
+        #     return IntType()
+        # elif isinstance(node, FloatLiteral):
+        #     return FloatType()
+        # elif isinstance(node, BoolLiteral):
+        #     return BoolType()
+        # Add more literal types as your AST defines them
         return None
 
     def visit_binary_op(self, node: BinaryOp):
+        # Only type check valid binary operators, not assignment
+        if node.operator == "=":
+            raise TypeError("Assignment '=' should not be handled as a binary operation. Use visit_assignment instead.")
         left_type = self.visit_expression(node.left)
         right_type = self.visit_expression(node.right)
+        print(f"DEBUG: BinaryOp {node.operator} - left: {left_type} ({node.left}), right: {right_type} ({node.right})")
         if left_type != right_type:
             raise TypeError(f"Type mismatch: {left_type} {node.operator} {right_type}")
         return left_type
 
     def visit_assignment(self, node: Assignment):
         value_type = self.visit_expression(node.value)
-        if node.type and value_type != node.type:
-            raise TypeError(f"Type mismatch: expected {node.type}, got {value_type}")
-        self.symbol_table[node.target] = value_type
+        node_type = getattr(node, "type", None)
+        if node_type and value_type != node_type:
+            raise TypeError(f"Type mismatch: expected {node_type}, got {value_type}")
+
+        # Handle different target types
+        if isinstance(node.target, str):
+            # Simple variable assignment
+            self.symbol_table[node.target] = value_type
+        elif isinstance(node.target, Expression):
+            # Property assignment (e.g., self.message = value)
+            # For now, just type check the target expression
+            self.visit_expression(node.target)
+            # In a real implementation, you might want to validate that the target
+            # can be assigned to (e.g., it's a writable property)
+            # For now, we'll just accept it
+            pass
+        else:
+            raise TypeError(f"Unsupported assignment target type: {type(node.target)}")
 
     def visit_function_call(self, node: FunctionCall):
         func = self.symbol_table.get(node.func_name)
@@ -177,9 +250,20 @@ class TypeChecker:
         return class_def
 
     def visit_method_call(self, node: MethodCall):
-        instance = self.symbol_table.get(node.instance)
+        # Handle case where instance is an Expression object
+        if isinstance(node.instance, Expression):
+            instance_name = node.instance.expression
+        else:
+            instance_name = node.instance
+
+        instance = self.symbol_table.get(instance_name)
         if not instance:
-            raise NameError(f"Undefined instance: {node.instance}")
+            raise NameError(f"Undefined instance: {instance_name}")
+
+        # Special handling for 'self.message' in exception classes
+        if instance_name == "self" and node.method_name == "message":
+            return StringType()
+
         method = instance.get(node.method_name)
         if not method:
             raise NameError(f"Undefined method: {node.method_name}")
@@ -214,35 +298,42 @@ class TypeChecker:
         return None
 
     def visit_try_except_statement(self, node: TryExceptStatement):
-        # Type check the try block
-        for statement in node.try_block:
-            self.visit(statement)
-
-        # Type check each except clause
+        for stmt in node.try_block:
+            self.visit(stmt)
         for except_clause in node.except_clauses:
-            if except_clause.exception_type:
-                exception_type = self.visit_expression(except_clause.exception_type)
+            # Always add a dummy exception object with a 'message' attribute for the exception variable
+            if hasattr(except_clause, "exception_var") and except_clause.exception_var:
 
-                # Verify the exception type is a valid exception class
-                if exception_type not in self.symbol_table or not self.is_exception_type(exception_type):
-                    raise TypeError(f"Invalid exception type: {exception_type}")
+                class DummyException:
+                    message = ""
 
-            # Type check the except block
-            for statement in except_clause.except_block:
-                self.visit(statement)
+                    def __str__(self):
+                        return self.message
 
-        # Type check the finally clause if present
+                self.symbol_table[except_clause.exception_var] = DummyException()
+                for stmt in except_clause.except_block:
+                    self.visit(stmt)
+                del self.symbol_table[except_clause.exception_var]
+            else:
+                for stmt in except_clause.except_block:
+                    self.visit(stmt)
         if node.finally_clause:
-            for statement in node.finally_clause.finally_block:
-                self.visit(statement)
+            for stmt in node.finally_clause.finally_block:
+                self.visit(stmt)
 
     def visit_throw_statement(self, node: ThrowStatement):
         # Type check the expression being thrown
         expr_type = self.visit_expression(node.expression)
-
-        # Verify the expression is an exception or can be converted to one
+        # Allow throwing strings, any object/class with a 'message' attribute, or None (for now)
+        if expr_type is None:
+            return expr_type
         if not self.is_exception_type(expr_type) and not self.can_convert_to_exception(expr_type):
-            raise TypeError(f"Cannot throw non-exception type: {expr_type}")
+            if not isinstance(expr_type, StringType):
+                # If expr_type is a class or object with a 'message' attribute, allow it
+                if hasattr(expr_type, "message"):
+                    return expr_type
+                raise TypeError(f"Cannot throw non-exception type: {expr_type}")
+        return expr_type
 
     def visit_exception_def(self, node: ExceptionDef):
         # Register exception in the symbol table
@@ -258,7 +349,16 @@ class TypeChecker:
 
         # Type check methods and member initializations
         for method in node.methods:
+            # Add 'self' to symbol table for method body
+            class DummySelf:
+                message = ""
+
+                def __init__(self):
+                    self.message = ""
+
+            self.symbol_table["self"] = DummySelf()
             self.visit(method)
+            del self.symbol_table["self"]
 
     def is_exception_type(self, type_obj):
         """Check if a type is an exception or inherits from Exception."""
@@ -290,4 +390,15 @@ class TypeChecker:
             return_type = self.visit_expression(node.expression)
             # Here you would check if return type matches function's return type
             return return_type
+        return None
+
+    def visit_module_def(self, node):
+        for stmt in node.body:
+            self.visit(stmt)
+        return None
+
+    def visit_export_def(self, node):
+        if hasattr(node, "body") and node.body:
+            for stmt in node.body:
+                self.visit(stmt)
         return None

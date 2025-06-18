@@ -1,11 +1,13 @@
 module stdlib.datetime
 
-export func get_current_date() -> string {
-    // Placeholder for actual date logic
-    return "2024-01-01"
+# Placeholder for actual date logic
+
+export func now() -> string {
+    return "2023-01-01T00:00:00Z"
 }
 
-export func get_current_time() -> string {
-    // Placeholder for actual time logic
-    return "00:00:00"
+# Placeholder for actual time logic
+
+export func today() -> string {
+    return "2023-01-01"
 }

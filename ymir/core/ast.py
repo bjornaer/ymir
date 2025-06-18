@@ -58,7 +58,7 @@ class BinaryOp(ASTNode):
 
 
 class Assignment(ASTNode):
-    def __init__(self, target: str, value: ASTNode, var_type: Optional["Type"] = None):
+    def __init__(self, target: Union[str, Expression], value: ASTNode, var_type: Optional["Type"] = None):
         self.target = target
         self.value = value
         self.var_type = var_type

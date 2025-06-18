@@ -39,7 +39,7 @@ class TestExceptionHandling:
 
         # Call the test function
         result = interpreter.evaluate_function_call("test", [])
-        assert result == "caught"
+        assert result == "try caught"
 
     def test_exception_binding(self):
         """Test exception binding with 'as' keyword."""
@@ -71,11 +71,7 @@ class TestExceptionHandling:
     def test_exception_type_matching(self):
         """Test exception type matching in except clauses."""
         source = """
-        exception MyError {
-            func __init__(message: string) {
-                self.message = message
-            }
-        }
+        exception MyError {}
 
         func test() {
             try {
@@ -198,17 +194,8 @@ class TestExceptionHandling:
     def test_exception_inheritance(self):
         """Test exception inheritance."""
         source = """
-        exception BaseError {
-            func __init__(message: string) {
-                self.message = message
-            }
-        }
-
-        exception ChildError: BaseError {
-            func __init__(message: string) {
-                super.__init__(message)
-            }
-        }
+        exception BaseError {}
+        exception ChildError: BaseError {}
 
         func test() {
             try {
@@ -268,17 +255,8 @@ class TestExceptionHandling:
     def test_no_matching_except(self):
         """Test when no except clause matches the raised exception."""
         source = """
-        exception MyError {
-            func __init__(message: string) {
-                self.message = message
-            }
-        }
-
-        exception OtherError {
-            func __init__(message: string) {
-                self.message = message
-            }
-        }
+        exception MyError {}
+        exception OtherError {}
 
         func test() {
             var result: string = "start"

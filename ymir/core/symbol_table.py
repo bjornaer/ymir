@@ -16,3 +16,7 @@ class SymbolTable:
             if name in scope:
                 return scope[name]
         return None
+
+    def lookup(self, name):
+        """Alias for resolve() to maintain compatibility with code expecting lookup()"""
+        return self.resolve(name)

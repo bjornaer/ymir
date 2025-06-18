@@ -24,7 +24,7 @@ requests = "^2.32.3"
 [tool.poetry.group.dev.dependencies]
 black = "^24.4.2"
 isort = "^5.13.2"
-ruff = "^0.5.1"
+ruff = "^0.5.3"
 pytest = "^8.2.2"
 
 [tool.poetry.scripts]

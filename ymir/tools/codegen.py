@@ -1,5 +1,6 @@
 import ctypes
 import functools
+import logging
 from typing import Any, Dict, List, Union
 
 from llvmlite import binding, ir
@@ -52,14 +53,23 @@ class CodeGenerator:
         self.exception_handlers = []  # Stack of exception handlers
         self.current_try_block = None
         self.current_landing_pad = None
+        self.logger = logging.getLogger("ymir.codegen")
+        if not self.logger.hasHandlers():
+            logging.basicConfig(level=logging.DEBUG)
 
     def generate_code(self, ast: List[Any]) -> str:
+        self.logger.debug(f"[CodeGen] Generating code for AST: {ast}")
         for node in ast:
+            if isinstance(node, ModuleDef):
+                self.logger.warning(f"[CodeGen] Skipping unexpected ModuleDef node: {repr(node)}")
+                continue
+            self.logger.debug(f"[CodeGen] Visiting node: {type(node)} - {repr(node)}")
             self.visit(node)
         return str(self.module)
 
     @functools.lru_cache(maxsize=128)
     def visit(self, node: Any):
+        self.logger.debug(f"[CodeGen] In visit: {type(node)} - {repr(node)}")
         if isinstance(node, FunctionDef):
             self.visit_function_def(node)
         elif isinstance(node, AsyncFunctionDef):
