@@ -1,6 +1,7 @@
 from typing import List, Union
 
 from ymir.core.ast import (
+    ArrayAccess,
     ArrayLiteral,
     Assignment,
     ASTNode,
@@ -86,6 +87,8 @@ class SemanticAnalyzer:
             self.visit_method_call(node)
         elif isinstance(node, UnaryOp):
             self.visit_unary_op(node)
+        elif isinstance(node, ArrayAccess):
+            self.visit_array_access(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -243,3 +246,8 @@ class SemanticAnalyzer:
 
     def visit_unary_op(self, node: UnaryOp) -> None:
         self.visit(node.operand)
+
+    def visit_array_access(self, node: ArrayAccess) -> None:
+        """Visit an array access node."""
+        self.visit(node.array)
+        self.visit(node.index)

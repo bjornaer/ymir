@@ -208,3 +208,9 @@ class UnaryOp(ASTNode):
             return f"{self.operand}{self.operator}"
         else:
             return f"{self.operator}{self.operand}"
+
+
+class ArrayAccess(ASTNode):
+    def __init__(self, array: ASTNode, index: ASTNode):
+        self.array = array
+        self.index = index

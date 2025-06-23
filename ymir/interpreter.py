@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from llvmlite import binding, ir
 
 from ymir.core.ast import (
+    ArrayAccess,
     Assignment,
     ASTNode,
     BinaryOp,
@@ -347,6 +348,18 @@ class YmirInterpreter:
             # If not a variable, treat as string literal
             self.logger.debug(f"[evaluate_expression] String literal: {node}")
             return node
+        elif isinstance(node, ArrayAccess):
+            array_val = self.evaluate_expression(node.array)
+            index_val = self.evaluate_expression(node.index)
+            # Convert index to integer since Python lists require integer indices
+            if isinstance(index_val, float):
+                index_val = int(index_val)
+            return array_val[index_val]
+        elif hasattr(node, "elements") and type(node).__name__ == "ArrayLiteral":
+            # ArrayLiteral node
+            elements = [self.evaluate_expression(element) for element in node.elements]
+            self.logger.debug(f"[evaluate_expression] ArrayLiteral: {elements}")
+            return elements
         elif hasattr(node, "func_name") and hasattr(node, "args"):
             # FunctionCall node (for exception instantiation like ChildError("message"))
             func_name = node.func_name
@@ -418,6 +431,8 @@ class YmirInterpreter:
         elif hasattr(node, "expression"):
             # Expression node
             if isinstance(node.expression, int):
+                return node.expression
+            elif isinstance(node.expression, float):
                 return node.expression
             elif isinstance(node.expression, str):
                 if node.expression in self.local_scope:

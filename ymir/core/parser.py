@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple
 
 from ymir.core.ast import (
+    ArrayAccess,
     ArrayLiteral,
     Assignment,
     ASTNode,
@@ -720,25 +721,22 @@ class Parser:
 
         if token.type == TokenType.LITERAL:
             self.advance()
-            return Expression(token.value)
-        if token.type == TokenType.KEYWORD and token.value == "await":
+            expr = Expression(token.value)
+        elif token.type == TokenType.KEYWORD and token.value == "await":
             self.advance()  # Skip 'await'
-            expr = self.parse_expression()
-            return AwaitExpression(expr)
+            expr = AwaitExpression(self.parse_expression())
         elif token.type == TokenType.KEYWORD and token.value in {"true", "false"}:
             self.advance()
-            return Expression(True if token.value == "true" else False)
+            expr = Expression(True if token.value == "true" else False)
         elif token.type == TokenType.STRING:
             self.advance()
-            return StringLiteral(token.value)
+            expr = StringLiteral(token.value)
         elif token.type == TokenType.BRACKET_OPEN:
             return self.parse_array_literal()
         elif token.type == TokenType.BRACE_OPEN:
             return self.parse_map_literal()
         elif token.type == TokenType.PAREN_OPEN:
-            return (
-                self.parse_tuple_literal()
-            )  # this should return tuple literal OR whatever was originally in the parenthesis if not a tuple
+            return self.parse_tuple_literal()
         elif token.type == TokenType.IDENTIFIER:
             identifier = token.value
             self.advance()
@@ -747,12 +745,12 @@ class Parser:
                 self.advance()  # skip '('
                 args = self.parse_arguments()
                 self.expect_token(TokenType.PAREN_CLOSE)
-                return FunctionCall(identifier, args)
-            # Handle property access (dot notation)
-            if self.current_token().type == TokenType.DOT:
+                expr = FunctionCall(identifier, args)
+            elif self.current_token().type == TokenType.DOT:
                 left = Expression(identifier)
-                return self.parse_property_access(left)
-            return Expression(identifier)
+                expr = self.parse_property_access(left)
+            else:
+                expr = Expression(identifier)
         elif token.type == TokenType.KEYWORD:
             identifier = token.value
             self.advance()
@@ -761,10 +759,20 @@ class Parser:
                 self.advance()  # skip '('
                 args = self.parse_arguments()
                 self.expect_token(TokenType.PAREN_CLOSE)
-                return FunctionCall(identifier, args)
-            return Expression(identifier)
+                expr = FunctionCall(identifier, args)
+            else:
+                expr = Expression(identifier)
         else:
             raise SyntaxError(f"Unexpected token: {token} value: '{token.value}' after identifier")
+
+        # Handle array access (chaining allowed)
+        while self.current_token().type == TokenType.BRACKET_OPEN:
+            self.advance()  # skip '['
+            index_expr = self.parse_expression()
+            self.expect_token(TokenType.BRACKET_CLOSE)
+            expr = ArrayAccess(expr, index_expr)
+
+        return expr
 
     def parse_property_access(self, left: Expression) -> Expression:
         """Parse property access using dot notation."""
