@@ -328,6 +328,19 @@ class YmirInterpreter:
         elif isinstance(node, Assignment):
             value = self.evaluate_expression(node.value)
             self.logger.debug(f"[evaluate] Assignment: {node.target} = {value}")
+
+            # Handle array element assignment (e.g., arr[0] = value)
+            if isinstance(node.target, ArrayAccess):
+                array_val = self.evaluate_expression(node.target.array)
+                index_val = self.evaluate_expression(node.target.index)
+                # Convert index to integer since Python lists require integer indices
+                if isinstance(index_val, float):
+                    index_val = int(index_val)
+                # Perform the assignment
+                array_val[index_val] = value
+                return value
+
+            # Handle regular variable assignment
             if self.local_scope is not None and node.target in self.local_scope:
                 self.local_scope[node.target] = value
             elif self.local_scope is not None and len(self.local_scope) > 0:

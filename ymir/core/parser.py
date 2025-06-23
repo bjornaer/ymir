@@ -424,7 +424,11 @@ class Parser:
         if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "else":
             self.advance()
             self.skip_whitespace()
-            else_body = self.parse_block()  # parse_block handles the braces
+            # Support chained else if
+            if self.current_token().type == TokenType.KEYWORD and self.current_token().value == "if":
+                else_body = [self.parse_if_statement()]
+            else:
+                else_body = self.parse_block()  # parse_block handles the braces
 
         return IfStatement(condition, then_body, else_body)
 
@@ -507,6 +511,17 @@ class Parser:
                 lhs.expression, MethodCall
             ):  # Expression containing MethodCall
                 target = lhs  # Use the Expression object containing MethodCall
+                value = self.parse_expression()
+
+                # Handle compound assignment operators by desugaring
+                if operator != "=":
+                    # Convert += to +, -= to -, etc.
+                    base_operator = operator[:-1]  # Remove the '=' from '+=', '-=', etc.
+                    value = BinaryOp(operator=base_operator, left=lhs, right=value)
+
+                return Assignment(target, value)
+            elif isinstance(lhs, ArrayAccess):  # Array element assignment (e.g., arr[0] = value)
+                target = lhs  # Use the ArrayAccess object as target
                 value = self.parse_expression()
 
                 # Handle compound assignment operators by desugaring

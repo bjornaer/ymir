@@ -1,4 +1,5 @@
 from ymir.core.ast import (
+    ArrayAccess,
     ArrayLiteral,
     Assignment,
     BinaryOp,
@@ -264,6 +265,15 @@ class TypeChecker:
                 return self.visit_method_call(node.expression)
             # Add more cases as needed for Expression
             return None
+        # Handle ArrayAccess node
+        elif isinstance(node, ArrayAccess):
+            array_type = self.visit_expression(node.array)
+            if isinstance(array_type, ArrayType):
+                return array_type.element_type
+            # Optionally handle matrix type
+            if hasattr(array_type, "element_type"):
+                return array_type.element_type
+            return None
         # Handle StringLiteral node
         elif isinstance(node, StringLiteral):
             return StringType()
@@ -347,6 +357,14 @@ class TypeChecker:
             # In a real implementation, you might want to validate that the target
             # can be assigned to (e.g., it's a writable property)
             # For now, we'll just accept it
+            pass
+        elif isinstance(node.target, ArrayAccess):
+            # Array element assignment (e.g., arr[0] = value)
+            # Type check the array and index expressions
+            self.visit_expression(node.target.array)
+            self.visit_expression(node.target.index)
+            # For now, we'll just accept it (in a real implementation, you might
+            # want to validate that the array type matches the value type)
             pass
         else:
             raise TypeError(f"Unsupported assignment target type: {type(node.target)}")

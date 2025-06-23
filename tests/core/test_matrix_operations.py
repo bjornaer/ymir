@@ -651,3 +651,123 @@ class TestMatrixOperations:
             assert "singular_values2 =" in output
         finally:
             os.unlink(temp_file)
+
+    def test_matrix_eigenvectors_enhanced(self):
+        """Test enhanced matrix eigenvectors calculation with real computation."""
+        script = """
+        module test_matrix_eigenvectors_enhanced
+        import stdlib.math
+
+        # Test 2x2 matrix with real eigenvectors
+        var matrix1: matrix[float] = [[4.0, 1.0], [2.0, 3.0]]
+        var eigenvectors1: matrix[float] = stdlib.math.matrix_eigenvectors(matrix1)
+        print("eigenvectors1 =", eigenvectors1)
+
+        # Test identity matrix
+        var matrix2: matrix[float] = [[1.0, 0.0], [0.0, 1.0]]
+        var eigenvectors2: matrix[float] = stdlib.math.matrix_eigenvectors(matrix2)
+        print("eigenvectors2 =", eigenvectors2)
+        """
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+        try:
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+            output = f.getvalue()
+            assert "eigenvectors1 =" in output
+            assert "eigenvectors2 =" in output
+        finally:
+            os.unlink(temp_file)
+
+    def test_matrix_eigenvalues_3x3(self):
+        """Test matrix eigenvalues calculation for 3x3 matrices."""
+        script = """
+        module test_matrix_eigenvalues_3x3
+        import stdlib.math
+
+        # Test 3x3 matrix
+        var matrix1: matrix[float] = [[1.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 3.0]]
+        var eigenvalues1: array[float] = stdlib.math.matrix_eigenvalues(matrix1)
+        print("eigenvalues1 =", eigenvalues1)
+        """
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+        try:
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+            output = f.getvalue()
+            assert "eigenvalues1 =" in output
+        finally:
+            os.unlink(temp_file)
+
+    def test_matrix_svd_full(self):
+        """Test full SVD decomposition."""
+        script = """
+        module test_matrix_svd_full
+        import stdlib.math
+
+        # Test 2x2 matrix
+        var matrix1: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var svd_result: any = stdlib.math.matrix_svd_full(matrix1)
+        print("svd_result =", svd_result)
+        """
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+        try:
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+            output = f.getvalue()
+            assert "svd_result =" in output
+        finally:
+            os.unlink(temp_file)
+
+    def test_matrix_condition_number(self):
+        """Test matrix condition number calculation."""
+        script = """
+        module test_matrix_condition_number
+        import stdlib.math
+
+        # Test well-conditioned matrix (identity)
+        var matrix1: matrix[float] = [[1.0, 0.0], [0.0, 1.0]]
+        var cond1: float = stdlib.math.matrix_condition_number(matrix1)
+        print("condition_number1 =", cond1)
+
+        # Test ill-conditioned matrix
+        var matrix2: matrix[float] = [[1.0, 1.0], [1.0, 1.0001]]
+        var cond2: float = stdlib.math.matrix_condition_number(matrix2)
+        print("condition_number2 =", cond2)
+        """
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+        try:
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+            output = f.getvalue()
+            assert "condition_number1 =" in output
+            assert "condition_number2 =" in output
+        finally:
+            os.unlink(temp_file)
