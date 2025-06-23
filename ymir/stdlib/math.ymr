@@ -18,3 +18,26 @@ export func multiply(a: int, b: int) -> int {
 export func divide(a: int, b: int) -> float {
     return a / b
 }
+
+# Trigonometric Formulas
+
+export func sin_sum(a: float, b: float) -> float {
+    # Calculates sin(a + b)
+    return sin(a) * cos(b) + cos(a) * sin(b)
+}
+
+export func cos_sum(a: float, b: float) -> float {
+    # Calculates cos(a + b)
+    return cos(a) * cos(b) - sin(a) * sin(b)
+}
+
+export func tan_sum(a: float, b: float) -> float {
+    # Calculates tan(a + b)
+    return (tan(a) + tan(b)) / (1.0 - tan(a) * tan(b))
+}
+
+export func law_of_cosines(a: float, b: float, angle_c_rad: float) -> float {
+    # Calculates the length of side c of a triangle given sides a and b,
+    # and the angle C between them in radians.
+    return sqrt(pow(a, 2.0) + pow(b, 2.0) - 2.0 * a * b * cos(angle_c_rad))
+}
