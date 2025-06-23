@@ -25,6 +25,11 @@ class BoolType(Type):
         return "bool"
 
 
+class AnyType(Type):
+    def __str__(self) -> str:
+        return "any"
+
+
 class ArrayType(Type):
     def __init__(self, element_type: Type):
         self.element_type = element_type

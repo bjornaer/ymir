@@ -23,6 +23,7 @@ from ymir.core.ast import (
     ThrowStatement,
     TryExceptStatement,
     TupleLiteral,
+    UnaryOp,
     WhileStatement,
 )
 from ymir.core.symbol_table import SymbolTable
@@ -83,6 +84,8 @@ class SemanticAnalyzer:
             self.visit_export_def(node)
         elif isinstance(node, MethodCall):
             self.visit_method_call(node)
+        elif isinstance(node, UnaryOp):
+            self.visit_unary_op(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -237,3 +240,6 @@ class SemanticAnalyzer:
     def visit_method_call(self, node: MethodCall) -> None:
         # Implementation of visit_method_call method
         pass
+
+    def visit_unary_op(self, node: UnaryOp) -> None:
+        self.visit(node.operand)

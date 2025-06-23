@@ -34,6 +34,7 @@ from ymir.core.ast import (
 )
 from ymir.core.lexer import Token, TokenType
 from ymir.core.types import (
+    AnyType,
     ArrayType,
     BoolType,
     FloatType,
@@ -855,6 +856,8 @@ class Parser:
                 return StringType()
             elif type_name == "bool":
                 return BoolType()
+            elif type_name == "any":
+                return AnyType()
             elif type_name == "array":
                 self.expect_token(TokenType.BRACKET_OPEN, "[")
                 element_type = self.parse_type_annotation()

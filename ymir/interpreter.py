@@ -10,6 +10,7 @@ from llvmlite import binding, ir
 from ymir.core.ast import (
     Assignment,
     ASTNode,
+    BinaryOp,
     Break,
     ClassDef,
     Continue,
@@ -319,6 +320,8 @@ class YmirInterpreter:
         elif type(node).__name__ == "ImportDef":
             # No-op for import statements (already handled by load_standard_library)
             return None
+        elif isinstance(node, BinaryOp):
+            return self.evaluate_expression(node)
         else:
             self.logger.debug(f"[evaluate] Unknown node type: {type(node)} - {repr(node)}")
             raise TypeError(f"Unknown AST node type: {type(node)}")

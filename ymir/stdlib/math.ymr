@@ -41,3 +41,77 @@ export func law_of_cosines(a: float, b: float, angle_c_rad: float) -> float {
     # and the angle C between them in radians.
     return sqrt(pow(a, 2.0) + pow(b, 2.0) - 2.0 * a * b * cos(angle_c_rad))
 }
+
+# Core Mathematical Enhancements
+
+export func lcm(a: int, b: int) -> int {
+    # Calculates the least common multiple of two integers.
+    if (a == 0 || b == 0) {
+        return 0
+    }
+    return abs(a * b) / gcd(a, b)
+}
+
+export func is_close(a: float, b: float) -> bool {
+    # Checks if two floating-point numbers are close to each other using relative and absolute tolerance.
+    var rel_tol: float = 1e-9
+    var abs_tol: float = 0.0
+    # print("is_close debug: a =", a)
+    # print("is_close debug: b =", b)
+    var abs_a: float = abs(a)
+    var abs_b: float = abs(b)
+    # print("is_close debug: abs(a) =", abs_a)
+    # print("is_close debug: abs(b) =", abs_b)
+    var max_abs: float = max(abs_a, abs_b)
+    # print("is_close debug: max(abs(a), abs(b)) =", max_abs)
+    var diff: float = abs(a - b)
+    # print("is_close debug: abs(a - b) =", diff)
+    var rel_part: float = rel_tol * max_abs
+    # print("is_close debug: rel_tol * max_abs =", rel_part)
+    var max_tol: float = max(rel_part, abs_tol)
+    # print("is_close debug: max(rel_tol * max_abs, abs_tol) =", max_tol)
+    var result: bool = diff <= max_tol
+    # print("is_close debug: result =", result)
+    return result
+}
+
+export func modf(x: float) -> array[float] {
+    # Returns the fractional and integer parts of x as a two-item array.
+    var integer: float = floor(x)
+    var fractional: float = x - integer
+    return [fractional, integer]
+}
+
+export func combinations(n: int, k: int) -> int {
+    # Calculates the number of combinations (nCk).
+    if (k < 0 || k > n) {
+        return 0
+    }
+    if (k == 0 || k == n) {
+        return 1
+    }
+    if (k > n / 2) {
+        k = n - k
+    }
+    var res: int = 1
+    var i: int = 0
+    while (i < k) {
+        res = res * (n - i) / (i + 1)
+        i = i + 1
+    }
+    return res
+}
+
+export func permutations(n: int, k: int) -> int {
+    # Calculates the number of permutations (nPk).
+    if (k < 0 || k > n) {
+        return 0
+    }
+    var res: int = 1
+    var i: int = 0
+    while (i < k) {
+        res = res * (n - i)
+        i = i + 1
+    }
+    return res
+}

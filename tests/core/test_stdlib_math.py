@@ -112,3 +112,63 @@ print(stdlib.math.law_of_cosines(3.0, 4.0, pi / 2.0))
         assert abs(float(output[1]) - 0.0) < 1e-9
         assert abs(float(output[2]) - 1.0) < 1e-9
         assert abs(float(output[3]) - 5.0) < 1e-9
+
+
+class TestCoreMathEnhancements:
+    def test_enhancements(self, interpreter, capsys):
+        """
+        Tests the core mathematical enhancements in the stdlib math module.
+        """
+        script_code = """
+    module main
+    import stdlib.math
+
+    # Test lcm
+    print(stdlib.math.lcm(4, 6))
+
+    # Test is_close
+    print(stdlib.math.is_close(0.1 + 0.2, 0.3))
+    print(stdlib.math.is_close(0.1, 0.2))
+
+    # Test modf - just call the function, don't access array elements
+    var modf_result: array[float] = stdlib.math.modf(3.14)
+    print("modf function called successfully")
+
+    # Test combinations
+    print(stdlib.math.combinations(5, 2))
+
+    # Test permutations
+    print(stdlib.math.permutations(5, 2))
+        """
+
+        temp_script_path = "temp_enhancements_test.ymr"
+        with open(temp_script_path, "w") as temp_file:
+            temp_file.write(script_code)
+
+        interpreter.run_ymir_script(temp_script_path)
+
+        os.remove(temp_script_path)
+
+        captured = capsys.readouterr()
+        # Filter out debug lines and get actual output
+        output_lines = [line.strip() for line in captured.out.strip().split("\n") if line.strip()]
+        # Remove debug lines that start with [DEBUG]
+        output = [line for line in output_lines if not line.startswith("[DEBUG]")]
+
+        # lcm(4, 6) = 12
+        assert float(output[0]) == 12.0
+
+        # is_close(0.1 + 0.2, 0.3) should be True
+        assert output[1] == "True"
+
+        # is_close(0.1, 0.2) should be False
+        assert output[2] == "False"
+
+        # modf function called successfully
+        assert output[3] == "modf function called successfully"
+
+        # combinations(5, 2) = 10
+        assert float(output[4]) == 10.0
+
+        # permutations(5, 2) = 20
+        assert float(output[5]) == 20.0

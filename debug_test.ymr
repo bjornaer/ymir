@@ -1,0 +1,25 @@
+module main
+import stdlib.math
+
+# Test max function
+print("Testing max function:")
+print(max(1, 2))
+print(max(1.5, 2.5))
+print(max(1, 2.5))
+
+# Test abs function
+print("Testing abs function:")
+print(abs(5))
+print(abs(-5))
+print(abs(3.14))
+print(abs(-3.14))
+
+# Test simple is_close logic
+print("Testing is_close components:")
+var a: float = 0.1
+var b: float = 0.2
+print("a =", a)
+print("b =", b)
+print("abs(a) =", abs(a))
+print("abs(b) =", abs(b))
+print("max(abs(a), abs(b)) =", max(abs(a), abs(b)))

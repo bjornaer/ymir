@@ -21,6 +21,7 @@ from ymir.core.ast import (
     WhileStatement,
 )
 from ymir.core.types import (
+    AnyType,
     ArrayType,
     BoolType,
     FloatType,
@@ -45,13 +46,13 @@ class TypeChecker:
     def _register_builtin_functions(self):
         """Register common builtin functions in the symbol table."""
         # print function: takes any number of arguments, returns void
-        self.symbol_table["print"] = FunctionType(["any"], None)  # special case: 'any' and variadic
+        self.symbol_table["print"] = FunctionType([AnyType()], None)  # special case: 'any' and variadic
 
         # str function: takes one argument of any type, returns string
-        self.symbol_table["str"] = FunctionType(["any"], StringType())
+        self.symbol_table["str"] = FunctionType([AnyType()], StringType())
 
         # len function: takes array/string, returns int
-        self.symbol_table["len"] = FunctionType(["any"], IntType())
+        self.symbol_table["len"] = FunctionType([AnyType()], IntType())
 
         # Common math functions
         self.symbol_table["sqrt"] = FunctionType([FloatType()], FloatType())
@@ -61,10 +62,10 @@ class TypeChecker:
         self.symbol_table["pow"] = FunctionType([FloatType(), FloatType()], FloatType())
 
         # More math functions
-        self.symbol_table["abs"] = FunctionType(["any"], FloatType())  # Can take int or float
-        self.symbol_table["round"] = FunctionType(["any"], IntType())  # Can take int or float, returns int
-        self.symbol_table["min"] = FunctionType(["any"], "any")  # Variadic
-        self.symbol_table["max"] = FunctionType(["any"], "any")  # Variadic
+        self.symbol_table["abs"] = FunctionType([AnyType()], FloatType())  # Can take int or float
+        self.symbol_table["round"] = FunctionType([AnyType()], IntType())  # Can take int or float, returns int
+        self.symbol_table["min"] = FunctionType([AnyType()], AnyType())  # Variadic
+        self.symbol_table["max"] = FunctionType([AnyType()], AnyType())  # Variadic
         self.symbol_table["ceil"] = FunctionType([FloatType()], IntType())
         self.symbol_table["floor"] = FunctionType([FloatType()], IntType())
         self.symbol_table["fabs"] = FunctionType([FloatType()], FloatType())
@@ -371,7 +372,7 @@ class TypeChecker:
             raise TypeError(f"Argument count mismatch: expected {len(func.param_types)}, got {len(node.args)}")
         for arg, param_type in zip(node.args, func.param_types):
             arg_type = self.visit_expression(arg)
-            if param_type == "any":
+            if isinstance(param_type, AnyType):
                 continue
             if type(arg_type) is not type(param_type):
                 raise TypeError(f"Argument type mismatch: expected {param_type}, got {arg_type}")
@@ -463,6 +464,8 @@ class TypeChecker:
         elif isinstance(node, FunctionType):
             param_types = [self.visit_type_annotation(t) for t in node.param_types]
             return FunctionType(param_types, self.visit_type_annotation(node.return_type))
+        elif isinstance(node, AnyType):
+            return AnyType()
         return None
 
     def visit_try_except_statement(self, node: TryExceptStatement):

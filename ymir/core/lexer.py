@@ -81,6 +81,7 @@ class Lexer:
             "array",  # Type hint keywords
             "map",  # Type hint keywords
             "tuple",  # Type hint keywords
+            "any",  # Type hint keywords
             "var",
             # Exception handling keywords
             "try",
@@ -91,7 +92,7 @@ class Lexer:
             "as",
         }
         self.token_specification = [
-            ("NUMBER", r"\d+(\.\d*)?"),
+            ("NUMBER", r"\d+(\.\d*)?([eE][+-]?\d+)?"),
             ("ID", r"[A-Za-z_]\w*"),
             ("STRING", r"\".*?\""),
             ("OP", r"(\+\+|\+=|&&|\|\||[+\-*/%=<>!]+)"),  # Added '&&' and '||'
@@ -126,7 +127,11 @@ class Lexer:
             column = match.start() - line_start
             # print(f"Matched {type} with value {value} at line {line_number}, column {column}")  # Debug print
             if type == "NUMBER":
-                value = float(value) if "." in value else int(value)
+                # Handle scientific notation and decimal numbers
+                if "e" in value.lower() or "." in value:
+                    value = float(value)
+                else:
+                    value = int(value)
                 token = Token(TokenType.LITERAL, value, line_number, column)
             elif type == "ID":
                 if value in self.keywords:
