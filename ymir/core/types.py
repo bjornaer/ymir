@@ -10,7 +10,7 @@ class Type(ABC):
         pass
 
     def __eq__(self, other) -> bool:
-        return type(self) == type(other)
+        return type(self) is type(other)
 
     def __hash__(self) -> int:
         return hash(type(self))
