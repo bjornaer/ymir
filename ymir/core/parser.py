@@ -749,7 +749,8 @@ class Parser:
                 return FunctionCall(identifier, args)
             # Handle property access (dot notation)
             if self.current_token().type == TokenType.DOT:
-                return self.parse_property_access(Expression(identifier))
+                left = Expression(identifier)
+                return self.parse_property_access(left)
             return Expression(identifier)
         elif token.type == TokenType.KEYWORD:
             identifier = token.value
@@ -780,17 +781,10 @@ class Parser:
                 self.advance()  # Skip opening parenthesis
                 args = self.parse_arguments()
                 self.expect_token(TokenType.PAREN_CLOSE)
-
-                # If left is a simple identifier or Expression, treat as MethodCall
-                if isinstance(left, Expression) and isinstance(left.expression, str):
-                    left = Expression(MethodCall(left, property_name, args))
-                else:
-                    # Otherwise, build full dotted name for FunctionCall
-                    full_name = self._build_dotted_name_from_expression(left) + "." + property_name
-                    left = Expression(FunctionCall(full_name, args))
+                left = MethodCall(left, property_name, args)
             else:
                 # It's a property access
-                left = Expression(MethodCall(left, property_name, []))
+                left = MethodCall(left, property_name, [])
 
         return left
 

@@ -35,6 +35,14 @@ from ymir.logging import get_logger
 from ymir.tools.codegen import CodeGenerator
 
 
+class Module:
+    """Simple module class to hold exported functions and constants."""
+
+    def __init__(self, name: str):
+        self.name = name
+        self.exports = {}
+
+
 class YmirInterpreter:
     def __init__(self, verbosity: str = "INFO"):
         self.verbosity = verbosity
@@ -42,7 +50,7 @@ class YmirInterpreter:
         self.logger.setLevel(getattr(logging, verbosity))
         self.global_scope = {}
         self.local_scope = {}
-        self.module_cache: Dict[str, ModuleDef] = {}
+        self.loaded_modules: Dict[str, Module] = {}
         self.standard_library_path = os.path.join(os.path.dirname(__file__), "stdlib")
 
         # Register builtin functions
@@ -64,14 +72,15 @@ class YmirInterpreter:
         # Common math functions
         import math
 
-        self.global_scope["sqrt"] = math.sqrt
-        self.global_scope["sin"] = math.sin
-        self.global_scope["cos"] = math.cos
-        self.global_scope["tan"] = math.tan
         self.global_scope["abs"] = abs
         self.global_scope["round"] = round
         self.global_scope["min"] = min
         self.global_scope["max"] = max
+
+        # Add ALL functions from the math module
+        for name, func in math.__dict__.items():
+            if callable(func) and not name.startswith("__"):
+                self.global_scope[name] = func
 
     def execute(self, llvm_ir: str) -> None:
         """Execute LLVM IR code by JIT compiling and running it.
@@ -159,7 +168,11 @@ class YmirInterpreter:
         project_root = os.path.dirname(os.path.abspath(file_path))
         main_module = self.load_module(file_path, project_root, is_entry_point=True)
         self.logger.debug(f"Main module after loading: {main_module}")
-        self.logger.debug(f"Main module body: {main_module.body}")
+        # Don't try to access .body on Module objects
+        if hasattr(main_module, "body"):
+            self.logger.debug(f"Main module body: {main_module.body}")
+        else:
+            self.logger.debug(f"Main module exports: {main_module.exports}")
 
         # Skip LLVM code generation and execution for now since interpretation is working
         # and LLVM execution fails due to missing main function
@@ -176,8 +189,12 @@ class YmirInterpreter:
         # self.execute(llvm_ir)
         # self.logger.debug("Execution finished.")
 
-    def load_module(self, file_path: str, project_root: str, is_entry_point: bool = False) -> ModuleDef:
-        self.logger.debug(f"Loading module: {file_path}")
+    def load_module(self, file_path: str, project_root: str, is_entry_point: bool = False) -> Module:
+        canonical_path = os.path.realpath(file_path)
+        if canonical_path in self.loaded_modules:
+            self.logger.debug(f"Returning cached module for path: {canonical_path}")
+            return self.loaded_modules[canonical_path]
+
         with open(file_path, "r") as file:
             source_code = file.read()
         self.logger.debug(f"Source code: {source_code}")
@@ -193,50 +210,58 @@ class YmirInterpreter:
         type_checker = TypeChecker(verbosity=self.verbosity)
         type_checker.check(ast)
         self.logger.debug("Type checking complete")
-        module = None
         module_body = ast
         module_name = None
         for node in ast:
             if isinstance(node, ModuleDef):
-                module = node
                 module_body = node.body
                 module_name = node.name
                 break
         if module_name is None:
             raise SyntaxError(f"Module name not defined in {file_path}")
         self.logger.debug(f"Module name: {module_name}")
-        module = ModuleDef(module_name, module_body)
-        self.module_cache[module_name] = module
-        self.logger.debug(f"Module: {module}")
+
+        # Create a Module object to hold exports and cache it to handle cycles
+        module_obj = Module(module_name)
+        self.loaded_modules[canonical_path] = module_obj
+
+        self.logger.debug(f"Module: {module_obj}")
         # First pass: register all classes and functions
         for node in module_body:
             if isinstance(node, (ClassDef, ExceptionDef)):
                 self.logger.debug(f"[load_module] Registering class: {node.name}")
-                self.global_scope[node.name] = self.evaluate_exception_def(node)
+                class_obj = self.evaluate_exception_def(node)
+                module_obj.exports[node.name] = class_obj
+                self.global_scope[f"{module_name}.{node.name}"] = class_obj
             elif isinstance(node, FunctionDef):
                 self.logger.debug(f"[load_module] Registering function: {node.name}")
-                self.global_scope[node.name] = node
+                module_obj.exports[node.name] = node
+                self.global_scope[f"{module_name}.{node.name}"] = node
+            elif isinstance(node, ExportDef):
+                if isinstance(node.value, FunctionDef):
+                    func_node = node.value
+                    self.logger.debug(f"[load_module] Registering exported function: {func_node.name}")
+                    module_obj.exports[func_node.name] = func_node
+                    self.global_scope[f"{module_name}.{func_node.name}"] = func_node
+
         # Second pass: process imports and exports
         for node in module_body:
             if isinstance(node, ModuleDef):
-                self.logger.debug("[load_module] Skipping ModuleDef node in module body evaluation loop.")
                 continue
             if isinstance(node, ImportDef):
-                import_path = self.resolve_import(node.module_name)
-                self.logger.debug(f"[load_module] Importing module: {import_path}")
-                self.load_module(import_path, project_root)
-            if isinstance(node, ExportDef):
-                self.logger.debug(f"[load_module] Exporting: {node.name}")
-                value = self.evaluate(node.value)
-                if isinstance(value, str) and value in self.global_scope:
-                    value = self.global_scope[value]
-                self.global_scope[node.name] = value
-                fq_name = f"{module_name}.{node.name}"
-                self.global_scope[fq_name] = value
+                self.process_import(node.module_name, project_root)
+            elif isinstance(node, ExportDef):
+                # Functions are handled in the first pass
+                if not isinstance(node.value, FunctionDef):
+                    self.logger.debug(f"[load_module] Exporting: {node.name}")
+                    value = self.evaluate(node.value)
+                    if isinstance(value, str) and value in self.global_scope:
+                        value = self.global_scope[value]
+                    module_obj.exports[node.name] = value
             elif is_entry_point:
                 self.logger.debug(f"[load_module] Evaluating (entry point): {type(node)} - {repr(node)}")
                 self.evaluate(node)
-        return module
+        return module_obj
 
     def evaluate(self, node: ASTNode) -> Any:
         self.logger.debug(f"[evaluate] Evaluating AST node: {type(node)} - {repr(node)}")
@@ -291,31 +316,6 @@ class YmirInterpreter:
             self.logger.debug(f"[evaluate] Handling ReturnStatement: {repr(node)}")
             value = self.evaluate_expression(node.expression)
             raise ReturnSignal(value)
-        elif hasattr(node, "instance") and hasattr(node, "method_name") and hasattr(node, "args"):
-            # MethodCall node (for property access like e.message)
-            instance = self.evaluate_expression(node.instance)
-            if not node.args:  # Property access
-                if hasattr(instance, node.method_name):
-                    attr = getattr(instance, node.method_name)
-                    if callable(attr):
-                        import inspect
-
-                        sig = inspect.signature(attr)
-                        if len(sig.parameters) == 0:
-                            return attr()
-                    return attr
-                else:
-                    raise AttributeError(f"'{type(instance).__name__}' object has no attribute '{node.method_name}'")
-            else:  # Method call with arguments
-                args = [self.evaluate_expression(arg) for arg in node.args]
-                if hasattr(instance, node.method_name):
-                    method = getattr(instance, node.method_name)
-                    if callable(method):
-                        return method(*args)
-                    else:
-                        return method
-                else:
-                    raise AttributeError(f"'{type(instance).__name__}' object has no method '{node.method_name}'")
         elif type(node).__name__ == "ImportDef":
             # No-op for import statements (already handled by load_standard_library)
             return None
@@ -328,6 +328,8 @@ class YmirInterpreter:
         self.logger.debug(f"[evaluate_expression] Node type: {type(node)} - {repr(node)}")
         if isinstance(node, int):
             return node
+        elif isinstance(node, float):
+            return node
         elif isinstance(node, str):
             if node in self.local_scope:
                 value = self.local_scope[node]
@@ -336,6 +338,8 @@ class YmirInterpreter:
             elif node in self.global_scope:
                 value = self.global_scope[node]
                 self.logger.debug(f"[evaluate_expression] Variable '{node}' in global_scope -> {value}")
+                if isinstance(value, Module):
+                    return value
                 return value
             # If not a variable, treat as string literal
             self.logger.debug(f"[evaluate_expression] String literal: {node}")
@@ -345,6 +349,32 @@ class YmirInterpreter:
             func_name = node.func_name
             args = [self.evaluate_expression(arg) for arg in node.args]
             self.logger.debug(f"[FunctionCall] func_name: {repr(func_name)}")
+
+            # Handle module access in function calls (e.g., stdlib.math.add)
+            if "." in func_name:
+                module_parts = func_name.split(".")
+                if len(module_parts) >= 2:
+                    module_name = ".".join(module_parts[:-1])
+                    method_name = module_parts[-1]
+                    if module_name in self.global_scope:
+                        module_obj = self.global_scope[module_name]
+                        if isinstance(module_obj, Module):
+                            # It's a Module object, look in its exports
+                            if method_name in module_obj.exports:
+                                export = module_obj.exports[method_name]
+                                if callable(export):
+                                    return export(*args)
+                                else:
+                                    return export
+                        # Try to find the function in the module's global scope
+                        fq_name = f"{module_name}.{method_name}"
+                        if fq_name in self.global_scope:
+                            func = self.global_scope[fq_name]
+                            if callable(func):
+                                return func(*args)
+                            else:
+                                return func
+
             if func_name in self.global_scope:
                 obj = self.global_scope[func_name]
                 self.logger.debug(f"[FunctionCall] Retrieved obj for {func_name}: {obj}, type: {type(obj)}")
@@ -394,6 +424,8 @@ class YmirInterpreter:
                 elif node.expression in self.global_scope:
                     value = self.global_scope[node.expression]
                     self.logger.debug(f"[evaluate_expression] Variable '{node.expression}' in global_scope -> {value}")
+                    if isinstance(value, Module):
+                        return value
                     return value
                 # If not a variable, treat as string literal
                 self.logger.debug(f"[evaluate_expression] String literal: {node.expression}")
@@ -476,45 +508,71 @@ class YmirInterpreter:
             self.logger.debug(f"[evaluate_expression] StringLiteral node: {value}")
             return value
         elif hasattr(node, "instance") and hasattr(node, "method_name") and hasattr(node, "args"):
-            # MethodCall node (for property access like e.message)
+            # This handles all dot-notation access, including module functions and constants.
             instance = self.evaluate_expression(node.instance)
-            if not node.args:  # Property access
-                if hasattr(instance, node.method_name):
-                    attr = getattr(instance, node.method_name)
-                    if callable(attr):
-                        import inspect
 
-                        sig = inspect.signature(attr)
-                        if len(sig.parameters) == 0:
-                            return attr()
-                    return attr
+            # Special case for __str__ on exceptions
+            if isinstance(instance, BaseException) and node.method_name == "__str__":
+                return str(instance)
+
+            if isinstance(instance, Module):
+                if node.method_name in instance.exports:
+                    export = instance.exports[node.method_name]
+                    if isinstance(export, FunctionDef):
+                        # It's a Ymir function defined in a module.
+                        args = [self.evaluate_expression(arg) for arg in node.args]
+                        return self.evaluate_function_call(export.name, args, module_context=instance)
+                    elif callable(export):
+                        # It's a callable python object (like a built-in).
+                        if node.args:
+                            args = [self.evaluate_expression(arg) for arg in node.args]
+                            return export(*args)
+                        else:
+                            return export  # It's a reference to a callable.
+                    else:
+                        # It's a constant.
+                        return export
                 else:
-                    raise AttributeError(f"'{type(instance).__name__}' object has no attribute '{node.method_name}'")
-            else:  # Method call with arguments
-                args = [self.evaluate_expression(arg) for arg in node.args]
-                if hasattr(instance, node.method_name):
-                    method = getattr(instance, node.method_name)
-                    if callable(method):
+                    raise AttributeError(f"Module '{instance.name}' has no export named '{node.method_name}'")
+
+            # Fallback for regular object method calls (if you add classes with methods).
+            elif hasattr(instance, node.method_name):
+                method = getattr(instance, node.method_name)
+                if callable(method):
+                    if node.args:
+                        args = [self.evaluate_expression(arg) for arg in node.args]
                         return method(*args)
                     else:
                         return method
                 else:
-                    raise AttributeError(f"'{type(instance).__name__}' object has no method '{node.method_name}'")
+                    return method  # It's a property.
+            else:
+                raise AttributeError(f"'{type(instance).__name__}' object has no attribute '{node.method_name}'")
         return None
 
-    def evaluate_function_call(self, func_name: str, args: List[Any]) -> Any:
+    def evaluate_function_call(self, func_name: str, args: List[Any], module_context: Optional[Module] = None) -> Any:
         """Evaluate a function call by interpreting the FunctionDef body."""
-        func = self.global_scope[func_name]
+        if module_context:
+            func = module_context.exports.get(func_name)
+        else:
+            func = self.global_scope.get(func_name)
+
         if not isinstance(func, FunctionDef):
+            # Try to find a python function in global scope
+            if func_name in self.global_scope and callable(self.global_scope[func_name]):
+                return self.global_scope[func_name](*args)
             raise TypeError(f"{func_name} is not a function definition")
+
         prev_local_scope = self.local_scope.copy()
         self.local_scope = {}
         for param, arg in zip(func.params, args):
             self.local_scope[param] = arg
+
+        last_value = None
         try:
             for stmt in func.body:
                 self.logger.debug(f"[evaluate_function_call] Evaluating stmt: {type(stmt)} - {repr(stmt)}")
-                self.evaluate(stmt)
+                last_value = self.evaluate(stmt)
         except ReturnSignal as ret:
             self.logger.debug(f"[evaluate_function_call] Caught ReturnSignal with value: {ret.value}")
             self.local_scope = prev_local_scope
@@ -522,9 +580,10 @@ class YmirInterpreter:
             if isinstance(ret.value, BaseException):
                 return str(ret.value)
             return ret.value
-        self.logger.debug("[evaluate_function_call] No return encountered, returning None")
+
+        self.logger.debug(f"[evaluate_function_call] No return, returning last evaluated value: {last_value}")
         self.local_scope = prev_local_scope
-        return None
+        return last_value
 
     def evaluate_for_cstyle_loop(self, node: ForCStyleLoop) -> None:
         """Evaluate a C-style for loop.
@@ -581,18 +640,27 @@ class YmirInterpreter:
                     self.load_module(file_path, stdlib_path)
 
     def resolve_import(self, module_name: str) -> str:
-        stdlib_path = self.standard_library_path
-        module_parts = module_name.split(".")
-        if len(module_parts) == 1:
-            # Assume standard library
-            file_path = os.path.join(stdlib_path, module_parts[0] + ".ymr")
-            if os.path.exists(file_path):
-                return file_path
-        else:
-            # Project module
-            file_path = os.path.join(*module_parts) + ".ymr"
-            if os.path.exists(file_path):
-                return file_path
+        # First, check for the module in the standard library
+        module_path_parts = module_name.split(".")
+        if module_path_parts[0] == "stdlib":
+            # The module name is like 'stdlib.math', so we look for 'math.ymr'
+            # inside the stdlib directory.
+            filename = f"{module_path_parts[-1]}.ymr"
+            stdlib_file_path = os.path.join(self.standard_library_path, filename)
+            if os.path.exists(stdlib_file_path):
+                return stdlib_file_path
+
+        # If not in stdlib, check project-relative paths
+        # This assumes the CWD is the project root.
+        project_file_path = os.path.join(*module_path_parts) + ".ymr"
+        if os.path.exists(project_file_path):
+            return project_file_path
+
+        # Also check inside the 'ymir' source directory for project modules
+        ymir_source_path = os.path.join("ymir", project_file_path)
+        if os.path.exists(ymir_source_path):
+            return ymir_source_path
+
         raise ImportError(f"Cannot find module {module_name}")
 
     def build_ymir(self, input_file: str, output_file: str, arch: Optional[str] = None) -> None:
@@ -750,6 +818,27 @@ class YmirInterpreter:
         if exception_class is None:
             return True
         return isinstance(exception, exception_class)
+
+    def process_import(self, module_name: str, project_root: str):
+        """Processes an import statement, creating nested module objects."""
+        self.logger.debug(f"Processing import: {module_name}")
+        import_path = self.resolve_import(module_name)
+
+        imported_module_obj = self.load_module(import_path, project_root)
+
+        parts = module_name.split(".")
+
+        scope = self.global_scope
+        for part in parts[:-1]:
+            if part not in scope:
+                scope[part] = Module(part)
+
+            if isinstance(scope[part], Module):
+                scope = scope[part].exports
+            else:
+                raise ImportError(f"Cannot import '{module_name}'; '{part}' is not a module.")
+
+        scope[parts[-1]] = imported_module_obj
 
 
 class ContinueSignal(Exception):

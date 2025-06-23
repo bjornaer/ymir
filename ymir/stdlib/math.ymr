@@ -1,5 +1,8 @@
 module stdlib.math
 
+export PI = 3.141592653589793
+export E = 2.718281828459045
+
 export func add(a: int, b: int) -> int {
     return a + b
 }

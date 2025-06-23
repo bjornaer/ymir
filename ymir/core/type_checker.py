@@ -60,6 +60,24 @@ class TypeChecker:
         self.symbol_table["tan"] = FunctionType([FloatType()], FloatType())
         self.symbol_table["pow"] = FunctionType([FloatType(), FloatType()], FloatType())
 
+        # More math functions
+        self.symbol_table["abs"] = FunctionType(["any"], FloatType())  # Can take int or float
+        self.symbol_table["round"] = FunctionType(["any"], IntType())  # Can take int or float, returns int
+        self.symbol_table["min"] = FunctionType(["any"], "any")  # Variadic
+        self.symbol_table["max"] = FunctionType(["any"], "any")  # Variadic
+        self.symbol_table["ceil"] = FunctionType([FloatType()], IntType())
+        self.symbol_table["floor"] = FunctionType([FloatType()], IntType())
+        self.symbol_table["fabs"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["factorial"] = FunctionType([IntType()], IntType())
+        self.symbol_table["fmod"] = FunctionType([FloatType(), FloatType()], FloatType())
+        self.symbol_table["exp"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["log"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["log10"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["log2"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["degrees"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["radians"] = FunctionType([FloatType()], FloatType())
+        self.symbol_table["gcd"] = FunctionType([IntType(), IntType()], IntType())
+
         # String functions
         self.symbol_table["strlen"] = FunctionType([StringType()], IntType())
         self.symbol_table["strcmp"] = FunctionType([StringType(), StringType()], IntType())
