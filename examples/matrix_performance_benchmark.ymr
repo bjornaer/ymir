@@ -1,0 +1,162 @@
+module matrix_performance_benchmark
+
+import stdlib.math
+
+func benchmark_matrix_operations() {
+    print("=== Ymir Matrix Performance Benchmark ===")
+    print()
+
+    # Test matrix sizes
+    var sizes: array[int] = [10, 50, 100, 200]
+
+    for (var i: int = 0; i < len(sizes); i = i + 1) {
+        var size: int = sizes[i]
+        print("Testing matrix size:", size, "x", size)
+
+        # Create test matrices
+        var a: matrix[float] = stdlib.math.matrix_create(size, size, 1.0)
+        var b: matrix[float] = stdlib.math.matrix_create(size, size, 2.0)
+
+        # Benchmark matrix multiplication
+        var start_time: float = stdlib.math.time()
+        var result: matrix[float] = stdlib.math.matrix_optimized_multiply(a, b)
+        var end_time: float = stdlib.math.time()
+        var duration: float = end_time - start_time
+
+        print("  Optimized multiplication:", duration, "seconds")
+
+        # Benchmark chunked operations
+        start_time = stdlib.math.time()
+        var chunked_result: matrix[float] = stdlib.math.matrix_chunked_operation(a, 4, "sqrt")
+        end_time = stdlib.math.time()
+        duration = end_time - start_time
+
+        print("  Chunked sqrt operation:", duration, "seconds")
+
+        # Benchmark sparse operations
+        var sparse_matrix: matrix[float] = stdlib.math.matrix_create(size, size, 0.0)
+        # Make it sparse by setting only diagonal elements
+        for (var j: int = 0; j < size; j = j + 1) {
+            sparse_matrix[j][j] = 1.0
+        }
+
+        start_time = stdlib.math.time()
+        var sparse_format: any = stdlib.math.matrix_to_sparse_format(sparse_matrix)
+        end_time = stdlib.math.time()
+        duration = end_time - start_time
+
+        print("  Sparse conversion:", duration, "seconds")
+        print()
+    }
+}
+
+func benchmark_parallel_operations() {
+    print("=== Parallel Computation Benchmark ===")
+    print()
+
+    # Test parallel matrix operations
+    var matrix_size: int = 100
+    var a: matrix[float] = stdlib.math.matrix_create(matrix_size, matrix_size, 1.0)
+    var b: matrix[float] = stdlib.math.matrix_create(matrix_size, matrix_size, 2.0)
+
+    print("Matrix size:", matrix_size, "x", matrix_size)
+
+    # Benchmark parallel multiplication
+    var start_time: float = stdlib.math.time()
+    var parallel_result: matrix[float] = stdlib.math.matrix_parallel_multiply(a, b, 4)
+    var end_time: float = stdlib.math.time()
+    var duration: float = end_time - start_time
+
+    print("Parallel multiplication (4 threads):", duration, "seconds")
+
+    # Compare with sequential
+    start_time = stdlib.math.time()
+    var sequential_result: matrix[float] = stdlib.math.matrix_multiply(a, b)
+    end_time = stdlib.math.time()
+    duration = end_time - start_time
+
+    print("Sequential multiplication:", duration, "seconds")
+    print()
+}
+
+func benchmark_memory_efficiency() {
+    print("=== Memory Efficiency Benchmark ===")
+    print()
+
+    # Test memory usage for different matrix types
+    var size: int = 1000
+
+    print("Testing memory efficiency for", size, "x", size, "matrices")
+
+    # Dense matrix
+    var dense: matrix[float] = stdlib.math.matrix_create(size, size, 1.0)
+    print("Dense matrix created successfully")
+
+    # Sparse matrix (only diagonal elements)
+    var sparse: matrix[float] = stdlib.math.matrix_create(size, size, 0.0)
+    for (var i: int = 0; i < size; i = i + 1) {
+        sparse[i][i] = 1.0
+    }
+    var sparse_format: any = stdlib.math.matrix_to_sparse_format(sparse)
+    print("Sparse matrix created successfully")
+
+    # Banded matrix
+    var banded: matrix[float] = stdlib.math.matrix_create_banded(size, size, 2, 1.0)
+    print("Banded matrix created successfully")
+    print()
+}
+
+func benchmark_advanced_operations() {
+    print("=== Advanced Operations Benchmark ===")
+    print()
+
+    var size: int = 50
+    var a: matrix[float] = stdlib.math.matrix_create(size, size, 1.0)
+    var b: matrix[float] = stdlib.math.matrix_create(size, size, 2.0)
+
+    print("Testing advanced operations on", size, "x", size, "matrices")
+
+    # Kronecker product
+    var start_time: float = stdlib.math.time()
+    var kronecker: matrix[float] = stdlib.math.matrix_kronecker_product(a, b)
+    var end_time: float = stdlib.math.time()
+    print("Kronecker product:", end_time - start_time, "seconds")
+
+    # SVD decomposition
+    start_time = stdlib.math.time()
+    var svd_result: array[float] = stdlib.math.matrix_svd(a)
+    end_time = stdlib.math.time()
+    print("SVD decomposition:", end_time - start_time, "seconds")
+
+    # Cholesky decomposition
+    var symmetric: matrix[float] = stdlib.math.matrix_multiply(a, stdlib.math.matrix_transpose(a))
+    start_time = stdlib.math.time()
+    var cholesky: matrix[float] = stdlib.math.matrix_cholesky_decomposition(symmetric)
+    end_time = stdlib.math.time()
+    print("Cholesky decomposition:", end_time - start_time, "seconds")
+
+    # Condition number
+    start_time = stdlib.math.time()
+    var condition: float = stdlib.math.matrix_condition_number(a)
+    end_time = stdlib.math.time()
+    print("Condition number calculation:", end_time - start_time, "seconds")
+    print()
+}
+
+func main() {
+    benchmark_matrix_operations()
+    benchmark_parallel_operations()
+    benchmark_memory_efficiency()
+    benchmark_advanced_operations()
+
+    print("=== Benchmark Complete ===")
+    print("Performance improvements include:")
+    print("- Optimized matrix multiplication algorithms")
+    print("- Chunked operations for better cache utilization")
+    print("- Sparse matrix support for memory efficiency")
+    print("- Parallel computation capabilities")
+    print("- Banded matrix optimizations")
+    print("- Advanced decomposition algorithms")
+}
+
+main()

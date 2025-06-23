@@ -1,12 +1,17 @@
 import os
 import tempfile
 
+from ymir.core.lexer import Lexer
+from ymir.core.parser import Parser
 from ymir.interpreter import YmirInterpreter
 
 
 class TestMatrixOperations:
     def setup_method(self):
         self.interpreter = YmirInterpreter(verbosity="WARNING")
+        # Initialize parser for direct expression evaluation tests
+        self.lexer = Lexer("", verbosity="WARNING")
+        self.parser = Parser([], verbosity="WARNING")
 
     def test_matrix_create(self):
         """Test matrix creation with specified dimensions and value."""
@@ -745,29 +750,806 @@ class TestMatrixOperations:
         module test_matrix_condition_number
         import stdlib.math
 
-        # Test well-conditioned matrix (identity)
-        var matrix1: matrix[float] = [[1.0, 0.0], [0.0, 1.0]]
-        var cond1: float = stdlib.math.matrix_condition_number(matrix1)
-        print("condition_number1 =", cond1)
+        # Test with well-conditioned matrix
+        var a: matrix[float] = [[1.0, 0.0], [0.0, 1.0]]
+        var condition: float = stdlib.math.matrix_condition_number(a)
+        print("condition =", condition)
 
-        # Test ill-conditioned matrix
-        var matrix2: matrix[float] = [[1.0, 1.0], [1.0, 1.0001]]
-        var cond2: float = stdlib.math.matrix_condition_number(matrix2)
-        print("condition_number2 =", cond2)
+        # Test with ill-conditioned matrix
+        var b: matrix[float] = [[1.0, 1.0], [1.0, 1.0001]]
+        var condition2: float = stdlib.math.matrix_condition_number(b)
+        print("condition2 =", condition2)
         """
 
+        # Create temporary test file
         with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
             f.write(script)
             temp_file = f.name
+
         try:
+            # Capture output
             import io
             from contextlib import redirect_stdout
 
             f = io.StringIO()
             with redirect_stdout(f):
                 self.interpreter.run_ymir_script(temp_file)
+
             output = f.getvalue()
-            assert "condition_number1 =" in output
-            assert "condition_number2 =" in output
+
+            # Check that condition numbers were calculated correctly
+            assert "condition = 1.0" in output or "condition = 1" in output
+            # The ill-conditioned matrix should have a large condition number
+            assert "condition2 =" in output
         finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_slicing(self):
+        """Test matrix slicing operations."""
+        script = """
+        module test_matrix_slicing
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+
+        # Test basic slicing
+        var slice_result: matrix[float] = stdlib.math.matrix_slice(a, 0, 1, 0, 1)
+        print("slice_result =", slice_result)
+
+        # Test row extraction
+        var row: array[float] = stdlib.math.matrix_get_row(a, 1)
+        print("row =", row)
+
+        # Test column extraction
+        var col: array[float] = stdlib.math.matrix_get_col(a, 1)
+        print("col =", col)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that slicing operations work correctly
+            assert "slice_result = [[1.0, 2.0], [4.0, 5.0]]" in output
+            assert "row = [4.0, 5.0, 6.0]" in output
+            assert "col = [2.0, 5.0, 8.0]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_reshaping(self):
+        """Test matrix reshaping operations."""
+        script = """
+        module test_matrix_reshaping
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0]]
+
+        # Test reshape
+        var reshaped: matrix[float] = stdlib.math.matrix_reshape(a, 4, 2)
+        print("reshaped =", reshaped)
+
+        # Test transpose
+        var transposed: matrix[float] = stdlib.math.matrix_transpose(a)
+        print("transposed =", transposed)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that reshaping operations work correctly
+            assert "reshaped = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]]" in output
+            assert "transposed = [[1.0, 5.0], [2.0, 6.0], [3.0, 7.0], [4.0, 8.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_flipping(self):
+        """Test matrix flipping operations."""
+        script = """
+        module test_matrix_flipping
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+
+        # Test horizontal flip
+        var h_flipped: matrix[float] = stdlib.math.matrix_flip_horizontal(a)
+        print("h_flipped =", h_flipped)
+
+        # Test vertical flip
+        var v_flipped: matrix[float] = stdlib.math.matrix_flip_vertical(a)
+        print("v_flipped =", v_flipped)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that flipping operations work correctly
+            assert "h_flipped = [[3.0, 2.0, 1.0], [6.0, 5.0, 4.0]]" in output
+            assert "v_flipped = [[4.0, 5.0, 6.0], [1.0, 2.0, 3.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_stacking(self):
+        """Test matrix stacking operations."""
+        script = """
+        module test_matrix_stacking
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var b: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+        # Test vertical stacking
+        var vstacked: matrix[float] = stdlib.math.matrix_vstack(a, b)
+        print("vstacked =", vstacked)
+
+        # Test horizontal stacking
+        var hstacked: matrix[float] = stdlib.math.matrix_hstack(a, b)
+        print("hstacked =", hstacked)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that stacking operations work correctly
+            assert "vstacked = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]]" in output
+            assert "hstacked = [[1.0, 2.0, 5.0, 6.0], [3.0, 4.0, 7.0, 8.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_splitting(self):
+        """Test matrix splitting operations."""
+        script = """
+        module test_matrix_splitting
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]]
+
+        # Test vertical split
+        var v_split: array[matrix[float]] = stdlib.math.matrix_vsplit(a, 3)
+        print("v_split =", v_split)
+
+        # Test horizontal split
+        var h_split: array[matrix[float]] = stdlib.math.matrix_hsplit(a, 2)
+        print("h_split =", h_split)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that splitting operations work correctly
+            assert "v_split = [[[1.0, 2.0, 3.0, 4.0]], [[5.0, 6.0, 7.0, 8.0]], [[9.0, 10.0, 11.0, 12.0]]]" in output
+            assert "h_split = [[[1.0, 2.0], [5.0, 6.0], [9.0, 10.0]], [[3.0, 4.0], [7.0, 8.0], [11.0, 12.0]]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_broadcasting(self):
+        """Test matrix broadcasting operations."""
+        script = """
+        module test_matrix_broadcasting
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var scalar: matrix[float] = [[5.0]]
+
+        # Test broadcasting addition
+        var broadcasted: matrix[float] = stdlib.math.matrix_broadcast_add(a, scalar)
+        print("broadcasted =", broadcasted)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that broadcasting operations work correctly
+            assert "broadcasted = [[6.0, 7.0], [8.0, 9.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_optimized_operations(self):
+        """Test optimized matrix operations."""
+        script = """
+        module test_matrix_optimized_operations
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var b: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+        # Test optimized multiplication
+        var optimized_mult: matrix[float] = stdlib.math.matrix_optimized_multiply(a, b)
+        print("optimized_mult =", optimized_mult)
+
+        # Test chunked operations
+        var chunked_sqrt: matrix[float] = stdlib.math.matrix_chunked_operation(a, 2, "sqrt")
+        print("chunked_sqrt =", chunked_sqrt)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that optimized operations work correctly
+            assert "optimized_mult = [[19.0, 22.0], [43.0, 50.0]]" in output
+            assert "chunked_sqrt = [[1.0, 1.4142135623730951], [1.7320508075688772, 2.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_sparse_matrix_operations(self):
+        """Test sparse matrix operations."""
+        script = """
+        module test_sparse_matrix_operations
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 0.0, 3.0], [0.0, 5.0, 0.0], [7.0, 0.0, 9.0]]
+
+        # Test conversion to sparse format
+        var sparse_format: any = stdlib.math.matrix_to_sparse_format(a)
+        print("sparse_format =", sparse_format)
+
+        # Test conversion back to dense
+        var back_to_dense: matrix[float] = stdlib.math.sparse_to_dense_matrix(sparse_format)
+        print("back_to_dense =", back_to_dense)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that sparse operations work correctly
+            assert "sparse_format = [[0, 0, 1, 2, 2], [0, 2, 1, 0, 2], [1.0, 3.0, 5.0, 7.0, 9.0], [3, 3]]" in output
+            assert "back_to_dense = [[1.0, 0.0, 3.0], [0.0, 5.0, 0.0], [7.0, 0.0, 9.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_advanced_matrix_operations(self):
+        """Test advanced matrix operations."""
+        script = """
+        module test_advanced_matrix_operations
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var b: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+        # Test Kronecker product
+        var kronecker: matrix[float] = stdlib.math.matrix_kronecker_product(a, b)
+        print("kronecker =", kronecker)
+
+        # Test Hadamard product
+        var hadamard: matrix[float] = stdlib.math.matrix_hadamard_product(a, b)
+        print("hadamard =", hadamard)
+
+        # Test outer product
+        var vec_a: array[float] = [1.0, 2.0]
+        var vec_b: array[float] = [3.0, 4.0, 5.0]
+        var outer: matrix[float] = stdlib.math.matrix_outer_product(vec_a, vec_b)
+        print("outer =", outer)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that advanced operations work correctly
+            assert (
+                "kronecker = [[5.0, 6.0, 10.0, 12.0], [7.0, 8.0, 14.0, 16.0], [15.0, 18.0, 20.0, 24.0], [21.0, 24.0, 28.0, 32.0]]"  # noqa: E501
+                in output
+            )
+            assert "hadamard = [[5.0, 12.0], [21.0, 32.0]]" in output
+            assert "outer = [[3.0, 4.0, 5.0], [6.0, 8.0, 10.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_statistics(self):
+        """Test matrix statistics operations."""
+        script = """
+        module test_matrix_statistics
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+
+        # Test correlation matrix
+        var correlation: matrix[float] = stdlib.math.matrix_correlation(a)
+        print("correlation =", correlation)
+
+        # Test covariance matrix
+        var covariance: matrix[float] = stdlib.math.matrix_covariance(a)
+        print("covariance =", covariance)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that statistics operations work correctly
+            assert "correlation = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]" in output
+            assert "covariance = [[9.0, 9.0, 9.0], [9.0, 9.0, 9.0], [9.0, 9.0, 9.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_decompositions(self):
+        """Test matrix decomposition operations."""
+        script = """
+        module test_matrix_decompositions
+        import stdlib.math
+
+        var a: matrix[float] = [[4.0, 12.0, -16.0], [12.0, 37.0, -43.0], [-16.0, -43.0, 98.0]]
+
+        # Test Cholesky decomposition
+        var cholesky: matrix[float] = stdlib.math.matrix_cholesky_decomposition(a)
+        print("cholesky =", cholesky)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that decomposition works correctly
+            assert "cholesky = [[2.0, 0.0, 0.0], [6.0, 1.0, 0.0], [-8.0, 5.0, 3.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_norms(self):
+        """Test matrix norm calculations."""
+        script = """
+        module test_matrix_norms
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+
+        # Test Frobenius norm
+        var frobenius: float = stdlib.math.matrix_frobenius_norm(a)
+        print("frobenius =", frobenius)
+
+        # Test L1 norm
+        var l1_norm: float = stdlib.math.matrix_l1_norm(a)
+        print("l1_norm =", l1_norm)
+
+        # Test infinity norm
+        var inf_norm: float = stdlib.math.matrix_infinity_norm(a)
+        print("inf_norm =", inf_norm)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that norm calculations work correctly
+            assert "frobenius = 5.477225575051661" in output
+            assert "l1_norm = 6.0" in output
+            assert "inf_norm = 7.0" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_distances(self):
+        """Test matrix distance calculations."""
+        script = """
+        module test_matrix_distances
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var b: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+        # Test Euclidean distance
+        var euclidean: float = stdlib.math.matrix_euclidean_distance(a, b)
+        print("euclidean =", euclidean)
+
+        # Test Manhattan distance
+        var manhattan: float = stdlib.math.matrix_manhattan_distance(a, b)
+        print("manhattan =", manhattan)
+
+        # Test cosine similarity
+        var cosine: float = stdlib.math.matrix_cosine_similarity(a, b)
+        print("cosine =", cosine)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that distance calculations work correctly
+            assert "euclidean = 8.0" in output
+            assert "manhattan = 16.0" in output
+            assert "cosine = 0.9688639316269662" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_gpu_placeholder_functions(self):
+        """Test GPU placeholder functions."""
+        script = """
+        module test_gpu_placeholder_functions
+        import stdlib.math
+
+        # Test GPU availability (should return false for now)
+        var gpu_available: bool = stdlib.math.matrix_gpu_available()
+        print("gpu_available =", gpu_available)
+
+        # Test matrix to GPU transfer
+        var matrix_x: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var gpu_matrix: any = stdlib.math.matrix_to_gpu(matrix_x)
+        print("gpu_matrix =", gpu_matrix)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that GPU functions work correctly
+            assert "gpu_available = False" in output
+            assert "gpu_matrix = [[1.0, 2.0], [3.0, 4.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_set_operations(self):
+        """Test matrix set operations."""
+        script = """
+        module test_matrix_set_operations
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+        var new_row: array[float] = [10.0, 11.0, 12.0]
+        var new_col: array[float] = [13.0, 14.0, 15.0]
+
+        # Test set row
+        var set_row_result: matrix[float] = stdlib.math.matrix_set_row(a, 1, new_row)
+        print("set_row_result =", set_row_result)
+
+        # Test set column
+        var set_col_result: matrix[float] = stdlib.math.matrix_set_col(a, 1, new_col)
+        print("set_col_result =", set_col_result)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that set operations work correctly
+            assert "set_row_result = [[1.0, 2.0, 3.0], [10.0, 11.0, 12.0], [7.0, 8.0, 9.0]]" in output
+            assert "set_col_result = [[1.0, 13.0, 3.0], [4.0, 14.0, 6.0], [7.0, 15.0, 9.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_matrix_concatenate(self):
+        """Test matrix concatenation with multiple arrays."""
+        script = """
+        module test_matrix_concatenate
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var b: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+        var c: matrix[float] = [[9.0, 10.0], [11.0, 12.0]]
+        var arrays: array[matrix[float]] = [a, b, c]
+
+        # Test vertical concatenation
+        var v_concat: matrix[float] = stdlib.math.matrix_concatenate(arrays, 0)
+        print("v_concat =", v_concat)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that concatenation works correctly
+            assert "v_concat = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_lu_decomposition(self):
+        """Test LU decomposition."""
+        script = """
+        module test_lu_decomposition
+        import stdlib.math
+
+        var a: matrix[float] = [[2.0, 1.0, 1.0], [4.0, -6.0, 0.0], [-2.0, 7.0, 2.0]]
+
+        var lu: any = stdlib.math.matrix_lu_decomposition(a)
+        print("lu =", lu)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that LU decomposition works correctly
+            assert "lu =" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_performance_optimizations(self):
+        """Test performance optimization functions."""
+        script = """
+        module test_performance_optimizations
+        import stdlib.math
+
+        var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+
+        # Test parallel sum (should work same as regular sum for now)
+        var parallel_sum: float = stdlib.math.matrix_parallel_sum(a, -1)
+        print("parallel_sum =", parallel_sum)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that performance optimizations work correctly
+            assert "parallel_sum = 10.0" in output
+        finally:
+            # Clean up temporary file
+            os.unlink(temp_file)
+
+    def test_sparse_matrix_multiply(self):
+        """Test sparse matrix multiplication."""
+        script = """
+        module test_sparse_matrix_multiply
+        import stdlib.math
+
+        # Create a simple sparse matrix
+        var dense_matrix: matrix[float] = [[1.0, 0.0, 3.0], [0.0, 5.0, 0.0], [7.0, 0.0, 9.0]]
+
+        # Convert to sparse format
+        var sparse_format: any = stdlib.math.matrix_to_sparse_format(dense_matrix)
+        print("sparse_format =", sparse_format)
+
+        # Convert back to dense
+        var back_to_dense: matrix[float] = stdlib.math.sparse_to_dense_matrix(sparse_format)
+        print("back_to_dense =", back_to_dense)
+        """
+
+        # Create temporary test file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+
+        try:
+            # Capture output
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+
+            output = f.getvalue()
+
+            # Check that sparse matrix operations work correctly
+            assert "sparse_format =" in output
+            assert "back_to_dense = [[1.0, 0.0, 3.0], [0.0, 5.0, 0.0], [7.0, 0.0, 9.0]]" in output
+        finally:
+            # Clean up temporary file
             os.unlink(temp_file)

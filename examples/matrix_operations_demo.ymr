@@ -1,0 +1,193 @@
+module matrix_operations_demo
+
+import stdlib.math
+
+func main() {
+    print("=== Ymir Matrix Operations Demo ===")
+    print()
+
+    # Basic matrix creation
+    print("1. Basic Matrix Creation:")
+    var matrix_a: matrix[float] = stdlib.math.matrix_create(3, 3, 1.0)
+    print("matrix_a =", matrix_a)
+
+    var identity: matrix[float] = stdlib.math.matrix_eye(3)
+    print("identity =", identity)
+
+    var zeros: matrix[float] = stdlib.math.matrix_zeros(2, 3)
+    print("zeros =", zeros)
+    print()
+
+    # Matrix slicing and indexing
+    print("2. Matrix Slicing and Indexing:")
+    var data: matrix[float] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]]
+    print("data =", data)
+
+    var slice_result: matrix[float] = stdlib.math.matrix_slice(data, 0, 1, 0, 1)
+    print("slice_result =", slice_result)
+
+    var row: array[float] = stdlib.math.matrix_get_row(data, 1)
+    print("row 1 =", row)
+
+    var col: array[float] = stdlib.math.matrix_get_col(data, 2)
+    print("col 2 =", col)
+    print()
+
+    # Matrix reshaping and transposition
+    print("3. Matrix Reshaping and Transposition:")
+    var original: matrix[float] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    print("original =", original)
+
+    var reshaped: matrix[float] = stdlib.math.matrix_reshape(original, 3, 2)
+    print("reshaped =", reshaped)
+
+    var transposed: matrix[float] = stdlib.math.matrix_transpose(original)
+    print("transposed =", transposed)
+
+    var h_flipped: matrix[float] = stdlib.math.matrix_flip_horizontal(original)
+    print("h_flipped =", h_flipped)
+
+    var v_flipped: matrix[float] = stdlib.math.matrix_flip_vertical(original)
+    print("v_flipped =", v_flipped)
+    print()
+
+    # Matrix stacking and concatenation
+    print("4. Matrix Stacking and Concatenation:")
+    var a: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+    var b: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+    var c: matrix[float] = [[9.0, 10.0], [11.0, 12.0]]
+
+    var vstacked: matrix[float] = stdlib.math.matrix_vstack(a, b)
+    print("vstacked =", vstacked)
+
+    var hstacked: matrix[float] = stdlib.math.matrix_hstack(a, b)
+    print("hstacked =", hstacked)
+
+    var arrays: array[matrix[float]] = [a, b, c]
+    var concatenated: matrix[float] = stdlib.math.matrix_concatenate(arrays, 0)
+    print("concatenated =", concatenated)
+    print()
+
+    # Matrix splitting
+    print("5. Matrix Splitting:")
+    var big_matrix: matrix[float] = [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]]
+    print("big_matrix =", big_matrix)
+
+    var v_split: array[matrix[float]] = stdlib.math.matrix_vsplit(big_matrix, 3)
+    print("v_split =", v_split)
+
+    var h_split: array[matrix[float]] = stdlib.math.matrix_hsplit(big_matrix, 2)
+    print("h_split =", h_split)
+    print()
+
+    # Broadcasting
+    print("6. Matrix Broadcasting:")
+    var matrix_2x2: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+    var scalar: matrix[float] = [[5.0]]
+
+    var broadcasted: matrix[float] = stdlib.math.matrix_broadcast_add(matrix_2x2, scalar)
+    print("broadcasted =", broadcasted)
+    print()
+
+    # Performance optimizations
+    print("7. Performance Optimizations:")
+    var matrix_1: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+    var matrix_2: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+    var optimized_mult: matrix[float] = stdlib.math.matrix_optimized_multiply(matrix_1, matrix_2)
+    print("optimized_mult =", optimized_mult)
+
+    var chunked_sqrt: matrix[float] = stdlib.math.matrix_chunked_operation(matrix_1, 2, "sqrt")
+    print("chunked_sqrt =", chunked_sqrt)
+    print()
+
+    # Sparse matrix operations
+    print("8. Sparse Matrix Operations:")
+    var dense_matrix: matrix[float] = [[1.0, 0.0, 3.0], [0.0, 5.0, 0.0], [7.0, 0.0, 9.0]]
+    print("dense_matrix =", dense_matrix)
+
+    var sparse_format: any = stdlib.math.matrix_to_sparse_format(dense_matrix)
+    print("sparse_format =", sparse_format)
+
+    var back_to_dense: matrix[float] = stdlib.math.sparse_to_dense_matrix(sparse_format)
+    print("back_to_dense =", back_to_dense)
+    print()
+
+    # Advanced matrix operations
+    print("9. Advanced Matrix Operations:")
+    var matrix_x: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+    var matrix_y: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+    var kronecker: matrix[float] = stdlib.math.matrix_kronecker_product(matrix_x, matrix_y)
+    print("kronecker =", kronecker)
+
+    var hadamard: matrix[float] = stdlib.math.matrix_hadamard_product(matrix_x, matrix_y)
+    print("hadamard =", hadamard)
+
+    var vec1: array[float] = [1.0, 2.0]
+    var vec2: array[float] = [3.0, 4.0, 5.0]
+    var outer: matrix[float] = stdlib.math.matrix_outer_product(vec1, vec2)
+    print("outer =", outer)
+    print()
+
+    # Matrix statistics
+    print("10. Matrix Statistics:")
+    var stats_matrix: matrix[float] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+    print("stats_matrix =", stats_matrix)
+
+    var correlation: matrix[float] = stdlib.math.matrix_correlation(stats_matrix)
+    print("correlation =", correlation)
+
+    var covariance: matrix[float] = stdlib.math.matrix_covariance(stats_matrix)
+    print("covariance =", covariance)
+    print()
+
+    # Matrix decompositions
+    print("11. Matrix Decompositions:")
+    var decomp_matrix: matrix[float] = [[4.0, 12.0, -16.0], [12.0, 37.0, -43.0], [-16.0, -43.0, 98.0]]
+    print("decomp_matrix =", decomp_matrix)
+
+    var cholesky: matrix[float] = stdlib.math.matrix_cholesky_decomposition(decomp_matrix)
+    print("cholesky =", cholesky)
+    print()
+
+    # Matrix norms and distances
+    print("12. Matrix Norms and Distances:")
+    var norm_matrix: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+    print("norm_matrix =", norm_matrix)
+
+    var frobenius: float = stdlib.math.matrix_frobenius_norm(norm_matrix)
+    print("frobenius_norm =", frobenius)
+
+    var l1_norm: float = stdlib.math.matrix_l1_norm(norm_matrix)
+    print("l1_norm =", l1_norm)
+
+    var inf_norm: float = stdlib.math.matrix_infinity_norm(norm_matrix)
+    print("infinity_norm =", inf_norm)
+
+    var matrix_dist1: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+    var matrix_dist2: matrix[float] = [[5.0, 6.0], [7.0, 8.0]]
+
+    var euclidean: float = stdlib.math.matrix_euclidean_distance(matrix_dist1, matrix_dist2)
+    print("euclidean_distance =", euclidean)
+
+    var manhattan: float = stdlib.math.matrix_manhattan_distance(matrix_dist1, matrix_dist2)
+    print("manhattan_distance =", manhattan)
+
+    var cosine: float = stdlib.math.matrix_cosine_similarity(matrix_dist1, matrix_dist2)
+    print("cosine_similarity =", cosine)
+    print()
+
+    # GPU acceleration (placeholder)
+    print("13. GPU Acceleration (Placeholder):")
+    var gpu_available: bool = stdlib.math.matrix_gpu_available()
+    print("gpu_available =", gpu_available)
+
+    var gpu_matrix: any = stdlib.math.matrix_to_gpu(matrix_x)
+    print("gpu_matrix =", gpu_matrix)
+    print()
+
+    print("=== Demo Complete ===")
+}
+
+main()
