@@ -245,3 +245,71 @@ class TestMatrixOperations:
             assert "flat2 = [5.0]" in output
         finally:
             os.unlink(temp_file)
+
+    def test_matrix_sum(self):
+        """Test matrix sum operations with different axes."""
+        script = """
+        module test_matrix_sum
+        import stdlib.math
+
+        var matrix1: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var sum_all: float = stdlib.math.matrix_sum(matrix1, -1)
+        print("sum_all =", sum_all)
+
+        var sum_cols: array[float] = stdlib.math.matrix_sum(matrix1, 0)
+        print("sum_cols =", sum_cols)
+
+        var sum_rows: array[float] = stdlib.math.matrix_sum(matrix1, 1)
+        print("sum_rows =", sum_rows)
+        """
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+        try:
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+            output = f.getvalue()
+            assert "sum_all = 10.0" in output
+            assert "sum_cols = [4.0, 6.0]" in output
+            assert "sum_rows = [3.0, 7.0]" in output
+        finally:
+            os.unlink(temp_file)
+
+    def test_matrix_mean(self):
+        """Test matrix mean operations with different axes."""
+        script = """
+        module test_matrix_mean
+        import stdlib.math
+
+        var matrix1: matrix[float] = [[1.0, 2.0], [3.0, 4.0]]
+        var mean_all: float = stdlib.math.matrix_mean(matrix1, -1)
+        print("mean_all =", mean_all)
+
+        var mean_cols: array[float] = stdlib.math.matrix_mean(matrix1, 0)
+        print("mean_cols =", mean_cols)
+
+        var mean_rows: array[float] = stdlib.math.matrix_mean(matrix1, 1)
+        print("mean_rows =", mean_rows)
+        """
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(script)
+            temp_file = f.name
+        try:
+            import io
+            from contextlib import redirect_stdout
+
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self.interpreter.run_ymir_script(temp_file)
+            output = f.getvalue()
+            assert "mean_all = 2.5" in output
+            assert "mean_cols = [2.0, 3.0]" in output
+            assert "mean_rows = [1.5, 3.5]" in output
+        finally:
+            os.unlink(temp_file)

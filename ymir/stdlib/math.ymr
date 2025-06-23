@@ -205,3 +205,124 @@ export func matrix_flatten(a: matrix[float]) -> array[float] {
     }
     return result
 }
+
+export func matrix_sum(a: matrix[float], axis: int) -> any {
+    # Sum all elements in the matrix.
+    # axis = -1 means sum all elements (default)
+    # axis = 0 means sum along columns (reduce rows)
+    # axis = 1 means sum along rows (reduce columns)
+    if (axis == -1) {
+        # Sum all elements
+        var total: float = 0.0
+        var i: int = 0
+        var rows: int = len(a)
+        while (i < rows) {
+            var row: array[float] = a[i]
+            var j: int = 0
+            var cols: int = len(row)
+            while (j < cols) {
+                total = total + row[j]
+                j = j + 1
+            }
+            i = i + 1
+        }
+        return total
+    } else {
+        if (axis == 0) {
+            # Sum along columns (reduce rows)
+            var rows: int = len(a)
+            if (rows == 0) {
+                return 0.0
+            }
+            var cols: int = len(a[0])
+            var result: array[float] = []
+            var j: int = 0
+            while (j < cols) {
+                var col_sum: float = 0.0
+                var i: int = 0
+                while (i < rows) {
+                    col_sum = col_sum + a[i][j]
+                    i = i + 1
+                }
+                result = result.append(col_sum)
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Sum along rows (reduce columns)
+                var result: array[float] = []
+                var i: int = 0
+                var rows: int = len(a)
+                while (i < rows) {
+                    var row: array[float] = a[i]
+                    var row_sum: float = 0.0
+                    var j: int = 0
+                    var cols: int = len(row)
+                    while (j < cols) {
+                        row_sum = row_sum + row[j]
+                        j = j + 1
+                    }
+                    result = result.append(row_sum)
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return 0.0
+            }
+        }
+    }
+}
+
+export func matrix_mean(a: matrix[float], axis: int) -> any {
+    # Mean of all elements in the matrix.
+    # axis = -1 means mean of all elements (default)
+    # axis = 0 means mean along columns (reduce rows)
+    # axis = 1 means mean along rows (reduce columns)
+    if (axis == -1) {
+        # Mean of all elements
+        var total: float = matrix_sum(a, -1)
+        var rows: int = len(a)
+        if (rows == 0) {
+            return 0.0
+        }
+        var cols: int = len(a[0])
+        var count: int = rows * cols
+        return total / count
+    } else {
+        if (axis == 0) {
+            # Mean along columns (reduce rows)
+            var col_sums: array[float] = matrix_sum(a, 0)
+            var rows: int = len(a)
+            if (rows == 0) {
+                return 0.0
+            }
+            var result: array[float] = []
+            var j: int = 0
+            var cols: int = len(col_sums)
+            while (j < cols) {
+                result = result.append(col_sums[j] / rows)
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Mean along rows (reduce columns)
+                var row_sums: array[float] = matrix_sum(a, 1)
+                var result: array[float] = []
+                var i: int = 0
+                var rows: int = len(row_sums)
+                while (i < rows) {
+                    var cols: int = len(a[i])
+                    result = result.append(row_sums[i] / cols)
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return 0.0
+            }
+        }
+    }
+}
