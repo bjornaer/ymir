@@ -326,3 +326,577 @@ export func matrix_mean(a: matrix[float], axis: int) -> any {
         }
     }
 }
+
+export func matrix_var(a: matrix[float], axis: int) -> any {
+    # Variance of elements in the matrix.
+    # axis = -1 means variance of all elements (default)
+    # axis = 0 means variance along columns (reduce rows)
+    # axis = 1 means variance along rows (reduce columns)
+    if (axis == -1) {
+        # Variance of all elements
+        var mean_val: float = matrix_mean(a, -1)
+        var total_squared_diff: float = 0.0
+        var i: int = 0
+        var rows: int = len(a)
+        var count: int = 0
+        while (i < rows) {
+            var row: array[float] = a[i]
+            var j: int = 0
+            var cols: int = len(row)
+            while (j < cols) {
+                var diff: float = row[j] - mean_val
+                total_squared_diff = total_squared_diff + diff * diff
+                count = count + 1
+                j = j + 1
+            }
+            i = i + 1
+        }
+        if (count > 1) {
+            return total_squared_diff / (count - 1)
+        } else {
+            return 0.0
+        }
+    } else {
+        if (axis == 0) {
+            # Variance along columns (reduce rows)
+            var col_means: array[float] = matrix_mean(a, 0)
+            var rows: int = len(a)
+            if (rows <= 1) {
+                return 0.0
+            }
+            var cols: int = len(a[0])
+            var result: array[float] = []
+            var j: int = 0
+            while (j < cols) {
+                var col_squared_diff: float = 0.0
+                var i: int = 0
+                while (i < rows) {
+                    var diff: float = a[i][j] - col_means[j]
+                    col_squared_diff = col_squared_diff + diff * diff
+                    i = i + 1
+                }
+                result = result.append(col_squared_diff / (rows - 1))
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Variance along rows (reduce columns)
+                var row_means: array[float] = matrix_mean(a, 1)
+                var result: array[float] = []
+                var i: int = 0
+                var rows: int = len(a)
+                while (i < rows) {
+                    var row: array[float] = a[i]
+                    var cols: int = len(row)
+                    if (cols <= 1) {
+                        result = result.append(0.0)
+                    } else {
+                        var row_squared_diff: float = 0.0
+                        var j: int = 0
+                        while (j < cols) {
+                            var diff: float = row[j] - row_means[i]
+                            row_squared_diff = row_squared_diff + diff * diff
+                            j = j + 1
+                        }
+                        result = result.append(row_squared_diff / (cols - 1))
+                    }
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return 0.0
+            }
+        }
+    }
+}
+
+export func matrix_std(a: matrix[float], axis: int) -> any {
+    # Standard deviation of elements in the matrix.
+    # axis = -1 means std of all elements (default)
+    # axis = 0 means std along columns (reduce rows)
+    # axis = 1 means std along rows (reduce columns)
+    var variance: any = matrix_var(a, axis)
+    if (axis == -1) {
+        return sqrt(variance)
+    } else {
+        if (axis == 0) {
+            var result: array[float] = []
+            var i: int = 0
+            var len_var: int = len(variance)
+            while (i < len_var) {
+                result = result.append(sqrt(variance[i]))
+                i = i + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                var result: array[float] = []
+                var i: int = 0
+                var len_var: int = len(variance)
+                while (i < len_var) {
+                    result = result.append(sqrt(variance[i]))
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return 0.0
+            }
+        }
+    }
+}
+
+export func matrix_min(a: matrix[float], axis: int) -> any {
+    # Minimum value of elements in the matrix.
+    # axis = -1 means min of all elements (default)
+    # axis = 0 means min along columns (reduce rows)
+    # axis = 1 means min along rows (reduce columns)
+    if (axis == -1) {
+        # Min of all elements
+        var min_val: float = a[0][0]
+        var i: int = 0
+        var rows: int = len(a)
+        while (i < rows) {
+            var row: array[float] = a[i]
+            var j: int = 0
+            var cols: int = len(row)
+            while (j < cols) {
+                if (row[j] < min_val) {
+                    min_val = row[j]
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        return min_val
+    } else {
+        if (axis == 0) {
+            # Min along columns (reduce rows)
+            var rows: int = len(a)
+            if (rows == 0) {
+                return 0.0
+            }
+            var cols: int = len(a[0])
+            var result: array[float] = []
+            var j: int = 0
+            while (j < cols) {
+                var col_min: float = a[0][j]
+                var i: int = 1
+                while (i < rows) {
+                    if (a[i][j] < col_min) {
+                        col_min = a[i][j]
+                    }
+                    i = i + 1
+                }
+                result = result.append(col_min)
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Min along rows (reduce columns)
+                var result: array[float] = []
+                var i: int = 0
+                var rows: int = len(a)
+                while (i < rows) {
+                    var row: array[float] = a[i]
+                    var cols: int = len(row)
+                    if (cols == 0) {
+                        result = result.append(0.0)
+                    } else {
+                        var row_min: float = row[0]
+                        var j: int = 1
+                        while (j < cols) {
+                            if (row[j] < row_min) {
+                                row_min = row[j]
+                            }
+                            j = j + 1
+                        }
+                        result = result.append(row_min)
+                    }
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return 0.0
+            }
+        }
+    }
+}
+
+export func matrix_max(a: matrix[float], axis: int) -> any {
+    # Maximum value of elements in the matrix.
+    # axis = -1 means max of all elements (default)
+    # axis = 0 means max along columns (reduce rows)
+    # axis = 1 means max along rows (reduce columns)
+    if (axis == -1) {
+        # Max of all elements
+        var max_val: float = a[0][0]
+        var i: int = 0
+        var rows: int = len(a)
+        while (i < rows) {
+            var row: array[float] = a[i]
+            var j: int = 0
+            var cols: int = len(row)
+            while (j < cols) {
+                if (row[j] > max_val) {
+                    max_val = row[j]
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        return max_val
+    } else {
+        if (axis == 0) {
+            # Max along columns (reduce rows)
+            var rows: int = len(a)
+            if (rows == 0) {
+                return 0.0
+            }
+            var cols: int = len(a[0])
+            var result: array[float] = []
+            var j: int = 0
+            while (j < cols) {
+                var col_max: float = a[0][j]
+                var i: int = 1
+                while (i < rows) {
+                    if (a[i][j] > col_max) {
+                        col_max = a[i][j]
+                    }
+                    i = i + 1
+                }
+                result = result.append(col_max)
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Max along rows (reduce columns)
+                var result: array[float] = []
+                var i: int = 0
+                var rows: int = len(a)
+                while (i < rows) {
+                    var row: array[float] = a[i]
+                    var cols: int = len(row)
+                    if (cols == 0) {
+                        result = result.append(0.0)
+                    } else {
+                        var row_max: float = row[0]
+                        var j: int = 1
+                        while (j < cols) {
+                            if (row[j] > row_max) {
+                                row_max = row[j]
+                            }
+                            j = j + 1
+                        }
+                        result = result.append(row_max)
+                    }
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return 0.0
+            }
+        }
+    }
+}
+
+export func matrix_argmin(a: matrix[float], axis: int) -> any {
+    # Index of minimum value of elements in the matrix.
+    # axis = -1 means argmin of all elements (returns [row, col])
+    # axis = 0 means argmin along columns (returns row indices)
+    # axis = 1 means argmin along rows (returns column indices)
+    if (axis == -1) {
+        # Argmin of all elements
+        var min_val: float = a[0][0]
+        var min_row: int = 0
+        var min_col: int = 0
+        var i: int = 0
+        var rows: int = len(a)
+        while (i < rows) {
+            var row: array[float] = a[i]
+            var j: int = 0
+            var cols: int = len(row)
+            while (j < cols) {
+                if (row[j] < min_val) {
+                    min_val = row[j]
+                    min_row = i
+                    min_col = j
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        return [min_row, min_col]
+    } else {
+        if (axis == 0) {
+            # Argmin along columns (reduce rows)
+            var rows: int = len(a)
+            if (rows == 0) {
+                return []
+            }
+            var cols: int = len(a[0])
+            var result: array[int] = []
+            var j: int = 0
+            while (j < cols) {
+                var col_min: float = a[0][j]
+                var col_argmin: int = 0
+                var i: int = 1
+                while (i < rows) {
+                    if (a[i][j] < col_min) {
+                        col_min = a[i][j]
+                        col_argmin = i
+                    }
+                    i = i + 1
+                }
+                result = result.append(col_argmin)
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Argmin along rows (reduce columns)
+                var result: array[int] = []
+                var i: int = 0
+                var rows: int = len(a)
+                while (i < rows) {
+                    var row: array[float] = a[i]
+                    var cols: int = len(row)
+                    if (cols == 0) {
+                        result = result.append(0)
+                    } else {
+                        var row_min: float = row[0]
+                        var row_argmin: int = 0
+                        var j: int = 1
+                        while (j < cols) {
+                            if (row[j] < row_min) {
+                                row_min = row[j]
+                                row_argmin = j
+                            }
+                            j = j + 1
+                        }
+                        result = result.append(row_argmin)
+                    }
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return []
+            }
+        }
+    }
+}
+
+export func matrix_argmax(a: matrix[float], axis: int) -> any {
+    # Index of maximum value of elements in the matrix.
+    # axis = -1 means argmax of all elements (returns [row, col])
+    # axis = 0 means argmax along columns (returns row indices)
+    # axis = 1 means argmax along rows (returns column indices)
+    if (axis == -1) {
+        # Argmax of all elements
+        var max_val: float = a[0][0]
+        var max_row: int = 0
+        var max_col: int = 0
+        var i: int = 0
+        var rows: int = len(a)
+        while (i < rows) {
+            var row: array[float] = a[i]
+            var j: int = 0
+            var cols: int = len(row)
+            while (j < cols) {
+                if (row[j] > max_val) {
+                    max_val = row[j]
+                    max_row = i
+                    max_col = j
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        return [max_row, max_col]
+    } else {
+        if (axis == 0) {
+            # Argmax along columns (reduce rows)
+            var rows: int = len(a)
+            if (rows == 0) {
+                return []
+            }
+            var cols: int = len(a[0])
+            var result: array[int] = []
+            var j: int = 0
+            while (j < cols) {
+                var col_max: float = a[0][j]
+                var col_argmax: int = 0
+                var i: int = 1
+                while (i < rows) {
+                    if (a[i][j] > col_max) {
+                        col_max = a[i][j]
+                        col_argmax = i
+                    }
+                    i = i + 1
+                }
+                result = result.append(col_argmax)
+                j = j + 1
+            }
+            return result
+        } else {
+            if (axis == 1) {
+                # Argmax along rows (reduce columns)
+                var result: array[int] = []
+                var i: int = 0
+                var rows: int = len(a)
+                while (i < rows) {
+                    var row: array[float] = a[i]
+                    var cols: int = len(row)
+                    if (cols == 0) {
+                        result = result.append(0)
+                    } else {
+                        var row_max: float = row[0]
+                        var row_argmax: int = 0
+                        var j: int = 1
+                        while (j < cols) {
+                            if (row[j] > row_max) {
+                                row_max = row[j]
+                                row_argmax = j
+                            }
+                            j = j + 1
+                        }
+                        result = result.append(row_argmax)
+                    }
+                    i = i + 1
+                }
+                return result
+            } else {
+                # Invalid axis
+                return []
+            }
+        }
+    }
+}
+
+export func matrix_rank(a: matrix[float]) -> int {
+    # Calculate the rank of a matrix using numpy's linear algebra.
+    # The rank is the number of linearly independent rows/columns.
+    var numpy_matrix: any = a  # This will be converted to numpy array by the interpreter
+    var rank: int = 0
+
+    # Use numpy's matrix_rank function
+    # For now, we'll implement a simple version using SVD
+    # The rank is the number of non-zero singular values
+    var singular_values: array[float] = matrix_svd(a)
+    var i: int = 0
+    var len_sv: int = len(singular_values)
+    while (i < len_sv) {
+        if (singular_values[i] > 1e-10) {  # Small threshold for numerical precision
+            rank = rank + 1
+        }
+        i = i + 1
+    }
+    return rank
+}
+
+export func matrix_svd(a: matrix[float]) -> array[float] {
+    # Compute Singular Value Decomposition and return singular values.
+    # SVD decomposes A = U * Σ * V^T where Σ contains singular values.
+    # For now, we'll return just the singular values as a 1D array.
+    var rows: int = len(a)
+    var cols: int = len(a[0])
+    var min_dim: int = rows
+    if (cols < rows) {
+        min_dim = cols
+    }
+
+    # For a simple implementation, we'll compute eigenvalues of A^T * A
+    # The singular values are the square roots of these eigenvalues
+    var at_a: matrix[float] = matrix_multiply_transpose(a, a)
+    var eigenvalues: array[float] = matrix_eigenvalues(at_a)
+
+    # Take square root of eigenvalues to get singular values
+    var singular_values: array[float] = []
+    var i: int = 0
+    var len_eigen: int = len(eigenvalues)
+    while (i < len_eigen) {
+        if (eigenvalues[i] > 0) {
+            singular_values = singular_values.append(sqrt(eigenvalues[i]))
+        }
+        i = i + 1
+    }
+
+    return singular_values
+}
+
+export func matrix_multiply_transpose(a: matrix[float], b: matrix[float]) -> matrix[float] {
+    # Helper function to compute A^T * B
+    var a_transpose: matrix[float] = transpose(a)
+    return a_transpose @ b
+}
+
+export func matrix_eigenvalues(a: matrix[float]) -> array[float] {
+    # Compute eigenvalues of a square matrix.
+    # Currently only supports 2x2 matrices.
+    var rows: int = len(a)
+    var cols: int = len(a[0])
+
+    if (rows != cols) {
+        # Non-square matrices don't have eigenvalues in the traditional sense
+        return []
+    }
+
+    if (rows == 2) {
+        # For 2x2 matrix [[a, b], [c, d]], eigenvalues are:
+        # λ = (a + d ± sqrt((a - d)² + 4bc)) / 2
+        var a11: float = a[0][0]
+        var a12: float = a[0][1]
+        var a21: float = a[1][0]
+        var a22: float = a[1][1]
+
+        var trace: float = a11 + a22
+        var det: float = a11 * a22 - a12 * a21
+        var discriminant: float = trace * trace - 4 * det
+
+        if (discriminant >= 0) {
+            var sqrt_disc: float = sqrt(discriminant)
+            var lambda1: float = (trace + sqrt_disc) / 2
+            var lambda2: float = (trace - sqrt_disc) / 2
+            return [lambda1, lambda2]
+        } else {
+            # Complex eigenvalues - return real parts for now
+            var real_part: float = trace / 2
+            return [real_part, real_part]
+        }
+    } else {
+        # For larger matrices, return empty array for now
+        return []
+    }
+}
+
+export func matrix_eigenvectors(a: matrix[float]) -> matrix[float] {
+    # Compute eigenvectors of a square matrix.
+    # Currently only supports 2x2 matrices.
+    var rows: int = len(a)
+    var cols: int = len(a[0])
+
+    if (rows != cols) {
+        # Non-square matrices don't have eigenvectors in the traditional sense
+        return []
+    }
+
+    if (rows == 2) {
+        # For 2x2 matrix, return identity matrix as a simple placeholder
+        var eigenvectors: matrix[float] = []
+        var eigenvector1: array[float] = [1.0, 0.0]
+        var eigenvector2: array[float] = [0.0, 1.0]
+        eigenvectors = eigenvectors.append(eigenvector1)
+        eigenvectors = eigenvectors.append(eigenvector2)
+        return eigenvectors
+    } else {
+        # For larger matrices, return empty array for now
+        return []
+    }
+}
