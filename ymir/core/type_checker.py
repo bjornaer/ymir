@@ -28,6 +28,7 @@ from ymir.core.types import (
     FunctionType,
     IntType,
     MapType,
+    MatrixType,
     StringType,
     TupleType,
     Type,
@@ -457,6 +458,8 @@ class TypeChecker:
             return BoolType()
         elif isinstance(node, ArrayType):
             return ArrayType(self.visit_type_annotation(node.element_type))
+        elif isinstance(node, MatrixType):
+            return MatrixType(self.visit_type_annotation(node.element_type))
         elif isinstance(node, MapType):
             return MapType(self.visit_type_annotation(node.key_type), self.visit_type_annotation(node.value_type))
         elif isinstance(node, TupleType):

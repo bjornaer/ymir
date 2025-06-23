@@ -95,7 +95,7 @@ class Lexer:
             ("NUMBER", r"\d+(\.\d*)?([eE][+-]?\d+)?"),
             ("ID", r"[A-Za-z_]\w*"),
             ("STRING", r"\".*?\""),
-            ("OP", r"(\+\+|\+=|&&|\|\||[+\-*/%=<>!]+)"),  # Added '&&' and '||'
+            ("OP", r"(\+\+|\+=|&&|\|\||[+\-*/%=<>!@]+)"),  # Added '@' for matrix multiplication
             ("DOT", r"\."),
             ("BRACE_OPEN", r"\{"),
             ("BRACE_CLOSE", r"\}"),

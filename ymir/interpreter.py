@@ -5,6 +5,7 @@ import platform
 import subprocess
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 from llvmlite import binding, ir
 
 from ymir.core.ast import (
@@ -78,6 +79,49 @@ class YmirInterpreter:
         self.global_scope["round"] = round
         self.global_scope["min"] = min
         self.global_scope["max"] = max
+
+        # Matrix methods
+        def matrix_transpose(matrix):
+            """Transpose a matrix."""
+            if self.is_matrix(matrix):
+                numpy_matrix = self.to_numpy_matrix(matrix)
+                result = numpy_matrix.T
+                return self.from_numpy_matrix(result)
+            else:
+                raise TypeError("transpose() can only be called on matrices")
+
+        def matrix_determinant(matrix):
+            """Calculate the determinant of a matrix."""
+            if self.is_matrix(matrix):
+                numpy_matrix = self.to_numpy_matrix(matrix)
+                return float(np.linalg.det(numpy_matrix))
+            else:
+                raise TypeError("det() can only be called on matrices")
+
+        def matrix_inverse(matrix):
+            """Calculate the inverse of a matrix."""
+            if self.is_matrix(matrix):
+                numpy_matrix = self.to_numpy_matrix(matrix)
+                try:
+                    result = np.linalg.inv(numpy_matrix)
+                    return self.from_numpy_matrix(result)
+                except np.linalg.LinAlgError:
+                    raise ValueError("Matrix is not invertible")
+            else:
+                raise TypeError("inverse() can only be called on matrices")
+
+        def matrix_shape(matrix):
+            """Get the shape of a matrix."""
+            if self.is_matrix(matrix):
+                numpy_matrix = self.to_numpy_matrix(matrix)
+                return list(numpy_matrix.shape)
+            else:
+                raise TypeError("shape() can only be called on matrices")
+
+        self.global_scope["transpose"] = matrix_transpose
+        self.global_scope["det"] = matrix_determinant
+        self.global_scope["inverse"] = matrix_inverse
+        self.global_scope["shape"] = matrix_shape
 
         # Add ALL functions from the math module
         for name, func in math.__dict__.items():
@@ -465,16 +509,39 @@ class YmirInterpreter:
             left = self.evaluate_expression(node.left)
             right = self.evaluate_expression(node.right)
             if node.operator == "+":
+                # Handle matrix addition
+                if self.is_matrix(left) and self.is_matrix(right):
+                    result = self.matrix_operation(left, right, "+")
+                # Handle array concatenation
+                elif isinstance(left, list) and isinstance(right, list):
+                    result = left + right
                 # If either side is an exception, convert to string for concatenation
-                if isinstance(left, BaseException):
+                elif isinstance(left, BaseException):
                     left = str(left)
-                if isinstance(right, BaseException):
+                    result = left + right
+                elif isinstance(right, BaseException):
                     right = str(right)
-                result = left + right
+                    result = left + right
+                else:
+                    result = left + right
             elif node.operator == "-":
-                result = left - right
+                # Handle matrix subtraction
+                if self.is_matrix(left) and self.is_matrix(right):
+                    result = self.matrix_operation(left, right, "-")
+                else:
+                    result = left - right
             elif node.operator == "*":
-                result = left * right
+                # Handle matrix elementwise multiplication
+                if self.is_matrix(left) and self.is_matrix(right):
+                    result = self.matrix_operation(left, right, "*")
+                else:
+                    result = left * right
+            elif node.operator == "@":
+                # Handle matrix multiplication
+                if self.is_matrix(left) and self.is_matrix(right):
+                    result = self.matrix_operation(left, right, "@")
+                else:
+                    raise ValueError("Matrix multiplication (@) can only be used with matrices")
             elif node.operator == "/":
                 result = left / right
             elif node.operator == "%":
@@ -533,6 +600,53 @@ class YmirInterpreter:
             if isinstance(instance, BaseException) and node.method_name == "__str__":
                 return str(instance)
 
+            # --- PATCH: Handle array methods in Ymir style ---
+            if isinstance(instance, list):
+                if node.method_name == "append":
+                    # Return a new list with the element added
+                    if len(node.args) != 1:
+                        raise TypeError("append() takes exactly one argument")
+                    value = self.evaluate_expression(node.args[0])
+                    return instance + [value]
+                elif node.method_name == "push":
+                    # Alias for append
+                    if len(node.args) != 1:
+                        raise TypeError("push() takes exactly one argument")
+                    value = self.evaluate_expression(node.args[0])
+                    return instance + [value]
+                elif node.method_name == "pop":
+                    # Return a new list with the last element removed
+                    if len(instance) == 0:
+                        raise IndexError("pop from empty list")
+                    return instance[:-1]
+                elif node.method_name == "insert":
+                    # Return a new list with value inserted at index
+                    if len(node.args) != 2:
+                        raise TypeError("insert() takes exactly two arguments")
+                    index = self.evaluate_expression(node.args[0])
+                    value = self.evaluate_expression(node.args[1])
+                    return instance[:index] + [value] + instance[index:]
+                elif node.method_name == "remove":
+                    # Return a new list with the first occurrence of value removed
+                    if len(node.args) != 1:
+                        raise TypeError("remove() takes exactly one argument")
+                    value = self.evaluate_expression(node.args[0])
+                    new_list = instance.copy()
+                    new_list.remove(value)
+                    return new_list
+                elif node.method_name == "clear":
+                    # Return an empty list
+                    return []
+                elif node.method_name == "extend":
+                    # Return a new list with another list concatenated
+                    if len(node.args) != 1:
+                        raise TypeError("extend() takes exactly one argument")
+                    other = self.evaluate_expression(node.args[0])
+                    if not isinstance(other, list):
+                        raise TypeError("extend() argument must be a list")
+                    return instance + other
+            # --- END PATCH ---
+
             if isinstance(instance, Module):
                 if node.method_name in instance.exports:
                     export = instance.exports[node.method_name]
@@ -570,9 +684,12 @@ class YmirInterpreter:
 
     def evaluate_function_call(self, func_name: str, args: List[Any], module_context: Optional[Module] = None) -> Any:
         """Evaluate a function call by interpreting the FunctionDef body."""
+        func = None
+        # First, try to find the function in the module context if provided
         if module_context:
             func = module_context.exports.get(func_name)
-        else:
+        # If not found in module context, try global scope
+        if func is None:
             func = self.global_scope.get(func_name)
 
         if not isinstance(func, FunctionDef):
@@ -582,7 +699,11 @@ class YmirInterpreter:
             raise TypeError(f"{func_name} is not a function definition")
 
         prev_local_scope = self.local_scope.copy()
+        prev_global_scope = self.global_scope.copy()
         self.local_scope = {}
+        # Inject module exports into global_scope for intra-module calls
+        if module_context:
+            self.global_scope = {**self.global_scope, **module_context.exports}
         for param, arg in zip(func.params, args):
             self.local_scope[param] = arg
 
@@ -594,6 +715,7 @@ class YmirInterpreter:
         except ReturnSignal as ret:
             self.logger.debug(f"[evaluate_function_call] Caught ReturnSignal with value: {ret.value}")
             self.local_scope = prev_local_scope
+            self.global_scope = prev_global_scope
             # If the return value is an exception, convert to string
             if isinstance(ret.value, BaseException):
                 return str(ret.value)
@@ -601,6 +723,7 @@ class YmirInterpreter:
 
         self.logger.debug(f"[evaluate_function_call] No return, returning last evaluated value: {last_value}")
         self.local_scope = prev_local_scope
+        self.global_scope = prev_global_scope
         return last_value
 
     def evaluate_for_cstyle_loop(self, node: ForCStyleLoop) -> None:
@@ -857,6 +980,55 @@ class YmirInterpreter:
                 raise ImportError(f"Cannot import '{module_name}'; '{part}' is not a module.")
 
         scope[parts[-1]] = imported_module_obj
+
+    def is_matrix(self, value: Any) -> bool:
+        """Check if a value is a matrix (2D array of numbers)."""
+        if not isinstance(value, list) or len(value) == 0:
+            return False
+
+        # Check if it's a 2D array
+        if not isinstance(value[0], list):
+            return False
+
+        # Check if all elements are numbers
+        for row in value:
+            if not isinstance(row, list):
+                return False
+            for element in row:
+                if not isinstance(element, (int, float)):
+                    return False
+
+        return True
+
+    def to_numpy_matrix(self, value: Any) -> np.ndarray:
+        """Convert a Ymir matrix (2D array) to numpy array."""
+        if self.is_matrix(value):
+            return np.array(value, dtype=np.float64)
+        else:
+            raise ValueError("Value is not a valid matrix")
+
+    def from_numpy_matrix(self, matrix: np.ndarray) -> List[List[float]]:
+        """Convert a numpy array back to Ymir matrix format."""
+        return matrix.tolist()
+
+    def matrix_operation(self, left: Any, right: Any, operation: str) -> Any:
+        """Perform matrix operations using numpy."""
+        # Convert to numpy arrays
+        left_matrix = self.to_numpy_matrix(left)
+        right_matrix = self.to_numpy_matrix(right)
+
+        if operation == "+":
+            result = left_matrix + right_matrix
+        elif operation == "-":
+            result = left_matrix - right_matrix
+        elif operation == "*":
+            result = left_matrix * right_matrix  # Elementwise multiplication
+        elif operation == "@":
+            result = left_matrix @ right_matrix  # Matrix multiplication
+        else:
+            raise ValueError(f"Unsupported matrix operation: {operation}")
+
+        return self.from_numpy_matrix(result)
 
 
 class ContinueSignal(Exception):

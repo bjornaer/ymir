@@ -1,5 +1,3 @@
-import pytest
-
 from ymir.core.lexer import Lexer, Token, TokenType
 
 
@@ -229,8 +227,17 @@ def test_tokenize_multiline():
 def test_unexpected_character():
     source_code = "func test() @"
     lexer = Lexer(source_code)
-    with pytest.raises(RuntimeError, match=r"Unexpected character '@' on line 1"):
-        lexer.tokenize()
+    tokens = lexer.tokenize()
+    # @ should be tokenized as an operator, not cause a lexer error
+    expected_tokens = [
+        Token(TokenType.KEYWORD, "func", 1, 0),
+        Token(TokenType.IDENTIFIER, "test", 1, 5),
+        Token(TokenType.PAREN_OPEN, "(", 1, 9),
+        Token(TokenType.PAREN_CLOSE, ")", 1, 10),
+        Token(TokenType.OPERATOR, "@", 1, 12),
+        Token(TokenType.EOF, "", 1, 13),
+    ]
+    assert tokens == expected_tokens
 
 
 def test_tokenize_if_statement():

@@ -115,3 +115,93 @@ export func permutations(n: int, k: int) -> int {
     }
     return res
 }
+
+# Matrix Operations
+
+export func matrix_create(rows: int, cols: int, value: float) -> matrix[float] {
+    # Creates a matrix with specified dimensions filled with the given value.
+    var result: matrix[float] = []
+    var i: int = 0
+    while (i < rows) {
+        var row: array[float] = []
+        var j: int = 0
+        while (j < cols) {
+            row = row.append(value)
+            j = j + 1
+        }
+        result = result.append(row)
+        i = i + 1
+    }
+    return result
+}
+
+export func matrix_zeros(rows: int, cols: int) -> matrix[float] {
+    # Creates a matrix filled with zeros.
+    return matrix_create(rows, cols, 0.0)
+}
+
+export func matrix_ones(rows: int, cols: int) -> matrix[float] {
+    # Creates a matrix filled with ones.
+    return matrix_create(rows, cols, 1.0)
+}
+
+export func matrix_eye(n: int) -> matrix[float] {
+    # Creates an n x n identity matrix.
+    var result: matrix[float] = []
+    var i: int = 0
+    while (i < n) {
+        var row: array[float] = []
+        var j: int = 0
+        while (j < n) {
+            if (i == j) {
+                row = row.append(1.0)
+            } else {
+                row = row.append(0.0)
+            }
+            j = j + 1
+        }
+        result = result.append(row)
+        i = i + 1
+    }
+    return result
+}
+
+export func matrix_diag(diagonal: array[float]) -> matrix[float] {
+    # Creates a square matrix with the given vector as its diagonal.
+    var n: int = len(diagonal)
+    var result: matrix[float] = []
+    var i: int = 0
+    while (i < n) {
+        var row: array[float] = []
+        var j: int = 0
+        while (j < n) {
+            if (i == j) {
+                row = row.append(diagonal[i])
+            } else {
+                row = row.append(0.0)
+            }
+            j = j + 1
+        }
+        result = result.append(row)
+        i = i + 1
+    }
+    return result
+}
+
+export func matrix_flatten(a: matrix[float]) -> array[float] {
+    # Flattens a matrix to a 1D array (row-major order).
+    var result: array[float] = []
+    var i: int = 0
+    var rows: int = len(a)
+    while (i < rows) {
+        var row: array[float] = a[i]
+        var j: int = 0
+        var cols: int = len(row)
+        while (j < cols) {
+            result = result.append(row[j])
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return result
+}

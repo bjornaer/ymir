@@ -41,6 +41,7 @@ from ymir.core.types import (
     FloatType,
     IntType,
     MapType,
+    MatrixType,
     NilType,
     StringType,
     TupleType,
@@ -853,7 +854,7 @@ class Parser:
         )
 
     def parse_type_annotation(self) -> Optional[Type]:
-        if self.current_token().type == TokenType.KEYWORD:
+        if self.current_token().type == TokenType.KEYWORD or self.current_token().type == TokenType.IDENTIFIER:
             type_name = self.current_token().value
             self.advance()
             if type_name == "int":
@@ -866,6 +867,11 @@ class Parser:
                 return BoolType()
             elif type_name == "any":
                 return AnyType()
+            elif type_name == "matrix":
+                self.expect_token(TokenType.BRACKET_OPEN, "[")
+                element_type = self.parse_type_annotation()
+                self.expect_token(TokenType.BRACKET_CLOSE, "]")
+                return MatrixType(element_type)
             elif type_name == "array":
                 self.expect_token(TokenType.BRACKET_OPEN, "[")
                 element_type = self.parse_type_annotation()
