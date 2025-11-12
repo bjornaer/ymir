@@ -9,6 +9,8 @@ from ymir.core.ast import (
     AwaitExpression,
     BinaryOp,
     Break,
+    ChannelReceive,
+    ChannelSend,
     ClassDef,
     Continue,
     ExceptClause,
@@ -26,6 +28,7 @@ from ymir.core.ast import (
     MethodCall,
     ModuleDef,
     ReturnStatement,
+    SpawnStatement,
     StringLiteral,
     ThrowStatement,
     TryExceptStatement,
@@ -38,6 +41,7 @@ from ymir.core.types import (
     AnyType,
     ArrayType,
     BoolType,
+    ChannelType,
     FloatType,
     IntType,
     MapType,
@@ -127,6 +131,8 @@ class Parser:
                 return self.parse_throw_statement()
             elif token.value == "exception":
                 return self.parse_exception_def()
+            elif token.value == "spawn":
+                return self.parse_spawn_statement()
         elif token.type == TokenType.IDENTIFIER:
             self.logger.debug(f"Parsing statement starting with identifier: {token.value}")
             return self.parse_assignment_or_expression()
@@ -412,9 +418,16 @@ class Parser:
 
     def parse_if_statement(self) -> IfStatement:
         self.expect_token(TokenType.KEYWORD, "if")
-        self.expect_token(TokenType.PAREN_OPEN)
+
+        # Parentheses are optional around the condition
+        has_parens = self.current_token().type == TokenType.PAREN_OPEN
+        if has_parens:
+            self.expect_token(TokenType.PAREN_OPEN)
+
         condition = self.parse_expression()
-        self.expect_token(TokenType.PAREN_CLOSE)
+
+        if has_parens:
+            self.expect_token(TokenType.PAREN_CLOSE)
 
         self.skip_whitespace()
         then_body = self.parse_block()  # parse_block handles the braces
@@ -574,10 +587,18 @@ class Parser:
                 self.logger.debug(f"Parsed parameter name: {param_name}")
                 self.advance()  # Skip parameter name
                 self.skip_whitespace()
-                self.expect_token(TokenType.COLON)
-                self.skip_whitespace()
-                param_type = self.parse_type_annotation()
-                self.logger.debug(f"Parsed parameter type: {param_type}")
+
+                # Check if there's a type annotation (colon)
+                if self.current_token().type == TokenType.COLON:
+                    self.advance()  # Skip ':'
+                    self.skip_whitespace()
+                    param_type = self.parse_type_annotation()
+                    self.logger.debug(f"Parsed parameter type: {param_type}")
+                else:
+                    # No type annotation (e.g., for 'self')
+                    param_type = None
+                    self.logger.debug(f"Parameter {param_name} has no type annotation")
+
                 params.append(param_name)
                 param_types.append(param_type)
                 self.skip_whitespace()
@@ -679,10 +700,15 @@ class Parser:
             right = self.parse_expression(precedence + 1)
             self.logger.debug(f"After parse_expression, right: {right}")
 
-            # Create a binary operation node with the left operand, operator, and right operand
-            # Use named parameters to ensure correct order
-            left = BinaryOp(operator=op, left=left, right=right)
-            self.logger.debug(f"After BinaryOp, left: {left}")
+            # Handle channel operations specially
+            if op == "<-":
+                # channel <- value (send)
+                left = ChannelSend(channel=left, value=right)
+            else:
+                # Create a binary operation node with the left operand, operator, and right operand
+                # Use named parameters to ensure correct order
+                left = BinaryOp(operator=op, left=left, right=right)
+            self.logger.debug(f"After operator handling, left: {left}")
 
         self.logger.debug(f"Returning expression: {left}")
         return left
@@ -693,33 +719,34 @@ class Parser:
             return 0
 
         precedences = {
-            "||": 1,
-            "&&": 2,
-            "not": 3,
-            "in": 4,
-            "not in": 4,
-            "is": 4,
-            "is not": 4,
-            "<": 4,
-            "<=": 4,
-            ">": 4,
-            ">=": 4,
-            "!=": 4,
-            "==": 4,
-            "|": 5,
-            "^": 6,
-            "&": 7,
-            "<<": 8,
-            ">>": 8,
-            "+": 9,
-            "-": 9,
-            "*": 10,
-            "@": 10,
-            "/": 10,
-            "//": 10,
-            "%": 10,
-            "~": 11,
-            "**": 12,
+            "<-": 1,  # Channel operations
+            "||": 2,
+            "&&": 3,
+            "not": 4,
+            "in": 5,
+            "not in": 5,
+            "is": 5,
+            "is not": 5,
+            "<": 5,
+            "<=": 5,
+            ">": 5,
+            ">=": 5,
+            "!=": 5,
+            "==": 5,
+            "|": 6,
+            "^": 7,
+            "&": 8,
+            "<<": 9,
+            ">>": 9,
+            "+": 10,
+            "-": 10,
+            "*": 11,
+            "@": 11,
+            "/": 11,
+            "//": 11,
+            "%": 11,
+            "~": 12,
+            "**": 13,
         }
         return precedences.get(operator, 0)
 
@@ -907,6 +934,11 @@ class Parser:
                         self.advance()  # Skip comma
                 self.expect_token(TokenType.BRACKET_CLOSE, "]")
                 return TupleType(element_types)
+            elif type_name == "chan":
+                self.expect_token(TokenType.BRACKET_OPEN, "[")
+                element_type = self.parse_type_annotation()
+                self.expect_token(TokenType.BRACKET_CLOSE, "]")
+                return ChannelType(element_type)
         return None
 
     def expect_token(self, type: str, value: Optional[str] = None):
@@ -1072,3 +1104,22 @@ class Parser:
         if self.pos + 1 >= len(self.tokens):
             return Token(TokenType.EOF, "", line=-1, column=-1)
         return self.tokens[self.pos + 1]
+
+    def parse_spawn_statement(self) -> SpawnStatement:
+        """Parse a spawn statement: spawn functionCall()"""
+        self.logger.debug("Entering parse_spawn_statement")
+        self.advance()  # Skip 'spawn'
+        self.skip_whitespace()
+
+        # Parse the function call
+        if self.current_token().type != TokenType.IDENTIFIER:
+            raise SyntaxError(f"Expected function call after 'spawn', got {self.current_token()}")
+
+        func_name = self.current_token().value
+        self.advance()
+
+        if self.current_token().type != TokenType.PAREN_OPEN:
+            raise SyntaxError(f"Expected '(' after function name in spawn, got {self.current_token()}")
+
+        call = self.parse_function_call(func_name)
+        return SpawnStatement(call)

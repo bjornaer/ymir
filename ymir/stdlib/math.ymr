@@ -116,6 +116,24 @@ export func permutations(n: int, k: int) -> int {
     return res
 }
 
+export func factorial(n: int) -> int {
+    # Calculate factorial: n! = n * (n-1) * ... * 2 * 1
+    if (n < 0) {
+        return 0
+    }
+    if (n == 0 || n == 1) {
+        return 1
+    }
+    
+    var result: int = 1
+    var i: int = 2
+    while (i <= n) {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
 # Matrix Operations
 
 export func matrix_create(rows: int, cols: int, value: float) -> matrix[float] {

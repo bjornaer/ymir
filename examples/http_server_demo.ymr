@@ -1,0 +1,64 @@
+module http_server_demo
+
+# HTTP Server Demo: Creating a simple web API
+
+import stdlib.server
+
+# Handler for the hello endpoint
+func handle_hello(request: Request) -> Response {
+    return Response(200, "Hello from Ymir!")
+}
+
+# Handler for the echo endpoint
+func handle_echo(request: Request) -> Response {
+    body = request.body
+    if body == "" {
+        return Response(400, "No body provided")
+    }
+    return Response(200, "Echo: " + body)
+}
+
+# Handler for a JSON endpoint
+func handle_json(request: Request) -> Response {
+    # Create a simple response
+    json_body = '{"message": "Hello", "language": "Ymir", "version": "0.1.0"}'
+    return Response(200, json_body, {"Content-Type": "application/json"})
+}
+
+# Handler for the root endpoint
+func handle_root(request: Request) -> Response {
+    html = "<h1>Welcome to Ymir HTTP Server</h1><p>Try /hello, /echo, or /json</p>"
+    return Response(200, html, {"Content-Type": "text/html"})
+}
+
+func main() {
+    print("=== Ymir HTTP Server Demo ===")
+    print("")
+    
+    # Create server
+    server = HTTPServer("0.0.0.0", 8080)
+    
+    # Register routes
+    print("Registering routes...")
+    server.route("/", handle_root, "GET")
+    server.route("/hello", handle_hello, "GET")
+    server.route("/echo", handle_echo, "POST")
+    server.route("/json", handle_json, "GET")
+    
+    print("")
+    print("Server running on http://0.0.0.0:8080")
+    print("Press Ctrl+C to stop")
+    print("")
+    print("Available endpoints:")
+    print("  GET  /         - Homepage")
+    print("  GET  /hello    - Simple hello message")
+    print("  POST /echo     - Echo back the request body")
+    print("  GET  /json     - JSON response")
+    print("")
+    
+    # Start the server (blocking)
+    server.run()
+}
+
+main()
+

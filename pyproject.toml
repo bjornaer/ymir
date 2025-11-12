@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ymir"
-version = "0.1.0"
+version = "0.2.0"
 description = "ymir is a programming language focused on machine learning systems"
 authors = ["bjornaer <max.schulkin@gmail.com>"]
 license = "MIT"
@@ -15,19 +15,31 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = ">=3.12,<3.15"
 click = "^8.1.7"
 toml = "^0.10.2"
 llvmlite = "^0.43.0"
 requests = "^2.32.3"
 pandas = "^2.3.0"
 numpy = "^2.3.1"
+jax = { version = "^0.4.23", optional = true }
+jaxlib = { version = "^0.4.23", optional = true }
+aiohttp = "^3.9.0"
+gitpython = "^3.1.40"
+
+[tool.poetry.extras]
+gpu = ["jax", "jaxlib"]
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.4.2"
 isort = "^5.13.2"
 ruff = "^0.5.3"
 pytest = "^8.2.2"
+pytest-cov = "^4.1.0"
+pytest-asyncio = "^0.21.0"
+pytest-mock = "^3.11.1"
+pytest-timeout = "^2.1.0"
+pyinstaller = "^6.16.0"
 
 [tool.poetry.scripts]
 ymir = "ymir.cli.ymir_cli:cli"
@@ -99,3 +111,38 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 # Ignore `E402` (import violations) in all `__init__.py` files, and in `path/to/file.py`.
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+  "--cov=ymir",
+  "--cov-report=html",
+  "--cov-report=term-missing",
+  "--cov-report=xml",
+  "-v",
+]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "integration: marks tests as integration tests",
+]
+
+[tool.coverage.run]
+source = ["ymir"]
+omit = ["tests/*", "ymir/tools/codegen.py", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "def __str__",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "class .*\\bProtocol\\):",
+  "@(abc\\.)?abstractmethod",
+]
+precision = 2
+show_missing = true

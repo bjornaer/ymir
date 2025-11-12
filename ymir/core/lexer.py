@@ -90,12 +90,19 @@ class Lexer:
             "throw",
             "exception",
             "as",
+            # Concurrency keywords
+            "spawn",
+            "chan",
+            "select",
         }
         self.token_specification = [
             ("NUMBER", r"\d+(\.\d*)?([eE][+-]?\d+)?"),
             ("ID", r"[A-Za-z_]\w*"),
             ("STRING", r"\".*?\""),
-            ("OP", r"(\+\+|\+=|&&|\|\||[+\-*/%=<>!@]+)"),  # Added '@' for matrix multiplication
+            (
+                "OP",
+                r"(<-|\+\+|\+=|&&|\|\||[+\-*/%=<>!@]+)",
+            ),  # Added '<-' for channels and '@' for matrix multiplication
             ("DOT", r"\."),
             ("BRACE_OPEN", r"\{"),
             ("BRACE_CLOSE", r"\}"),

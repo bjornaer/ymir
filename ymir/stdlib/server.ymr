@@ -1,0 +1,21 @@
+module stdlib.server
+
+# HTTP Server module using aiohttp
+# Provides an extensible HTTP server with routing
+
+# Server is exposed as HTTPServer class from built-ins
+# Request and Response are also exposed as built-in classes
+
+# Example usage:
+# import stdlib.server
+#
+# func handle_hello(request: Request) -> Response {
+#     return Response(200, "Hello, World!")
+# }
+#
+# func main() {
+#     server = HTTPServer("0.0.0.0", 8080)
+#     server.route("/hello", handle_hello)
+#     server.run()  # Blocking call
+# }
+

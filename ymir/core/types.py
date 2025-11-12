@@ -137,3 +137,19 @@ class ErrorType(Type):
 class NilType(Type):
     def __str__(self) -> str:
         return "nil"
+
+
+class ChannelType(Type):
+    """Represents a channel type for concurrent communication."""
+
+    def __init__(self, element_type: Type):
+        self.element_type = element_type
+
+    def __str__(self) -> str:
+        return f"chan[{self.element_type}]"
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, ChannelType) and self.element_type == other.element_type
+
+    def __hash__(self) -> int:
+        return hash((ChannelType, self.element_type))

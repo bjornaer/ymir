@@ -14,6 +14,8 @@ from ymir.core.ast import (
     ASTNode,
     BinaryOp,
     Break,
+    ChannelReceive,
+    ChannelSend,
     ClassDef,
     Continue,
     ExceptionDef,
@@ -26,11 +28,15 @@ from ymir.core.ast import (
     ImportDef,
     ModuleDef,
     ReturnStatement,
+    SpawnStatement,
     ThrowStatement,
     TryExceptStatement,
     WhileStatement,
 )
+from ymir.core.builtin_http import HTTPServer, Request, Response, get_http_client
+from ymir.core.concurrency import get_runtime as get_concurrency_runtime
 from ymir.core.lexer import Lexer
+from ymir.core.matrix_backend import get_backend as get_matrix_backend
 from ymir.core.parser import Parser
 from ymir.core.semantic_analyzer import SemanticAnalyzer
 from ymir.core.type_checker import TypeChecker
@@ -55,6 +61,15 @@ class YmirInterpreter:
         self.local_scope = {}
         self.loaded_modules: Dict[str, Module] = {}
         self.standard_library_path = os.path.join(os.path.dirname(__file__), "stdlib")
+
+        # Initialize matrix backend
+        self.matrix_backend = get_matrix_backend()
+        self.logger.info(f"Matrix backend initialized: GPU available = {self.matrix_backend.is_gpu_available()}")
+
+        # Initialize concurrency runtime
+        self.concurrency_runtime = get_concurrency_runtime()
+        self.concurrency_runtime.initialize()
+        self.logger.info("Concurrency runtime initialized")
 
         # Register builtin functions
         self._register_builtin_functions()
@@ -84,8 +99,8 @@ class YmirInterpreter:
         def matrix_transpose(matrix):
             """Transpose a matrix."""
             if self.is_matrix(matrix):
-                numpy_matrix = self.to_numpy_matrix(matrix)
-                result = numpy_matrix.T
+                backend_matrix = self.to_numpy_matrix(matrix)
+                result = self.matrix_backend.transpose(backend_matrix)
                 return self.from_numpy_matrix(result)
             else:
                 raise TypeError("transpose() can only be called on matrices")
@@ -93,35 +108,106 @@ class YmirInterpreter:
         def matrix_determinant(matrix):
             """Calculate the determinant of a matrix."""
             if self.is_matrix(matrix):
-                numpy_matrix = self.to_numpy_matrix(matrix)
-                return float(np.linalg.det(numpy_matrix))
+                backend_matrix = self.to_numpy_matrix(matrix)
+                return self.matrix_backend.determinant(backend_matrix)
             else:
                 raise TypeError("det() can only be called on matrices")
 
         def matrix_inverse(matrix):
             """Calculate the inverse of a matrix."""
             if self.is_matrix(matrix):
-                numpy_matrix = self.to_numpy_matrix(matrix)
+                backend_matrix = self.to_numpy_matrix(matrix)
                 try:
-                    result = np.linalg.inv(numpy_matrix)
+                    result = self.matrix_backend.inverse(backend_matrix)
                     return self.from_numpy_matrix(result)
-                except np.linalg.LinAlgError:
-                    raise ValueError("Matrix is not invertible")
+                except Exception as e:
+                    raise ValueError(f"Matrix is not invertible: {e}")
             else:
                 raise TypeError("inverse() can only be called on matrices")
 
         def matrix_shape(matrix):
             """Get the shape of a matrix."""
             if self.is_matrix(matrix):
-                numpy_matrix = self.to_numpy_matrix(matrix)
-                return list(numpy_matrix.shape)
+                backend_matrix = self.to_numpy_matrix(matrix)
+                return self.matrix_backend.shape(backend_matrix)
             else:
                 raise TypeError("shape() can only be called on matrices")
+
+        def matrix_gpu_available():
+            """Check if GPU acceleration is available."""
+            return self.matrix_backend.is_gpu_available()
+
+        def matrix_to_gpu(matrix):
+            """Transfer matrix to GPU memory."""
+            if self.is_matrix(matrix):
+                backend_matrix = self.to_numpy_matrix(matrix)
+                gpu_matrix = self.matrix_backend.to_gpu(backend_matrix)
+                # Return as opaque GPU matrix (backend-specific type)
+                return gpu_matrix
+            else:
+                raise TypeError("matrix_to_gpu() can only be called on matrices")
+
+        def matrix_from_gpu(gpu_matrix):
+            """Transfer matrix from GPU to CPU and convert to Ymir format."""
+            cpu_matrix = self.matrix_backend.to_cpu(gpu_matrix)
+            return self.from_numpy_matrix(cpu_matrix)
+
+        def matrix_gpu_multiply(a, b):
+            """Perform matrix multiplication on GPU (if available)."""
+            # Convert inputs if they're Python lists
+            if self.is_matrix(a):
+                a = self.to_numpy_matrix(a)
+            if self.is_matrix(b):
+                b = self.to_numpy_matrix(b)
+
+            # Move to GPU if available
+            if self.matrix_backend.is_gpu_available():
+                a_gpu = self.matrix_backend.to_gpu(a)
+                b_gpu = self.matrix_backend.to_gpu(b)
+                result_gpu = self.matrix_backend.matmul(a_gpu, b_gpu)
+                result = self.matrix_backend.to_cpu(result_gpu)
+            else:
+                result = self.matrix_backend.matmul(a, b)
+
+            return self.from_numpy_matrix(result)
 
         self.global_scope["transpose"] = matrix_transpose
         self.global_scope["det"] = matrix_determinant
         self.global_scope["inverse"] = matrix_inverse
         self.global_scope["shape"] = matrix_shape
+        self.global_scope["matrix_gpu_available"] = matrix_gpu_available
+        self.global_scope["matrix_to_gpu"] = matrix_to_gpu
+        self.global_scope["matrix_from_gpu"] = matrix_from_gpu
+        self.global_scope["matrix_gpu_multiply"] = matrix_gpu_multiply
+
+        # Concurrency functions
+        def make_channel(buffer_size=0):
+            """Create a new channel for concurrent communication."""
+            return self.concurrency_runtime.create_channel(Any, buffer_size)
+
+        self.global_scope["make_channel"] = make_channel
+
+        # HTTP client functions
+        def http_get(url: str, headers: dict = None):
+            """Perform HTTP GET request."""
+            import asyncio
+
+            client = get_http_client()
+            return self.concurrency_runtime.run_until_complete(client.get(url, headers))
+
+        def http_post(url: str, data: str = None, json_data: Any = None, headers: dict = None):
+            """Perform HTTP POST request."""
+            import asyncio
+
+            client = get_http_client()
+            return self.concurrency_runtime.run_until_complete(client.post(url, data, json_data, headers))
+
+        # HTTP server classes
+        self.global_scope["http_get"] = http_get
+        self.global_scope["http_post"] = http_post
+        self.global_scope["HTTPServer"] = HTTPServer
+        self.global_scope["Request"] = Request
+        self.global_scope["Response"] = Response
 
         # Add ALL functions from the math module
         for name, func in math.__dict__.items():
@@ -340,6 +426,13 @@ class YmirInterpreter:
                 array_val[index_val] = value
                 return value
 
+            # Handle attribute assignment (e.g., self.count = value)
+            if type(node.target).__name__ == "MethodCall":
+                # Attribute assignment
+                instance = self.evaluate_expression(node.target.instance)
+                setattr(instance, node.target.method_name, value)
+                return value
+
             # Handle regular variable assignment
             if self.local_scope is not None and node.target in self.local_scope:
                 self.local_scope[node.target] = value
@@ -368,6 +461,8 @@ class YmirInterpreter:
             return self.evaluate_throw_statement(node)
         elif isinstance(node, ExceptionDef):
             return self.evaluate_exception_def(node)
+        elif isinstance(node, SpawnStatement):
+            return self.evaluate_spawn_statement(node)
         elif isinstance(node, ModuleDef):
             for stmt in node.body:
                 self.evaluate(stmt)
@@ -379,6 +474,9 @@ class YmirInterpreter:
             # No-op for import statements (already handled by load_standard_library)
             return None
         elif isinstance(node, BinaryOp):
+            return self.evaluate_expression(node)
+        elif type(node).__name__ == "MethodCall":
+            # Handle method calls as statements (e.g., counter.increment())
             return self.evaluate_expression(node)
         else:
             self.logger.debug(f"[evaluate] Unknown node type: {type(node)} - {repr(node)}")
@@ -471,6 +569,37 @@ class YmirInterpreter:
                             raise
                     else:
                         raise ValueError(f"Exception constructor expects exactly 1 argument (message), got {len(args)}")
+                elif isinstance(obj, ClassDef):
+                    # Class instantiation: create instance and call __init__
+                    instance = type("Instance", (), {})()  # Create a simple object
+                    instance.__class__.__name__ = func_name
+                    instance._ymir_class_def = obj  # Store reference to ClassDef for method lookup
+
+                    # Find the __init__ method
+                    init_method = None
+                    for method in obj.methods:
+                        if method.name == "__init__":
+                            init_method = method
+                            break
+
+                    # Call __init__ if it exists
+                    if init_method:
+                        # Save current scope
+                        prev_local_scope = self.local_scope.copy()
+
+                        # Add 'self' and parameters to local scope
+                        self.local_scope["self"] = instance
+                        for param, arg in zip(init_method.params[1:], args):  # Skip 'self' parameter
+                            self.local_scope[param] = arg
+
+                        # Execute __init__ body
+                        for stmt in init_method.body:
+                            self.evaluate(stmt)
+
+                        # Restore scope
+                        self.local_scope = prev_local_scope
+
+                    return instance
                 elif isinstance(obj, FunctionDef):
                     # User-defined function: interpret its body
                     return self.evaluate_function_call(func_name, args)
@@ -528,6 +657,11 @@ class YmirInterpreter:
                 # Handle array concatenation
                 elif isinstance(left, list) and isinstance(right, list):
                     result = left + right
+                # Handle string + number concatenation
+                elif isinstance(left, str) and isinstance(right, (int, float)):
+                    result = left + str(right)
+                elif isinstance(left, (int, float)) and isinstance(right, str):
+                    result = str(left) + right
                 # If either side is an exception, convert to string for concatenation
                 elif isinstance(left, BaseException):
                     left = str(left)
@@ -547,6 +681,11 @@ class YmirInterpreter:
                 # Handle matrix elementwise multiplication
                 if self.is_matrix(left) and self.is_matrix(right):
                     result = self.matrix_operation(left, right, "*")
+                # Handle string repetition
+                elif isinstance(left, str) and isinstance(right, int):
+                    result = left * right
+                elif isinstance(left, int) and isinstance(right, str):
+                    result = left * right
                 else:
                     result = left * right
             elif node.operator == "@":
@@ -596,6 +735,30 @@ class YmirInterpreter:
                 raise ValueError(f"Unsupported unary operator: {node.operator}")
             self.logger.debug(f"[evaluate_expression] UnaryOp {node.operator}: {node.operator}{operand} = {result}")
             return result
+        elif isinstance(node, ChannelSend):
+            # Channel send operation: channel <- value
+            channel = self.evaluate_expression(node.channel)
+            value = self.evaluate_expression(node.value)
+            # Send is async, so we need to run it in the event loop
+            import asyncio
+
+            asyncio.create_task(channel.send(value))
+            self.logger.debug(f"[evaluate_expression] ChannelSend: sent {value} to channel")
+            return None
+        elif isinstance(node, ChannelReceive):
+            # Channel receive operation: <- channel
+            channel = self.evaluate_expression(node.channel)
+            # Receive is async, so we need to run it in the event loop
+            import asyncio
+
+            loop = self.concurrency_runtime.loop
+            if loop and loop.is_running():
+                # If we're already in an async context, create a task
+                future = asyncio.ensure_future(channel.receive())
+                return future
+            else:
+                # Run synchronously
+                return self.concurrency_runtime.run_until_complete(channel.receive())
         elif hasattr(node, "value") and type(node).__name__ == "StringLiteral":
             # Strip leading and trailing quotes from the string literal
             raw = node.value
@@ -613,7 +776,130 @@ class YmirInterpreter:
             if isinstance(instance, BaseException) and node.method_name == "__str__":
                 return str(instance)
 
-            # --- PATCH: Handle array methods in Ymir style ---
+            # --- STRING METHODS: Comprehensive Python-like API ---
+            if isinstance(instance, str):
+                # Basic transformations
+                if node.method_name == "upper":
+                    return instance.upper()
+                elif node.method_name == "lower":
+                    return instance.lower()
+                elif node.method_name == "capitalize":
+                    return instance.capitalize()
+                elif node.method_name == "title":
+                    return instance.title()
+                elif node.method_name == "strip":
+                    chars = self.evaluate_expression(node.args[0]) if node.args else None
+                    return instance.strip(chars)
+                elif node.method_name == "lstrip":
+                    chars = self.evaluate_expression(node.args[0]) if node.args else None
+                    return instance.lstrip(chars)
+                elif node.method_name == "rstrip":
+                    chars = self.evaluate_expression(node.args[0]) if node.args else None
+                    return instance.rstrip(chars)
+
+                # Search/check methods
+                elif node.method_name == "startswith":
+                    if len(node.args) < 1:
+                        raise TypeError("startswith() takes at least 1 argument")
+                    prefix = self.evaluate_expression(node.args[0])
+                    start = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else 0
+                    end = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else len(instance)
+                    return instance[start:end].startswith(prefix)
+                elif node.method_name == "endswith":
+                    if len(node.args) < 1:
+                        raise TypeError("endswith() takes at least 1 argument")
+                    suffix = self.evaluate_expression(node.args[0])
+                    start = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else 0
+                    end = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else len(instance)
+                    return instance[start:end].endswith(suffix)
+                elif node.method_name == "find":
+                    if len(node.args) < 1:
+                        raise TypeError("find() takes at least 1 argument")
+                    sub = self.evaluate_expression(node.args[0])
+                    start = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else 0
+                    end = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else len(instance)
+                    return instance.find(sub, start, end)
+                elif node.method_name == "rfind":
+                    if len(node.args) < 1:
+                        raise TypeError("rfind() takes at least 1 argument")
+                    sub = self.evaluate_expression(node.args[0])
+                    start = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else 0
+                    end = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else len(instance)
+                    return instance.rfind(sub, start, end)
+                elif node.method_name == "index":
+                    if len(node.args) < 1:
+                        raise TypeError("index() takes at least 1 argument")
+                    sub = self.evaluate_expression(node.args[0])
+                    start = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else 0
+                    end = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else len(instance)
+                    return instance.index(sub, start, end)
+                elif node.method_name == "count":
+                    if len(node.args) < 1:
+                        raise TypeError("count() takes at least 1 argument")
+                    sub = self.evaluate_expression(node.args[0])
+                    start = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else 0
+                    end = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else len(instance)
+                    return instance.count(sub, start, end)
+                elif node.method_name == "contains":
+                    if len(node.args) != 1:
+                        raise TypeError("contains() takes exactly 1 argument")
+                    sub = self.evaluate_expression(node.args[0])
+                    return sub in instance
+
+                # Manipulation methods
+                elif node.method_name == "split":
+                    sep = self.evaluate_expression(node.args[0]) if node.args else None
+                    maxsplit = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else -1
+                    return instance.split(sep, maxsplit)
+                elif node.method_name == "replace":
+                    if len(node.args) < 2:
+                        raise TypeError("replace() takes at least 2 arguments")
+                    old = self.evaluate_expression(node.args[0])
+                    new = self.evaluate_expression(node.args[1])
+                    count = self.evaluate_expression(node.args[2]) if len(node.args) > 2 else -1
+                    return instance.replace(old, new, count)
+                elif node.method_name == "join":
+                    if len(node.args) != 1:
+                        raise TypeError("join() takes exactly 1 argument")
+                    iterable = self.evaluate_expression(node.args[0])
+                    # Convert all elements to strings
+                    str_items = [str(item) for item in iterable]
+                    return instance.join(str_items)
+                elif node.method_name == "format":
+                    args = [self.evaluate_expression(arg) for arg in node.args]
+                    return instance.format(*args)
+
+                # Validation methods
+                elif node.method_name == "isdigit":
+                    return instance.isdigit()
+                elif node.method_name == "isalpha":
+                    return instance.isalpha()
+                elif node.method_name == "isalnum":
+                    return instance.isalnum()
+                elif node.method_name == "isspace":
+                    return instance.isspace()
+                elif node.method_name == "isupper":
+                    return instance.isupper()
+                elif node.method_name == "islower":
+                    return instance.islower()
+
+                # Utility methods
+                elif node.method_name == "repeat":
+                    if len(node.args) != 1:
+                        raise TypeError("repeat() takes exactly 1 argument")
+                    n = self.evaluate_expression(node.args[0])
+                    return instance * int(n)
+                elif node.method_name == "reverse":
+                    return instance[::-1]
+                elif node.method_name == "slice":
+                    if len(node.args) < 1:
+                        raise TypeError("slice() takes at least 1 argument")
+                    start = self.evaluate_expression(node.args[0])
+                    end = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else len(instance)
+                    return instance[int(start) : int(end)]
+            # --- END STRING METHODS ---
+
+            # --- COLLECTION METHODS: Arrays with comprehensive API ---
             if isinstance(instance, list):
                 if node.method_name == "append":
                     # Return a new list with the element added
@@ -658,7 +944,170 @@ class YmirInterpreter:
                     if not isinstance(other, list):
                         raise TypeError("extend() argument must be a list")
                     return instance + other
-            # --- END PATCH ---
+
+                # Aggregation methods
+                elif node.method_name == "sum":
+                    if not all(isinstance(x, (int, float)) for x in instance):
+                        raise TypeError("sum() requires all elements to be numeric")
+                    return sum(instance)
+                elif node.method_name == "min":
+                    if len(instance) == 0:
+                        raise ValueError("min() arg is an empty sequence")
+                    return min(instance)
+                elif node.method_name == "max":
+                    if len(instance) == 0:
+                        raise ValueError("max() arg is an empty sequence")
+                    return max(instance)
+                elif node.method_name == "avg" or node.method_name == "mean":
+                    if len(instance) == 0:
+                        raise ValueError("avg() arg is an empty sequence")
+                    if not all(isinstance(x, (int, float)) for x in instance):
+                        raise TypeError("avg() requires all elements to be numeric")
+                    return sum(instance) / len(instance)
+
+                # Functional programming methods
+                elif node.method_name == "filter":
+                    if len(node.args) != 1:
+                        raise TypeError("filter() takes exactly 1 argument")
+                    predicate_expr = node.args[0]
+                    result = []
+                    for item in instance:
+                        # Evaluate predicate with item
+                        # For now, we expect a function call or lambda
+                        if hasattr(predicate_expr, "func_name"):
+                            pred_result = self.evaluate_function_call(predicate_expr.func_name, [item])
+                        else:
+                            # Try to evaluate as expression
+                            self.local_scope["_item"] = item
+                            pred_result = self.evaluate_expression(predicate_expr)
+                            del self.local_scope["_item"]
+                        if pred_result:
+                            result.append(item)
+                    return result
+                elif node.method_name == "map":
+                    if len(node.args) != 1:
+                        raise TypeError("map() takes exactly 1 argument")
+                    func_expr = node.args[0]
+                    result = []
+                    for item in instance:
+                        if hasattr(func_expr, "func_name"):
+                            mapped_value = self.evaluate_function_call(func_expr.func_name, [item])
+                        else:
+                            self.local_scope["_item"] = item
+                            mapped_value = self.evaluate_expression(func_expr)
+                            del self.local_scope["_item"]
+                        result.append(mapped_value)
+                    return result
+                elif node.method_name == "reduce":
+                    if len(node.args) < 1 or len(node.args) > 2:
+                        raise TypeError("reduce() takes 1 or 2 arguments")
+                    func_expr = node.args[0]
+                    if len(instance) == 0:
+                        if len(node.args) == 2:
+                            return self.evaluate_expression(node.args[1])
+                        raise TypeError("reduce() of empty sequence with no initial value")
+
+                    if len(node.args) == 2:
+                        accumulator = self.evaluate_expression(node.args[1])
+                        start_idx = 0
+                    else:
+                        accumulator = instance[0]
+                        start_idx = 1
+
+                    for i in range(start_idx, len(instance)):
+                        if hasattr(func_expr, "func_name"):
+                            accumulator = self.evaluate_function_call(func_expr.func_name, [accumulator, instance[i]])
+                        else:
+                            self.local_scope["_acc"] = accumulator
+                            self.local_scope["_item"] = instance[i]
+                            accumulator = self.evaluate_expression(func_expr)
+                            del self.local_scope["_acc"]
+                            del self.local_scope["_item"]
+                    return accumulator
+                elif node.method_name == "forEach":
+                    if len(node.args) != 1:
+                        raise TypeError("forEach() takes exactly 1 argument")
+                    func_expr = node.args[0]
+                    for item in instance:
+                        if hasattr(func_expr, "func_name"):
+                            self.evaluate_function_call(func_expr.func_name, [item])
+                        else:
+                            self.local_scope["_item"] = item
+                            self.evaluate_expression(func_expr)
+                            del self.local_scope["_item"]
+                    return None
+
+                # Utility methods
+                elif node.method_name == "sort":
+                    return sorted(instance)
+                elif node.method_name == "sortDesc":
+                    return sorted(instance, reverse=True)
+                elif node.method_name == "reverse":
+                    return instance[::-1]
+                elif node.method_name == "slice":
+                    if len(node.args) < 1:
+                        raise TypeError("slice() takes at least 1 argument")
+                    start = self.evaluate_expression(node.args[0])
+                    end = self.evaluate_expression(node.args[1]) if len(node.args) > 1 else len(instance)
+                    return instance[int(start) : int(end)]
+                elif node.method_name == "indexOf":
+                    if len(node.args) != 1:
+                        raise TypeError("indexOf() takes exactly 1 argument")
+                    value = self.evaluate_expression(node.args[0])
+                    try:
+                        return instance.index(value)
+                    except ValueError:
+                        return -1
+                elif node.method_name == "lastIndexOf":
+                    if len(node.args) != 1:
+                        raise TypeError("lastIndexOf() takes exactly 1 argument")
+                    value = self.evaluate_expression(node.args[0])
+                    try:
+                        # Find last occurrence
+                        for i in range(len(instance) - 1, -1, -1):
+                            if instance[i] == value:
+                                return i
+                        return -1
+                    except:
+                        return -1
+                elif node.method_name == "contains":
+                    if len(node.args) != 1:
+                        raise TypeError("contains() takes exactly 1 argument")
+                    value = self.evaluate_expression(node.args[0])
+                    return value in instance
+                elif node.method_name == "unique":
+                    # Preserve order while removing duplicates
+                    seen = set()
+                    result = []
+                    for item in instance:
+                        # Use str representation for unhashable types
+                        try:
+                            if item not in seen:
+                                seen.add(item)
+                                result.append(item)
+                        except TypeError:
+                            item_str = str(item)
+                            if item_str not in seen:
+                                seen.add(item_str)
+                                result.append(item)
+                    return result
+                elif node.method_name == "flatten":
+                    # Flatten one level
+                    result = []
+                    for item in instance:
+                        if isinstance(item, list):
+                            result.extend(item)
+                        else:
+                            result.append(item)
+                    return result
+                elif node.method_name == "join":
+                    if len(node.args) != 1:
+                        raise TypeError("join() takes exactly 1 argument")
+                    separator = self.evaluate_expression(node.args[0])
+                    # Convert all elements to strings
+                    str_items = [str(item) for item in instance]
+                    return separator.join(str_items)
+            # --- END COLLECTION METHODS ---
 
             if isinstance(instance, Module):
                 if node.method_name in instance.exports:
@@ -679,6 +1128,49 @@ class YmirInterpreter:
                         return export
                 else:
                     raise AttributeError(f"Module '{instance.name}' has no export named '{node.method_name}'")
+
+            # Handle custom class instances
+            elif hasattr(instance, "_ymir_class_def"):
+                class_def = instance._ymir_class_def
+
+                # First, check if it's a method in the ClassDef
+                method_def = None
+                for method in class_def.methods:
+                    if method.name == node.method_name:
+                        method_def = method
+                        break
+
+                if method_def:
+                    # It's a method call
+                    # Save current scope
+                    prev_local_scope = self.local_scope.copy()
+
+                    # Add 'self' and parameters to local scope
+                    self.local_scope["self"] = instance
+                    args = [self.evaluate_expression(arg) for arg in node.args]
+                    for param, arg in zip(method_def.params[1:], args):  # Skip 'self' parameter
+                        self.local_scope[param] = arg
+
+                    # Execute method body
+                    result = None
+                    for stmt in method_def.body:
+                        result = self.evaluate(stmt)
+                        # Handle return statements
+                        if isinstance(stmt, ReturnStatement):
+                            break
+
+                    # Restore scope
+                    self.local_scope = prev_local_scope
+
+                    return result
+                else:
+                    # Not a method, so treat as attribute access
+                    if hasattr(instance, node.method_name):
+                        return getattr(instance, node.method_name)
+                    else:
+                        raise AttributeError(
+                            f"'{instance.__class__.__name__}' object has no attribute or method '{node.method_name}'"
+                        )
 
             # Fallback for regular object method calls (if you add classes with methods).
             elif hasattr(instance, node.method_name):
@@ -973,6 +1465,23 @@ class YmirInterpreter:
             return True
         return isinstance(exception, exception_class)
 
+    def evaluate_spawn_statement(self, node: SpawnStatement) -> str:
+        """Evaluate a spawn statement to launch a concurrent task."""
+        self.logger.debug(f"[evaluate_spawn_statement] Spawning: {node.call.func_name}")
+
+        # Get the function to spawn
+        func_name = node.call.func_name
+        args = [self.evaluate_expression(arg) for arg in node.call.args]
+
+        # Create a wrapper function that calls the Ymir function
+        def task_wrapper():
+            return self.evaluate_function_call(func_name, args)
+
+        # Spawn the task
+        task_id = self.concurrency_runtime.spawn(task_wrapper)
+        self.logger.info(f"[evaluate_spawn_statement] Spawned task {task_id} for function {func_name}")
+        return task_id
+
     def process_import(self, module_name: str, project_root: str):
         """Processes an import statement, creating nested module objects."""
         self.logger.debug(f"Processing import: {module_name}")
@@ -1014,30 +1523,30 @@ class YmirInterpreter:
         return True
 
     def to_numpy_matrix(self, value: Any) -> np.ndarray:
-        """Convert a Ymir matrix (2D array) to numpy array."""
+        """Convert a Ymir matrix (2D array) to backend array."""
         if self.is_matrix(value):
-            return np.array(value, dtype=np.float64)
+            return self.matrix_backend.to_array(value)
         else:
             raise ValueError("Value is not a valid matrix")
 
-    def from_numpy_matrix(self, matrix: np.ndarray) -> List[List[float]]:
-        """Convert a numpy array back to Ymir matrix format."""
-        return matrix.tolist()
+    def from_numpy_matrix(self, matrix: Any) -> List[List[float]]:
+        """Convert backend array back to Ymir matrix format."""
+        return self.matrix_backend.to_list(matrix)
 
     def matrix_operation(self, left: Any, right: Any, operation: str) -> Any:
-        """Perform matrix operations using numpy."""
-        # Convert to numpy arrays
+        """Perform matrix operations using the matrix backend."""
+        # Convert to backend arrays
         left_matrix = self.to_numpy_matrix(left)
         right_matrix = self.to_numpy_matrix(right)
 
         if operation == "+":
-            result = left_matrix + right_matrix
+            result = self.matrix_backend.add(left_matrix, right_matrix)
         elif operation == "-":
-            result = left_matrix - right_matrix
+            result = self.matrix_backend.subtract(left_matrix, right_matrix)
         elif operation == "*":
-            result = left_matrix * right_matrix  # Elementwise multiplication
+            result = self.matrix_backend.multiply(left_matrix, right_matrix)  # Elementwise multiplication
         elif operation == "@":
-            result = left_matrix @ right_matrix  # Matrix multiplication
+            result = self.matrix_backend.matmul(left_matrix, right_matrix)  # Matrix multiplication
         else:
             raise ValueError(f"Unsupported matrix operation: {operation}")
 

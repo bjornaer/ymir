@@ -1,0 +1,101 @@
+module gpu_matrix_demo
+
+# GPU Matrix Operations Demo
+
+import stdlib.math
+
+func main() {
+    print("=== Ymir GPU Matrix Operations Demo ===")
+    print("")
+    
+    # Check GPU availability
+    gpu_available = matrix_gpu_available()
+    if gpu_available {
+        print("✓ GPU acceleration is available!")
+    } else {
+        print("✗ GPU not available, using CPU fallback")
+    }
+    print("")
+    
+    # Create some matrices
+    print("Creating matrices...")
+    matrix_a = [[1.0, 2.0, 3.0], 
+                [4.0, 5.0, 6.0],
+                [7.0, 8.0, 9.0]]
+    
+    matrix_b = [[9.0, 8.0, 7.0],
+                [6.0, 5.0, 4.0],
+                [3.0, 2.0, 1.0]]
+    
+    print("Matrix A:")
+    print(str(matrix_a))
+    print("")
+    print("Matrix B:")
+    print(str(matrix_b))
+    print("")
+    
+    # Basic matrix operations
+    print("=== Basic Operations (CPU/GPU) ===")
+    
+    # Element-wise addition
+    result_add = matrix_a + matrix_b
+    print("A + B:")
+    print(str(result_add))
+    print("")
+    
+    # Matrix multiplication
+    result_mul = matrix_a @ matrix_b
+    print("A @ B (matrix multiplication):")
+    print(str(result_mul))
+    print("")
+    
+    # Transpose
+    result_transpose = transpose(matrix_a)
+    print("Transpose of A:")
+    print(str(result_transpose))
+    print("")
+    
+    # GPU-specific operations
+    if gpu_available {
+        print("=== GPU-Accelerated Operations ===")
+        
+        # Transfer to GPU
+        print("Transferring matrices to GPU...")
+        gpu_a = matrix_to_gpu(matrix_a)
+        gpu_b = matrix_to_gpu(matrix_b)
+        print("✓ Matrices on GPU")
+        print("")
+        
+        # GPU matrix multiplication
+        print("Performing GPU matrix multiplication...")
+        result_gpu = matrix_gpu_multiply(gpu_a, gpu_b)
+        print("GPU Result:")
+        print(str(result_gpu))
+        print("")
+    }
+    
+    # Matrix statistics
+    print("=== Matrix Operations ===")
+    shape_a = shape(matrix_a)
+    print("Shape of matrix A: " + str(shape_a))
+    
+    # Determinant
+    det_a = det(matrix_a)
+    print("Determinant of A: " + str(det_a))
+    print("")
+    
+    # Test with invertible matrix
+    inv_matrix = [[4.0, 7.0], [2.0, 6.0]]
+    print("Invertible matrix:")
+    print(str(inv_matrix))
+    
+    inv_result = inverse(inv_matrix)
+    print("Inverse:")
+    print(str(inv_result))
+    print("")
+    
+    print("GPU Matrix demo complete!")
+}
+
+main()
+

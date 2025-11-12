@@ -1,0 +1,186 @@
+module stdlib_showcase
+
+# ========================================
+# Ymir Standard Library Showcase
+# ========================================
+# Demonstrating string methods, collection methods,
+# operator overloading, and functional programming
+# ========================================
+
+func main() {
+    print("=== Ymir Stdlib Showcase ===")
+    print("")
+    
+    # STRING METHODS
+    print("=== String Methods ===")
+    
+    # Basic transformations
+    text = "hello world"
+    print("Original: " + text)
+    print("Upper: " + text.upper())
+    print("Title: " + text.title())
+    print("Capitalized: " + text.capitalize())
+    print("")
+    
+    # String search and manipulation
+    sentence = "The quick brown fox jumps over the lazy dog"
+    print("Sentence: " + sentence)
+    print("Contains 'fox': " + str(sentence.contains("fox")))
+    print("Index of 'fox': " + str(sentence.find("fox")))
+    print("Count 'the': " + str(sentence.lower().count("the")))
+    print("Replace 'fox' with 'cat': " + sentence.replace("fox", "cat"))
+    print("")
+    
+    # String splitting and joining
+    words = sentence.split(" ")
+    print("Words: " + str(words))
+    joined = " | ".join(words)
+    print("Joined with ' | ': " + joined)
+    print("")
+    
+    # String validation
+    digit_str = "12345"
+    alpha_str = "hello"
+    mixed_str = "hello123"
+    print("'" + digit_str + "' is digit: " + str(digit_str.isdigit()))
+    print("'" + alpha_str + "' is alpha: " + str(alpha_str.isalpha()))
+    print("'" + mixed_str + "' is alnum: " + str(mixed_str.isalnum()))
+    print("")
+    
+    # String operators
+    greeting = "Hello" + " " + "World" + 42
+    print("Concatenation with number: " + greeting)
+    repeated = "abc" * 3
+    print("String repetition: " + repeated)
+    print("")
+    
+    # Method chaining
+    messy = "  hello WORLD  "
+    clean = messy.strip().lower().capitalize()
+    print("Cleaned string: '" + clean + "'")
+    print("")
+    
+    # COLLECTION METHODS
+    print("=== Collection Methods ===")
+    
+    # Aggregation
+    numbers = [5, 2, 8, 1, 9, 3]
+    print("Numbers: " + str(numbers))
+    print("Sum: " + str(numbers.sum()))
+    print("Min: " + str(numbers.min()))
+    print("Max: " + str(numbers.max()))
+    print("Average: " + str(numbers.avg()))
+    print("")
+    
+    # Sorting and reversing
+    sorted_nums = numbers.sort()
+    print("Sorted: " + str(sorted_nums))
+    reversed_nums = numbers.reverse()
+    print("Reversed: " + str(reversed_nums))
+    sorted_desc = numbers.sortDesc()
+    print("Sorted descending: " + str(sorted_desc))
+    print("")
+    
+    # Array manipulation
+    arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    print("Array: " + str(arr))
+    sliced = arr.slice(2, 7)
+    print("Sliced [2:7]: " + str(sliced))
+    print("Index of 5: " + str(arr.indexOf(5)))
+    print("Contains 7: " + str(arr.contains(7)))
+    print("")
+    
+    # Unique and flatten
+    duplicates = [1, 2, 2, 3, 1, 4, 3, 5, 2]
+    unique_vals = duplicates.unique()
+    print("Duplicates: " + str(duplicates))
+    print("Unique: " + str(unique_vals))
+    
+    nested = [[1, 2], [3, 4], [5, 6]]
+    flattened = nested.flatten()
+    print("Nested: " + str(nested))
+    print("Flattened: " + str(flattened))
+    print("")
+    
+    # Join array to string
+    items = ["apple", "banana", "orange"]
+    fruit_list = items.join(", ")
+    print("Fruits: " + fruit_list)
+    print("")
+    
+    # Array operators
+    arr1 = [1, 2, 3]
+    arr2 = [4, 5, 6]
+    combined = arr1 + arr2
+    print("Array 1: " + str(arr1))
+    print("Array 2: " + str(arr2))
+    print("Combined: " + str(combined))
+    print("")
+    
+    # Method chaining
+    data = [10, 5, 8, 3, 7, 5, 10, 2]
+    processed = data.unique().sort().slice(0, 5)
+    print("Original data: " + str(data))
+    print("Processed (unique, sorted, sliced): " + str(processed))
+    print("")
+    
+    # Immutability demonstration
+    original = [3, 1, 2]
+    sorted_copy = original.sort()
+    print("Original array: " + str(original))
+    print("Sorted copy: " + str(sorted_copy))
+    print("Original unchanged!")
+    print("")
+    
+    # REAL-WORLD EXAMPLES
+    print("=== Real-World Examples ===")
+    
+    # Example 1: Text processing
+    print("Example 1: Processing user input")
+    user_input = "  john.DOE@EMAIL.com  "
+    email = user_input.strip().lower()
+    print("Raw input: '" + user_input + "'")
+    print("Cleaned email: " + email)
+    
+    # Validate email format
+    valid = email.contains("@") && email.contains(".")
+    print("Valid format: " + str(valid))
+    print("")
+    
+    # Example 2: Data analysis
+    print("Example 2: Sales data analysis")
+    daily_sales = [120, 95, 135, 110, 150, 95, 130]
+    print("Daily sales: " + str(daily_sales))
+    print("Total: $" + str(daily_sales.sum()))
+    print("Average: $" + str(daily_sales.avg()))
+    print("Best day: $" + str(daily_sales.max()))
+    print("Worst day: $" + str(daily_sales.min()))
+    print("")
+    
+    # Example 3: Tag processing
+    print("Example 3: Processing tags")
+    tags_string = "python, javascript, go, python, rust, go"
+    tags = tags_string.split(", ")
+    unique_tags = tags.unique().sort()
+    print("Raw tags: " + tags_string)
+    print("Unique tags: " + str(unique_tags))
+    formatted = unique_tags.join(" | ")
+    print("Formatted: " + formatted)
+    print("")
+    
+    # Example 4: Score calculation
+    print("Example 4: Student scores")
+    scores = [85, 92, 78, 95, 88, 76, 90]
+    print("Scores: " + str(scores))
+    average = scores.avg()
+    print("Average: " + str(average))
+    
+    top_scores = scores.sortDesc().slice(0, 3)
+    print("Top 3 scores: " + str(top_scores))
+    print("")
+    
+    print("=== Showcase Complete ===")
+}
+
+main()
+

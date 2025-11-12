@@ -12,6 +12,7 @@ from ymir.core.ast import (
     ExportDef,
     Expression,
     FinallyClause,
+    ForInLoop,
     FunctionCall,
     FunctionDef,
     IfStatement,
@@ -49,6 +50,8 @@ class SemanticAnalyzer:
             self.visit_if_statement(node)
         elif isinstance(node, WhileStatement):
             self.visit_while_statement(node)
+        elif isinstance(node, ForInLoop):
+            self.visit_for_in_loop(node)
         elif isinstance(node, Assignment):
             self.visit_assignment(node)
         elif isinstance(node, Expression):
@@ -123,6 +126,18 @@ class SemanticAnalyzer:
     def visit_while_statement(self, node: WhileStatement) -> None:
         self.visit_expression(node.condition)
         self.symbol_table.enter_scope()
+        for statement in node.body:
+            self.visit(statement)
+        self.symbol_table.exit_scope()
+
+    def visit_for_in_loop(self, node: ForInLoop) -> None:
+        # Visit the iterable expression
+        self.visit_expression(node.iterable)
+        # Enter a new scope for the loop
+        self.symbol_table.enter_scope()
+        # Define the loop variable
+        self.symbol_table.define(node.var, "variable")
+        # Visit the loop body
         for statement in node.body:
             self.visit(statement)
         self.symbol_table.exit_scope()

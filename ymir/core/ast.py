@@ -214,3 +214,43 @@ class ArrayAccess(ASTNode):
     def __init__(self, array: ASTNode, index: ASTNode):
         self.array = array
         self.index = index
+
+
+# Concurrency AST Nodes
+
+
+class SpawnStatement(ASTNode):
+    """AST node for spawning a concurrent task: spawn functionCall()"""
+
+    def __init__(self, call: FunctionCall):
+        self.call = call
+
+
+class ChannelSend(ASTNode):
+    """AST node for sending to a channel: channel <- value"""
+
+    def __init__(self, channel: ASTNode, value: ASTNode):
+        self.channel = channel
+        self.value = value
+
+
+class ChannelReceive(ASTNode):
+    """AST node for receiving from a channel: value <- channel or just <- channel"""
+
+    def __init__(self, channel: ASTNode):
+        self.channel = channel
+
+
+class SelectStatement(ASTNode):
+    """AST node for select statement (future implementation)"""
+
+    def __init__(self, cases: List["SelectCase"]):
+        self.cases = cases
+
+
+class SelectCase(ASTNode):
+    """AST node for a case in a select statement"""
+
+    def __init__(self, operation: ASTNode, body: List[ASTNode]):
+        self.operation = operation  # Either ChannelSend or ChannelReceive
+        self.body = body

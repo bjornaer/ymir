@@ -1,15 +1,76 @@
 module stdlib.string
 
+# String manipulation functions
+# Note: Most string operations are available as methods directly on strings
+
 export func concat(a: string, b: string) -> string {
     return a + b
 }
 
 export func split(s: string, delimiter: string) -> array[string] {
-    # Placeholder for actual split logic
-    return []
+    return s.split(delimiter)
 }
 
 export func replace(s: string, old: string, new: string) -> string {
-    # Placeholder for actual replace logic
-    return s
+    return s.replace(old, new)
+}
+
+export func upper(s: string) -> string {
+    return s.upper()
+}
+
+export func lower(s: string) -> string {
+    return s.lower()
+}
+
+export func trim(s: string) -> string {
+    return s.strip()
+}
+
+export func startsWith(s: string, prefix: string) -> bool {
+    return s.startswith(prefix)
+}
+
+export func endsWith(s: string, suffix: string) -> bool {
+    return s.endswith(suffix)
+}
+
+export func indexOf(s: string, substring: string) -> int {
+    return s.find(substring)
+}
+
+export func contains(s: string, substring: string) -> bool {
+    return s.contains(substring)
+}
+
+export func repeat(s: string, n: int) -> string {
+    return s * n
+}
+
+export func reverse(s: string) -> string {
+    return s.reverse()
+}
+
+export func join(arr: array[string], separator: string) -> string {
+    return separator.join(arr)
+}
+
+export func isDigit(s: string) -> bool {
+    return s.isdigit()
+}
+
+export func isAlpha(s: string) -> bool {
+    return s.isalpha()
+}
+
+export func isAlnum(s: string) -> bool {
+    return s.isalnum()
+}
+
+export func capitalize(s: string) -> string {
+    return s.capitalize()
+}
+
+export func title(s: string) -> string {
+    return s.title()
 }

@@ -1,0 +1,62 @@
+module concurrency_demo
+
+# Concurrency Demo: Spawning tasks and using channels
+
+import stdlib.math
+
+# Worker function that performs some computation
+func worker(id: int, ch: any) {
+    print("Worker " + str(id) + " starting...")
+    
+    # Simulate some work
+    result = stdlib.math.factorial(id + 3)
+    
+    # Send result to channel
+    ch <- result
+    
+    print("Worker " + str(id) + " finished with result: " + str(result))
+}
+
+# Function to sum numbers from a channel
+func sum_results(ch: any, count: int) -> int {
+    total = 0
+    var i: int = 0
+    
+    while i < count {
+        value <- ch
+        total = total + value
+        i = i + 1
+    }
+    
+    return total
+}
+
+func main() {
+    print("=== Ymir Concurrency Demo ===")
+    print("")
+    
+    # Create a channel for communication
+    ch = make_channel(10)
+    
+    # Spawn multiple worker tasks
+    print("Spawning 5 workers...")
+    spawn worker(1, ch)
+    spawn worker(2, ch)
+    spawn worker(3, ch)
+    spawn worker(4, ch)
+    spawn worker(5, ch)
+    
+    print("")
+    print("Collecting results from channel...")
+    
+    # Collect all results
+    total = sum_results(ch, 5)
+    
+    print("")
+    print("Total of all results: " + str(total))
+    print("")
+    print("Concurrency demo complete!")
+}
+
+main()
+

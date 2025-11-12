@@ -1,13 +1,27 @@
 module stdlib.http
 
-# Placeholder for actual HTTP GET logic
+# HTTP client functions using aiohttp
 
-export func get(url: string) -> string {
-    return ""
+export func get(url: string) -> any {
+    # Perform HTTP GET request
+    # Returns tuple of (status_code, body, headers)
+    return http_get(url, nil)
 }
 
-# Placeholder for actual HTTP POST logic
+export func get_with_headers(url: string, headers: map[string]string) -> any {
+    # Perform HTTP GET request with custom headers
+    # Returns tuple of (status_code, body, headers)
+    return http_get(url, headers)
+}
 
-export func post(url: string, data: string) -> string {
-    return ""
+export func post(url: string, data: string) -> any {
+    # Perform HTTP POST request with string data
+    # Returns tuple of (status_code, body, headers)
+    return http_post(url, data, nil, nil)
+}
+
+export func post_json(url: string, json_data: any) -> any {
+    # Perform HTTP POST request with JSON data
+    # Returns tuple of (status_code, body, headers)
+    return http_post(url, nil, json_data, nil)
 }

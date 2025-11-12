@@ -490,4 +490,117 @@ func divide(a: int, b: int) -> int {
 main()
 ```
 
+## Method Chaining
+
+Ymir supports method chaining for fluent, readable code:
+
+### String Method Chaining
+
+```ymr
+# Clean and transform user input
+user_input = "  HELLO WORLD  "
+result = user_input.strip().lower().capitalize()
+# Result: "Hello world"
+
+# Complex text processing
+text = "hello,world,test"
+words = text.split(",")
+formatted = " | ".join(words).upper()
+# Result: "HELLO | WORLD | TEST"
+```
+
+### Collection Method Chaining
+
+```ymr
+# Data processing pipeline
+data = [5, 2, 8, 1, 9, 2, 5, 3]
+result = data.unique().sort().slice(0, 5)
+# Result: [1, 2, 3, 5, 8]
+```
+
+## Operator Overloading Semantics
+
+Ymir operators work intelligently based on operand types:
+
+### Addition (`+`)
+
+- **Numbers**: Arithmetic addition
+- **Strings**: Concatenation
+- **String + Number**: Automatic type conversion
+- **Arrays**: Concatenation
+- **Matrices**: Element-wise addition
+
+```ymr
+# String + Number auto-conversion
+result = "Count: " + 42  # "Count: 42"
+```
+
+### Multiplication (`*`)
+
+- **Numbers**: Arithmetic multiplication
+- **String * int**: String repetition
+- **Matrices**: Element-wise multiplication
+
+```ymr
+# String repetition
+result = "abc" * 3  # "abcabcabc"
+```
+
+### Matrix Multiplication (`@`)
+
+- **Matrices only**: True matrix multiplication
+
+```ymr
+result = matrix_a @ matrix_b
+```
+
+## Functional Programming Patterns
+
+Ymir embraces functional programming with immutable collections:
+
+### Immutability
+
+All collection methods return new arrays:
+
+```ymr
+original = [3, 1, 2]
+sorted_copy = original.sort()
+# original is still [3, 1, 2]
+# sorted_copy is [1, 2, 3]
+```
+
+### Higher-Order Functions
+
+```ymr
+func isEven(n: int) -> bool {
+    return n % 2 == 0
+}
+
+func double(n: int) -> int {
+    return n * 2
+}
+
+numbers = [1, 2, 3, 4, 5, 6]
+result = numbers.filter(isEven).map(double)
+# Result: [4, 8, 12]
+```
+
+### Complete Functional Pipeline
+
+```ymr
+func isPositive(n: int) -> bool { return n > 0 }
+func square(n: int) -> int { return n * n }
+func add(a: int, b: int) -> int { return a + b }
+
+numbers = [-2, -1, 0, 1, 2, 3, 4, 5]
+result = numbers.filter(isPositive).map(square).reduce(add)
+# Result: 55 (1 + 4 + 9 + 16 + 25)
+```
+
+## Standard Library Reference
+
+For complete documentation of all string methods, collection methods, and operators, see:
+- `docs/stdlib_reference.md` - Complete API reference
+- `examples/stdlib_showcase.ymr` - Comprehensive examples
+
 This syntax guide covers the core features of the Ymir language. As the language evolves, additional features and syntax will be documented here.

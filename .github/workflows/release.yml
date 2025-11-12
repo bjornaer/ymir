@@ -3,97 +3,268 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
-  build:
+  build-wheels:
+    name: Build Python Wheels
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.12'
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
           version: 1.8.2
-    - name: Install dependencies
-      run: |
-          poetry install --no-interaction
+      
+      - name: Install dependencies
+        run: poetry install --no-interaction
+      
+      - name: Build wheels and sdist
+        run: poetry build
+      
+      - name: Generate requirements.txt
+        run: poetry export -f requirements.txt --output requirements.txt --without-hashes
+      
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: python-packages
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            requirements.txt
 
-    - name: Build the project
-      run: |
-        poetry build
-        mkdir -p dist
-        cp dist/*.whl dist/*.tar.gz dist/
-
-    - name: Generate requirements.txt
-      run: |
-        poetry export -f requirements.txt --output dist/requirements.txt
-
-    - name: Upload Release Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: ymir-release
-        path: dist/
-
-  homebrew:
-    needs: build
-    runs-on: ubuntu-latest
-
+  build-executables:
+    name: Build Executable - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: macos
+          - os: macos-14  # Apple Silicon
+            platform: macos-arm64
+          - os: windows-latest
+            platform: windows
+    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 1.8.2
+      
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction
+          poetry run pip install pyinstaller
+      
+      - name: Build executable
+        run: poetry run python scripts/build_executable.py
+      
+      - name: List dist directory
+        run: ls -la dist/
+      
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd dist
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            certutil -hashfile ymir-*.exe SHA256 > checksums.txt
+          else
+            shasum -a 256 ymir-* > checksums.txt
+          fi
+          cat checksums.txt
+      
+      - name: Upload executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: executable-${{ matrix.platform }}
+          path: |
+            dist/ymir-*
+            dist/checksums.txt
 
-    - name: Set up Git
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  create-release-assets:
+    name: Create Release Assets
+    needs: [build-wheels, build-executables]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      
+      - name: List artifacts
+        run: |
+          echo "Downloaded artifacts:"
+          find artifacts -type f
+      
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Copy Python packages
+          cp artifacts/python-packages/*.whl release-assets/ || true
+          cp artifacts/python-packages/*.tar.gz release-assets/ || true
+          cp artifacts/python-packages/requirements.txt release-assets/ || true
+          
+          # Copy executables
+          cp artifacts/executable-*/* release-assets/ || true
+          
+          # Create combined checksums
+          cd release-assets
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+      
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Create Homebrew Formula
-      id: create_formula
-      run: |
-        VERSION=$(git describe --tags)
-        SHA256=$(sha256sum dist/*.tar.gz | awk '{print $1}')
-        cat <<EOF > ymir.rb
-        class Ymir < Formula
-          include Language::Python::Virtualenv
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: create-release-assets
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Get release info
+        id: release
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Download release tarball and calculate SHA256
+        id: tarball
+        run: |
+          VERSION=${{ steps.release.outputs.version }}
+          wget https://github.com/${{ github.repository }}/archive/refs/tags/${VERSION}.tar.gz -O ymir-${VERSION}.tar.gz
+          SHA256=$(sha256sum ymir-${VERSION}.tar.gz | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "SHA256: $SHA256"
+      
+      - name: Clone homebrew-ymir repository
+        run: |
+          git clone https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/bjornaer/homebrew-ymir.git
+          cd homebrew-ymir
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Create Homebrew Formula
+        run: |
+          VERSION=${{ steps.release.outputs.version }}
+          SHA256=${{ steps.tarball.outputs.sha256 }}
+          
+          # Ensure Formula directory exists
+          mkdir -p homebrew-ymir/Formula
+          
+          cat > homebrew-ymir/Formula/ymir.rb << 'EOF'
+class Ymir < Formula
+  include Language::Python::Virtualenv
 
-          desc "A programming language for machine learning engineers."
-          homepage "https://github.com/bjornaer/ymir"
-          url "https://github.com/bjornaer/ymir/releases/download/${VERSION}/ymir-${VERSION}.tar.gz"
-          sha256 "${SHA256}"
-          version "${VERSION}"
+  desc "Modern programming language for ML with concurrency and GPU support"
+  homepage "https://github.com/bjornaer/ymir"
+  url "https://github.com/bjornaer/ymir/archive/refs/tags/VERSION_PLACEHOLDER.tar.gz"
+  sha256 "SHA256_PLACEHOLDER"
+  license "MIT"
 
-          depends_on "python@3.12"
+  depends_on "python@3.12"
+  depends_on "git"
 
-          def install
-            virtualenv_install_with_resources
-          end
+  resource "click" do
+    url "https://files.pythonhosted.org/packages/96/d3/f04c7bfcf5c1862a2a5b845c6b2b360488cf47af55dfa79c98f6a6bf98b5/click-8.1.7.tar.gz"
+    sha256 "ca9853ad459e787e2192211578cc907e7594e294c7ccc834310722b41b9ca6de"
+  end
 
-          resource "requirements" do
-            url "https://github.com/bjornaer/ymir/releases/download/${VERSION}/requirements.txt"
-          end
+  resource "toml" do
+    url "https://files.pythonhosted.org/packages/be/ba/1f744cdc819428fc6b5084ec34d9b30660f6f9daaf70eead706e3203ec3c/toml-0.10.2.tar.gz"
+    sha256 "b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"
+  end
 
-          def caveats
-            <<~EOS
-              To use the Ymir CLI, you might need to add the Homebrew Python site-packages to your PYTHONPATH:
-                export PYTHONPATH=#{HOMEBREW_PREFIX}/lib/python3.12/site-packages:$PYTHONPATH
-            EOS
-          end
-        end
-        EOF
+  resource "llvmlite" do
+    url "https://files.pythonhosted.org/packages/d4/e4/8c6b9307c9bb22a5aa72dbaa7efeb1cca091e92d2b92f3e4ec4476c22229/llvmlite-0.43.0.tar.gz"
+    sha256 "ae2b5b5c3ef67354824fb75517c8db08386df3f5e7c1b9e74b3f5c8b4843e91c"
+  end
 
-    - name: Push Homebrew Formula
-      run: |
-        git clone https://github.com/bjornaer/homebrew-tap.git
-        cd homebrew-tap
-        cp ../ymir.rb .
-        git add ymir.rb
-        git commit -m "Release ${GITHUB_REF#refs/tags/}"
-        git push
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  resource "numpy" do
+    url "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b8cd166c1ac8438307c14058/numpy-1.26.4.tar.gz"
+    sha256 "2a02aba9ed12e4ac4eb3ea9421c420301a0c6460d9830d74a9df87efa4912010"
+  end
+
+  resource "requests" do
+    url "https://files.pythonhosted.org/packages/63/70/2bf7780ad2d390a8d301ad0b550f1581eadbd9a20f896afe06353c2a2913/requests-2.32.3.tar.gz"
+    sha256 "55365417734eb18255590a9ff9eb97e9e1da868d4ccd6402399eaf68af20a760"
+  end
+
+  resource "pandas" do
+    url "https://files.pythonhosted.org/packages/9c/d6/9f8431bacc2e19dca897724cd097b1bb224a6ad5433784a44b587c7c13af/pandas-2.2.3.tar.gz"
+    sha256 "4f18ba62b61d7e192368b84517265a99b4d7ee8912f8708660fb4a366cc82667"
+  end
+
+  resource "aiohttp" do
+    url "https://files.pythonhosted.org/packages/1a/38/97799ec5e7e111e09e3832e8a3e093fb381b42ede3c1bcbb2c24a8dbe1e5/aiohttp-3.9.1.tar.gz"
+    sha256 "8fc49a87ac269d4529da45871e2ffb6874e87779c3d0e2ccd813c0899221239d"
+  end
+
+  resource "gitpython" do
+    url "https://files.pythonhosted.org/packages/b6/a1/106fd9fa2dd989b6a3e5b5f4c23e6ba4c457d8fe4b84a5ec28e6fc9c58a1/GitPython-3.1.40.tar.gz"
+    sha256 "22b126e9ffb671fdd0c129796343a02bf67bf2994b35c9b4c7c6b5d5e3b1c8e7"
+  end
+
+  def install
+    virtualenv_install_with_resources
+  end
+
+  test do
+    system bin/"ymir", "--version"
+    system bin/"ymir", "--help"
+  end
+end
+EOF
+          
+          # Replace placeholders
+          sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" homebrew-ymir/Formula/ymir.rb
+          sed -i "s/SHA256_PLACEHOLDER/$SHA256/g" homebrew-ymir/Formula/ymir.rb
+          
+          echo "Generated formula:"
+          cat homebrew-ymir/Formula/ymir.rb
+      
+      - name: Commit and push to homebrew-ymir
+        run: |
+          cd homebrew-ymir
+          git add Formula/ymir.rb
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
+          VERSION=${{ steps.release.outputs.version }}
+          git commit -m "Update Ymir formula to $VERSION"
+          git push origin main
+          
+          echo "::notice::Successfully updated Homebrew formula to $VERSION"
