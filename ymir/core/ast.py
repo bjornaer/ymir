@@ -137,15 +137,6 @@ class Break(ASTNode):
     pass
 
 
-class AsyncFunctionDef(FunctionDef):
-    pass
-
-
-class AwaitExpression(Expression):
-    def __init__(self, expression: Expression):
-        super().__init__(expression)
-
-
 class ImportDef(ASTNode):
     def __init__(self, module_name: str):
         self.module_name = module_name

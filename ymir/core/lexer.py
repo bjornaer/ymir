@@ -70,8 +70,6 @@ class Lexer:
             "nil",
             "true",
             "false",
-            "async",
-            "await",
             "module",
             "int",  # Type hint keywords
             "float",  # Type hint keywords
@@ -101,8 +99,8 @@ class Lexer:
             ("STRING", r"\".*?\""),
             (
                 "OP",
-                r"(<-|\+\+|\+=|&&|\|\||[+\-*/%=<>!@]+)",
-            ),  # Added '<-' for channels and '@' for matrix multiplication
+                r"(:=|<-|\+\+|\+=|&&|\|\||[+\-*/%=<>!@]+)",
+            ),  # Added ':=' for channel receive declaration, '<-' for channels and '@' for matrix multiplication
             ("DOT", r"\."),
             ("BRACE_OPEN", r"\{"),
             ("BRACE_CLOSE", r"\}"),

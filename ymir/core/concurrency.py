@@ -4,6 +4,7 @@ Concurrency runtime for Ymir programming language.
 Provides Go-style concurrency primitives:
 - spawn: Launch concurrent tasks
 - channels: Type-safe communication between tasks
+- async/await: Asynchronous function support
 """
 
 import asyncio
@@ -84,6 +85,7 @@ class ConcurrencyRuntime:
     Runtime manager for concurrent tasks in Ymir.
 
     Manages spawned tasks, channels, and the event loop.
+    Uses Go-style concurrency with spawn and channels.
     """
 
     def __init__(self):
@@ -93,6 +95,8 @@ class ConcurrencyRuntime:
         self.tasks: Dict[str, asyncio.Task] = {}
         self.channels: Dict[str, Channel] = {}
         self._task_counter = 0
+        self._in_async_context = False
+        self._in_spawned_task = False  # Separate flag for spawned tasks vs entry point
 
     def initialize(self) -> None:
         """Initialize or get the event loop."""
@@ -101,6 +105,10 @@ class ConcurrencyRuntime:
             logger.info("Using existing event loop")
         except RuntimeError:
             # No running loop, create a new one
+            # Clear any tasks from a previous loop to avoid cross-loop issues
+            if self.tasks:
+                logger.warning(f"Clearing {len(self.tasks)} tasks from previous event loop")
+                self.tasks.clear()
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
             logger.info("Created new event loop")
@@ -127,9 +135,12 @@ class ConcurrencyRuntime:
         if asyncio.iscoroutinefunction(func):
             coro = func(*args, **kwargs)
         else:
-            # Run in thread pool for CPU-bound tasks
+            # Wrap sync function in async wrapper (cooperative, not parallel)
+            # This avoids threading issues with asyncio
             async def wrapped():
-                return await self.loop.run_in_executor(self.thread_pool, func, *args, **kwargs)
+                # Yield control to allow other tasks to run
+                await asyncio.sleep(0)
+                return func(*args, **kwargs)
 
             coro = wrapped()
 
@@ -175,12 +186,37 @@ class ConcurrencyRuntime:
     async def wait_all(self) -> None:
         """Wait for all spawned tasks to complete."""
         if self.tasks:
-            await asyncio.gather(*self.tasks.values(), return_exceptions=True)
-            logger.info("All tasks completed")
+            # Filter out tasks that don't belong to the current loop
+            current_loop = asyncio.get_running_loop()
+            valid_tasks = []
+            invalid_task_ids = []
+
+            for task_id, task in self.tasks.items():
+                try:
+                    # Check if the task belongs to the current loop
+                    if task.get_loop() == current_loop:
+                        valid_tasks.append(task)
+                    else:
+                        invalid_task_ids.append(task_id)
+                        logger.warning(f"Task {task_id} belongs to a different event loop, skipping")
+                except Exception as e:
+                    logger.warning(f"Error checking task {task_id}: {e}")
+                    invalid_task_ids.append(task_id)
+
+            # Remove invalid tasks
+            for task_id in invalid_task_ids:
+                del self.tasks[task_id]
+
+            # Gather only valid tasks
+            if valid_tasks:
+                await asyncio.gather(*valid_tasks, return_exceptions=True)
+                logger.info(f"All {len(valid_tasks)} valid tasks completed")
+            else:
+                logger.info("No valid tasks to wait for")
 
     def run_until_complete(self, coro) -> Any:
         """
-        Run a coroutine until it completes.
+        Run a coroutine until it completes, ensuring spawned tasks can execute.
 
         Args:
             coro: The coroutine to run
@@ -191,7 +227,57 @@ class ConcurrencyRuntime:
         if self.loop is None:
             self.initialize()
 
-        return self.loop.run_until_complete(coro)
+        # Check if the loop is already running
+        try:
+            running_loop = asyncio.get_running_loop()
+            if running_loop is self.loop:
+                # Loop is already running - we're inside an async context
+                # This shouldn't happen with the new design where everything runs async
+                logger.error("Attempted to call run_until_complete from within running loop!")
+                raise RuntimeError("Cannot call run_until_complete from async context")
+        except RuntimeError:
+            # No running loop, we can safely use run_until_complete
+            pass
+
+        # Wrap the coroutine to ensure spawned tasks get a chance to run
+        async def run_with_tasks():
+            # Give spawned tasks a chance to start
+            await asyncio.sleep(0)
+            # Now await the main coroutine
+            result = await coro
+            # Give tasks another chance after the operation
+            await asyncio.sleep(0)
+            return result
+
+        # Run the coroutine to completion
+        # The event loop will also process any spawned tasks
+        return self.loop.run_until_complete(run_with_tasks())
+
+    def enter_async_context(self) -> None:
+        """Mark that we're entering an async execution context."""
+        self._in_async_context = True
+
+    def exit_async_context(self) -> None:
+        """Mark that we're exiting an async execution context."""
+        self._in_async_context = False
+
+    def is_in_async_context(self) -> bool:
+        """Check if we're currently in an async execution context."""
+        return self._in_async_context
+
+    def enter_spawned_task_context(self) -> None:
+        """Mark that we're in a spawned task (not entry point)."""
+        self._in_spawned_task = True
+        self.enter_async_context()
+
+    def exit_spawned_task_context(self) -> None:
+        """Mark that we're exiting a spawned task."""
+        self._in_spawned_task = False
+        self.exit_async_context()
+
+    def is_in_spawned_task(self) -> bool:
+        """Check if currently executing in a spawned task (not entry point)."""
+        return self._in_spawned_task
 
     def shutdown(self) -> None:
         """Shutdown the runtime, cleaning up resources."""

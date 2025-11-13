@@ -372,6 +372,9 @@ class TypeChecker:
         elif isinstance(node, BinaryOp):
             print(f"[DEBUG] visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
             return self.visit_binary_op(node)
+        # Handle ChannelReceive node (<-ch)
+        elif isinstance(node, ChannelReceive):
+            return self.visit_channel_receive(node)
         # Handle other literal types (add as needed)
         # elif isinstance(node, IntLiteral):
         #     return IntType()
@@ -402,6 +405,9 @@ class TypeChecker:
         # Arithmetic operators
         arithmetic_operators = ["+", "-", "*", "/"]
         if node.operator in arithmetic_operators:
+            # Allow operations with AnyType (from channel receives, etc.)
+            if isinstance(left_type, AnyType) or isinstance(right_type, AnyType):
+                return AnyType()
             # Allow string concatenation for '+'
             if node.operator == "+" and isinstance(left_type, StringType):
                 # Allow string + string
@@ -781,24 +787,8 @@ class TypeChecker:
         return self.visit(node.call)
 
     def visit_channel_send(self, node: ChannelSend):
-        """Type check a channel send operation.
-
-        Note: Due to parser limitations, `var <- ch` is parsed as ChannelSend
-        where var is the "channel" and ch is the "value". We need to detect this
-        case and treat it as a variable assignment from a channel receive.
-        """
-        # Check if this is actually a receive (var <- channel) vs send (channel <- value)
-        # If the "channel" is a simple identifier that doesn't exist, it's likely a receive
-        if isinstance(node.channel, Expression) and isinstance(node.channel.expression, str):
-            var_name = node.channel.expression
-            if var_name not in self.symbol_table:
-                # This is a receive: var <- channel
-                # Register the variable with AnyType (we don't know channel element type)
-                self.symbol_table[var_name] = AnyType()
-                self.visit_expression(node.value)  # Type check the actual channel
-                return None
-
-        # Normal send: channel <- value
+        """Type check a channel send operation: ch <- value"""
+        # Channel send operation
         self.visit_expression(node.channel)
         self.visit_expression(node.value)
         return None

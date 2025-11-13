@@ -5,10 +5,9 @@ from ymir.core.ast import (
     ArrayLiteral,
     Assignment,
     ASTNode,
-    AsyncFunctionDef,
-    AwaitExpression,
     BinaryOp,
     Break,
+    ChannelReceive,
     ChannelSend,
     ClassDef,
     Continue,
@@ -116,10 +115,6 @@ class Parser:
                 return self.parse_while_statement()
             elif token.value == "nil":
                 return self.parse_nil()
-            elif token.value == "async":
-                return self.parse_async_function_def()
-            elif token.value == "await":
-                return self.parse_await_expression()
             elif token.value == "return":
                 return self.parse_return_statement()
             elif token.value == "var":
@@ -368,29 +363,6 @@ class Parser:
         self.logger.debug(f"Created function definition: {function_def}")
         return function_def
 
-    def parse_async_function_def(self) -> AsyncFunctionDef:
-        self.expect_token(TokenType.KEYWORD, "async")
-        self.skip_whitespace()
-
-        # Parse as a regular function but then convert to async
-        func_def = self.parse_function_def()
-
-        # Convert to AsyncFunctionDef
-        async_func = AsyncFunctionDef(
-            name=func_def.name,
-            params=func_def.params,
-            param_types=func_def.param_types,
-            return_type=func_def.return_type,
-            body=func_def.body,
-        )
-
-        return async_func
-
-    def parse_await_expression(self) -> AwaitExpression:
-        self.advance()  # Skip 'await'
-        expr = self.parse_expression()
-        return AwaitExpression(expr)
-
     def parse_return_statement(self) -> ASTNode:
         self.advance()  # Consume 'return' keyword
         expr = self.parse_expression()
@@ -472,6 +444,31 @@ class Parser:
             op = self.current_token().value
             self.advance()  # Skip operator
             return UnaryOp(op, Expression(identifier), postfix=True)
+
+        # Handle walrus operator with type annotation (Go-style)
+        # Syntax: identifier: type := value
+        if (
+            token.type == TokenType.IDENTIFIER
+            and self.pos + 1 < len(self.tokens)
+            and self.tokens[self.pos + 1].type == TokenType.COLON
+        ):
+            identifier = token.value
+            self.advance()  # Skip identifier
+            self.advance()  # Skip ':'
+            self.skip_whitespace()
+
+            # Parse type annotation
+            var_type = self.parse_type_annotation()
+            self.skip_whitespace()
+
+            # Check for := operator
+            if self.current_token().type == TokenType.OPERATOR and self.current_token().value == ":=":
+                self.advance()  # Skip ':='
+                value = self.parse_expression()
+                return Assignment(identifier, value, var_type)
+            else:
+                # Not a walrus operator, might be something else - reset and parse normally
+                self.pos = start_pos
 
         # Reset position and try normal assignment
         self.pos = start_pos
@@ -604,9 +601,11 @@ class Parser:
                     param_type = self.parse_type_annotation()
                     self.logger.debug(f"Parsed parameter type: {param_type}")
                 else:
-                    # No type annotation (e.g., for 'self')
+                    # No type annotation - only allowed for 'self'
+                    if param_name != "self":
+                        raise SyntaxError(f"Parameter '{param_name}' missing required type annotation")
                     param_type = None
-                    self.logger.debug(f"Parameter {param_name} has no type annotation")
+                    self.logger.debug(f"Parameter {param_name} has no type annotation (allowed for 'self')")
 
                 params.append(param_name)
                 param_types.append(param_type)
@@ -771,12 +770,15 @@ class Parser:
             operand = self.parse_primary()  # Parse the operand
             return UnaryOp(operator=op, operand=operand)
 
+        # Handle channel receive operator (<-ch)
+        if token.type == TokenType.OPERATOR and token.value == "<-":
+            self.advance()  # Skip '<-'
+            channel = self.parse_primary()  # Parse the channel expression
+            return ChannelReceive(channel)
+
         if token.type == TokenType.LITERAL:
             self.advance()
             expr = Expression(token.value)
-        elif token.type == TokenType.KEYWORD and token.value == "await":
-            self.advance()  # Skip 'await'
-            expr = AwaitExpression(self.parse_expression())
         elif token.type == TokenType.KEYWORD and token.value in {"true", "false"}:
             self.advance()
             expr = Expression(True if token.value == "true" else False)

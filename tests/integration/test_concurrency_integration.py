@@ -1,11 +1,8 @@
 """
 Integration tests for concurrency features.
 
-Tests spawn, channels, and concurrent execution in realistic scenarios.
-
-TODO: These tests are currently skipped due to incomplete async/concurrency 
-implementation. The parser ambiguity with <- operator and event loop setup
-need to be resolved.
+Tests spawn, channels, and concurrent execution in realistic scenarios
+with Go-style channel syntax.
 """
 
 import pytest
@@ -16,28 +13,27 @@ from ymir.interpreter import YmirInterpreter
 class TestConcurrencyIntegration:
     """Integration tests for concurrency."""
 
-    @pytest.mark.skip(reason="Concurrency features need async/event loop fixes")
     def test_spawn_and_channel_communication(self):
-        """Test spawning tasks that communicate via channels."""
+        """Test spawning tasks that communicate via channels with Go-style syntax."""
         code = """
 module test_concurrency
 
 func worker(id: int, ch: any) {
-    result = id * 2
+    var result: int = id * 2
     ch <- result
 }
 
 func main() {
-    ch = make_channel(3)
+    var ch: any = make_channel(3)
     
     spawn worker(1, ch)
     spawn worker(2, ch)
     spawn worker(3, ch)
     
-    # Collect results
-    result1 <- ch
-    result2 <- ch
-    result3 <- ch
+    # Collect results using Go-style receive with walrus operator
+    result1: int := <-ch
+    result2: int := <-ch
+    result3: int := <-ch
     
     print("Results collected: " + str(result1) + ", " + str(result2) + ", " + str(result3))
 }
@@ -52,17 +48,15 @@ main()
             # If run_ymir_code doesn't exist, skip
             pytest.skip("run_ymir_code method not available")
 
-    @pytest.mark.skip(reason="Concurrency features need async/event loop fixes")
     def test_channel_type_safety(self):
-        """Test channel type annotations work correctly."""
+        """Test channel type annotations work correctly with Go-style syntax."""
         code = """
 module test_types
 
 func main() {
-    var ch: chan[int]
-    ch = make_channel(5)
+    var ch: chan[int] = make_channel(5)
     ch <- 42
-    value <- ch
+    value: int := <-ch
     print("Value: " + str(value))
 }
 
@@ -74,25 +68,24 @@ main()
         except AttributeError:
             pytest.skip("run_ymir_code method not available")
 
-    @pytest.mark.skip(reason="Concurrency features need async/event loop fixes")
     def test_multi_worker_pattern(self):
-        """Test multiple workers processing from shared channel."""
+        """Test multiple workers processing from shared channel with Go-style syntax."""
         code = """
 module test_workers
 
 func worker(id: int, jobs: any, results: any) {
     var i: int = 0
     while i < 2 {
-        job <- jobs
-        result = job * id
+        job: int := <-jobs
+        var result: int = job * id
         results <- result
         i = i + 1
     }
 }
 
 func main() {
-    jobs = make_channel(10)
-    results = make_channel(10)
+    var jobs: any = make_channel(10)
+    var results: any = make_channel(10)
     
     # Spawn workers
     spawn worker(1, jobs, results)
@@ -107,7 +100,7 @@ func main() {
     # Collect results
     var i: int = 0
     while i < 4 {
-        result <- results
+        result: int := <-results
         print("Result: " + str(result))
         i = i + 1
     }
@@ -125,27 +118,26 @@ main()
 class TestConcurrencyWithMatrix:
     """Test concurrency with matrix operations."""
 
-    @pytest.mark.skip(reason="Concurrency features need async/event loop fixes")
     def test_concurrent_matrix_operations(self):
-        """Test spawning tasks that perform matrix operations."""
+        """Test spawning tasks that perform matrix operations with Go-style syntax."""
         code = """
 module test_matrix_concurrent
 
 func matrix_worker(id: int, ch: any) {
-    matrix = [[1.0, 2.0], [3.0, 4.0]]
-    result = transpose(matrix)
-    shape_result = shape(result)
+    var matrix: any = [[1.0, 2.0], [3.0, 4.0]]
+    var result: any = transpose(matrix)
+    var shape_result: any = shape(result)
     ch <- shape_result
 }
 
 func main() {
-    ch = make_channel(2)
+    var ch: any = make_channel(2)
     
     spawn matrix_worker(1, ch)
     spawn matrix_worker(2, ch)
     
-    shape1 <- ch
-    shape2 <- ch
+    shape1: any := <-ch
+    shape2: any := <-ch
     
     print("Shapes: " + str(shape1) + ", " + str(shape2))
 }

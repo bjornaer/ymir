@@ -44,9 +44,7 @@ def test_tokenize_mixed():
 
 
 def test_tokenize_keywords():
-    source_code = (
-        "func class if else while return import export for in continue break error nil true false async await module"
-    )
+    source_code = "func class if else while return import export for in continue break error nil true false module"
     lexer = Lexer(source_code)
     tokens = lexer.tokenize()
     expected_tokens = [
@@ -66,10 +64,8 @@ def test_tokenize_keywords():
         Token(TokenType.KEYWORD, "nil", 1, 74),
         Token(TokenType.KEYWORD, "true", 1, 78),
         Token(TokenType.KEYWORD, "false", 1, 83),
-        Token(TokenType.KEYWORD, "async", 1, 89),
-        Token(TokenType.KEYWORD, "await", 1, 95),
-        Token(TokenType.KEYWORD, "module", 1, 101),
-        Token(TokenType.EOF, "", 1, 107),
+        Token(TokenType.KEYWORD, "module", 1, 89),
+        Token(TokenType.EOF, "", 1, 95),
     ]
     assert tokens == expected_tokens
 

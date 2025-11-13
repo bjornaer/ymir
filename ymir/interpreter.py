@@ -448,6 +448,106 @@ class YmirInterpreter:
         finally:
             os.remove(temp_path)
 
+    async def _async_evaluate_function_call(
+        self, func_name: str, args: List[Any], module_context: Optional[Module] = None
+    ) -> Any:
+        """Async version of evaluate_function_call for use in event loop context.
+
+        This allows channel operations within functions to properly await.
+        Similar to how Go goroutines can block on channels transparently.
+        """
+        import asyncio
+
+        func = None
+        if module_context:
+            func = module_context.exports.get(func_name)
+        if func is None:
+            func = self.global_scope.get(func_name)
+
+        if not isinstance(func, FunctionDef):
+            if func_name in self.global_scope and callable(self.global_scope[func_name]):
+                return self.global_scope[func_name](*args)
+            raise TypeError(f"{func_name} is not a function definition")
+
+        prev_local_scope = self.local_scope.copy()
+        prev_global_scope = self.global_scope.copy()
+
+        self.local_scope = {}
+        if module_context:
+            self.global_scope = {**self.global_scope, **module_context.exports}
+        for param, arg in zip(func.params, args):
+            self.local_scope[param] = arg
+
+        last_value = None
+        try:
+            for stmt in func.body:
+                last_value = self.evaluate(stmt)
+                # If statement returns a coroutine (channel operation), await it
+                if asyncio.iscoroutine(last_value) or asyncio.isfuture(last_value):
+                    last_value = await last_value
+        except ReturnSignal as ret:
+            self.local_scope = prev_local_scope
+            self.global_scope = prev_global_scope
+            ret_value = ret.value
+            # Await coroutines in return values
+            if asyncio.iscoroutine(ret_value) or asyncio.isfuture(ret_value):
+                ret_value = await ret_value
+            if isinstance(ret_value, BaseException):
+                return str(ret_value)
+            return ret_value
+
+        self.local_scope = prev_local_scope
+        self.global_scope = prev_global_scope
+        return last_value
+
+    def _run_entry_point_statements(self):
+        """Run collected entry point statements in an async context to support concurrency."""
+        import asyncio
+
+        # Create an async wrapper that runs all statements
+        # This is like Go's main goroutine - runs in the event loop
+        async def run_statements():
+            self.logger.debug("[_run_entry_point] Running entry point (Go-style)")
+
+            # Mark that we're in event loop context (like being in a goroutine)
+            self.concurrency_runtime.enter_async_context()
+
+            try:
+                from ymir.core.ast import FunctionCall
+
+                for node in self._entry_point_statements:
+                    self.logger.debug(f"[_run_entry_point] Processing node: {type(node).__name__}")
+
+                    # For function calls, use async evaluation
+                    if isinstance(node, FunctionCall):
+                        func_name = node.func_name
+                        args = [self.evaluate_expression(arg) for arg in node.args]
+                        self.logger.debug(f"[_run_entry_point] Async calling {func_name}")
+                        result = await self._async_evaluate_function_call(func_name, args)
+                    elif isinstance(node, Expression) and hasattr(node, "func_name"):
+                        # FunctionCall wrapped in Expression
+                        func_name = node.func_name
+                        args = [self.evaluate_expression(arg) for arg in node.args]
+                        result = await self._async_evaluate_function_call(func_name, args)
+                    else:
+                        # Other statements
+                        result = self.evaluate(node)
+                        if asyncio.iscoroutine(result) or asyncio.isfuture(result):
+                            result = await result
+
+                    # Yield to allow spawned tasks to run (like Go's scheduler)
+                    await asyncio.sleep(0)
+            finally:
+                self.concurrency_runtime.exit_async_context()
+                # Wait for all spawned tasks (goroutines) to complete
+                if self.concurrency_runtime.tasks:
+                    await self.concurrency_runtime.wait_all()
+
+        # Run in the concurrency runtime's event loop
+        if self.concurrency_runtime.loop is None:
+            self.concurrency_runtime.initialize()
+        self.concurrency_runtime.loop.run_until_complete(run_statements())
+
     def load_module(self, file_path: str, project_root: str, is_entry_point: bool = False) -> Module:
         canonical_path = os.path.realpath(file_path)
         if canonical_path in self.loaded_modules:
@@ -522,7 +622,16 @@ class YmirInterpreter:
                     module_obj.exports[node.name] = value
             elif is_entry_point:
                 self.logger.debug(f"[load_module] Evaluating (entry point): {type(node)} - {repr(node)}")
-                self.evaluate(node)
+                # Collect entry point statements
+                if not hasattr(self, "_entry_point_statements"):
+                    self._entry_point_statements = []
+                self._entry_point_statements.append(node)
+
+        # If this is an entry point, run all collected statements in async context if needed
+        if is_entry_point and hasattr(self, "_entry_point_statements"):
+            self._run_entry_point_statements()
+            delattr(self, "_entry_point_statements")
+
         return module_obj
 
     def evaluate(self, node: ASTNode) -> Any:
@@ -543,7 +652,35 @@ class YmirInterpreter:
             return value
         elif isinstance(node, Assignment):
             value = self.evaluate_expression(node.value)
-            self.logger.debug(f"[evaluate] Assignment: {node.target} = {value}")
+
+            self.logger.debug(f"[evaluate] Assignment: {node.target} = {value} (type: {type(value)})")
+
+            # If value is a coroutine (from channel receive), we need to handle it specially
+            import asyncio
+
+            if asyncio.iscoroutine(value) or asyncio.isfuture(value):
+                # Return a coroutine that will await the value and then assign it
+                async def async_assign():
+                    awaited_value = await value
+                    if isinstance(node.target, ArrayAccess):
+                        array_val = self.evaluate_expression(node.target.array)
+                        index_val = self.evaluate_expression(node.target.index)
+                        if isinstance(index_val, float):
+                            index_val = int(index_val)
+                        array_val[index_val] = awaited_value
+                    elif type(node.target).__name__ == "MethodCall":
+                        instance = self.evaluate_expression(node.target.instance)
+                        setattr(instance, node.target.method_name, awaited_value)
+                    else:
+                        if self.local_scope is not None and node.target in self.local_scope:
+                            self.local_scope[node.target] = awaited_value
+                        elif self.local_scope is not None and len(self.local_scope) > 0:
+                            self.local_scope[node.target] = awaited_value
+                        else:
+                            self.global_scope[node.target] = awaited_value
+                    return awaited_value
+
+                return async_assign()
 
             # Handle array element assignment (e.g., arr[0] = value)
             if isinstance(node.target, ArrayAccess):
@@ -869,28 +1006,22 @@ class YmirInterpreter:
             return result
         elif isinstance(node, ChannelSend):
             # Channel send operation: channel <- value
-            channel = self.evaluate_expression(node.channel)
-            value = self.evaluate_expression(node.value)
-            # Send is async, so we need to run it in the event loop
-            import asyncio
-
-            asyncio.create_task(channel.send(value))
-            self.logger.debug(f"[evaluate_expression] ChannelSend: sent {value} to channel")
+            # Delegate to evaluate_channel_send for consistency
+            self.evaluate_channel_send(node)
             return None
         elif isinstance(node, ChannelReceive):
-            # Channel receive operation: <- channel
+            # Channel receive operation: <-channel
             channel = self.evaluate_expression(node.channel)
-            # Receive is async, so we need to run it in the event loop
-            import asyncio
+            self.logger.debug(f"[ChannelReceive] Channel: {channel}")
 
-            loop = self.concurrency_runtime.loop
-            if loop and loop.is_running():
-                # If we're already in an async context, create a task
-                future = asyncio.ensure_future(channel.receive())
-                return future
-            else:
-                # Run synchronously
-                return self.concurrency_runtime.run_until_complete(channel.receive())
+            # Initialize concurrency runtime if needed
+            if self.concurrency_runtime.loop is None:
+                self.concurrency_runtime.initialize()
+
+            # Always return coroutine - it will be awaited by the async wrapper
+            # This is Go-style transparent blocking on channels
+            self.logger.debug("[ChannelReceive] Returning coroutine (Go-style)")
+            return channel.receive()
         elif hasattr(node, "value") and type(node).__name__ == "StringLiteral":
             # Strip leading and trailing quotes from the string literal
             raw = node.value
@@ -1346,6 +1477,7 @@ class YmirInterpreter:
             for stmt in func.body:
                 self.logger.debug(f"[evaluate_function_call] Evaluating stmt: {type(stmt)} - {repr(stmt)}")
                 last_value = self.evaluate(stmt)
+                self.logger.debug(f"[evaluate_function_call] Statement result: {last_value} (type: {type(last_value)})")
         except ReturnSignal as ret:
             self.logger.debug(f"[evaluate_function_call] Caught ReturnSignal with value: {ret.value}")
             self.local_scope = prev_local_scope
@@ -1605,56 +1737,70 @@ class YmirInterpreter:
         return isinstance(exception, exception_class)
 
     def evaluate_spawn_statement(self, node: SpawnStatement) -> str:
-        """Evaluate a spawn statement to launch a concurrent task."""
+        """Evaluate a spawn statement to launch a concurrent task.
+
+        Handles both regular and async functions.
+        """
         self.logger.debug(f"[evaluate_spawn_statement] Spawning: {node.call.func_name}")
 
         # Get the function to spawn
         func_name = node.call.func_name
         args = [self.evaluate_expression(arg) for arg in node.call.args]
 
-        # Create a wrapper function that calls the Ymir function
-        def task_wrapper():
-            return self.evaluate_function_call(func_name, args)
+        # Look up the function
+        func = None
+        if func_name in self.local_scope:
+            func = self.local_scope[func_name]
+        elif func_name in self.global_scope:
+            func = self.global_scope[func_name]
 
-        # Spawn the task
-        task_id = self.concurrency_runtime.spawn(task_wrapper)
+        # Check if it's an async function
+        import asyncio
+
+        if func and asyncio.iscoroutinefunction(func):
+            # It's an async function, spawn it directly
+            self.logger.debug(f"[evaluate_spawn_statement] Spawning async function: {func_name}")
+            task_id = self.concurrency_runtime.spawn(func, *args)
+        else:
+            # Regular function, create an async wrapper (like spawning a goroutine)
+            async def task_wrapper():
+                # Mark as async context (like being in a goroutine)
+                self.concurrency_runtime.enter_async_context()
+                try:
+                    # Use async function call evaluation (Go-style)
+                    result = await self._async_evaluate_function_call(func_name, args)
+                    return result
+                finally:
+                    self.concurrency_runtime.exit_async_context()
+
+            task_id = self.concurrency_runtime.spawn(task_wrapper)
+
         self.logger.info(f"[evaluate_spawn_statement] Spawned task {task_id} for function {func_name}")
         return task_id
 
-    def evaluate_channel_send(self, node: ChannelSend) -> None:
-        """Evaluate a channel send/receive operation.
+    def evaluate_channel_send(self, node: ChannelSend) -> Any:
+        """Evaluate a channel send operation: ch <- value
 
-        Due to parser limitations, `var <- ch` is parsed as ChannelSend where
-        var is the "channel" and ch is the "value". We detect this and handle
-        it as a receive that assigns to a variable.
+        Schedules the send as a task if in async context, or runs synchronously otherwise.
         """
-        # Check if this is actually a receive: var <- channel
-        if isinstance(node.channel, Expression) and isinstance(node.channel.expression, str):
-            var_name = node.channel.expression
-            # If it's a simple identifier, check if it exists
-            is_new_var = var_name not in self.local_scope and var_name not in self.global_scope
-
-            if is_new_var:
-                # This is a receive: var <- channel
-                channel = self.evaluate_expression(node.value)
-                # Receive from channel (synchronously for now)
-                value = self.concurrency_runtime.run_until_complete(channel.receive())
-                # Assign to local scope
-                if self.local_scope is not None and len(self.local_scope) > 0:
-                    self.local_scope[var_name] = value
-                else:
-                    self.global_scope[var_name] = value
-                return
-
-        # Normal send: channel <- value
         channel = self.evaluate_expression(node.channel)
         value = self.evaluate_expression(node.value)
-        # Send to channel (asynchronously)
-        import asyncio
 
-        asyncio.create_task(channel.send(value))
-        self.logger.debug(f"[evaluate_channel_send] Sent {value} to channel")
-        return None
+        # Initialize concurrency runtime if needed
+        if self.concurrency_runtime.loop is None:
+            self.concurrency_runtime.initialize()
+
+        # Check if we're in event loop context (like being in a goroutine)
+        if self.concurrency_runtime.is_in_async_context():
+            # In async context (goroutine-style), return coroutine to be awaited
+            # This is like Go's transparent blocking on channels
+            self.logger.debug("[evaluate_channel_send] Returning coroutine for send (Go-style)")
+            return channel.send(value)
+        else:
+            # Not in event loop, run synchronously (shouldn't happen with new design)
+            self.concurrency_runtime.run_until_complete(channel.send(value))
+            self.logger.debug(f"[evaluate_channel_send] Sent {value} (sync)")
+            return None
 
     def process_import(self, module_name: str, project_root: str):
         """Processes an import statement, creating nested module objects."""

@@ -3,8 +3,6 @@
 from ymir.core.ast import (  # StringLiteral,
     ArrayLiteral,
     Assignment,
-    AsyncFunctionDef,
-    AwaitExpression,
     BinaryOp,
     Break,
     ClassDef,
@@ -308,39 +306,6 @@ def test_parse_nil():
     ast = parser.parse()
 
     assert isinstance(ast[0], NilType)
-
-
-def test_parse_async_function_def():
-    source_code = "async func fetch() { await get_data() }"
-    lexer = Lexer(source_code)
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, verbosity="DEBUG")
-    ast = parser.parse()
-
-    assert isinstance(ast[0], AsyncFunctionDef)
-    assert ast[0].name == "fetch"
-    assert isinstance(ast[0].body[0], AwaitExpression)
-
-
-def test_parse_multiline_async_function_def():
-    source_code = """
-    async func fetch() {
-        data = await get_data()
-        process(data)
-    }
-    """
-    lexer = Lexer(source_code)
-    tokens = lexer.tokenize()
-    parser = Parser(tokens, verbosity="DEBUG")
-    ast = parser.parse()
-
-    assert isinstance(ast[0], AsyncFunctionDef)
-    assert ast[0].name == "fetch"
-    assert len(ast[0].body) == 2
-    assert isinstance(ast[0].body[0], Assignment)
-    assert isinstance(ast[0].body[0].value, AwaitExpression)
-    assert isinstance(ast[0].body[0].value.expression, FunctionCall)
-    assert isinstance(ast[0].body[1], FunctionCall)
 
 
 def test_parse_array_literal():

@@ -34,6 +34,8 @@ func main() {
 }
 ```
 
+Note: All functions are regular functions (no `async` keyword). Spawn works with any function.
+
 ## Channels
 
 Channels provide type-safe communication between concurrent tasks. They can be buffered or unbuffered.
@@ -59,6 +61,8 @@ var msg_ch: chan[string]  # Channel of strings
 
 ## Channel Operations
 
+Ymir uses **Go-style channel syntax** to avoid ambiguity between send and receive operations.
+
 ### Send Operation
 
 Send a value to a channel using the `<-` operator:
@@ -69,11 +73,17 @@ ch <- value
 
 ### Receive Operation
 
-Receive a value from a channel:
+Receive a value from a channel using the `:=` walrus operator with type annotation (for new variables) or `=` (for existing variables):
 
 ```ymr
-value <- ch
+# Receive and declare new variable with walrus operator
+value: int := <-ch
+
+# Receive into existing variable
+value = <-ch
 ```
+
+**Note**: The walrus operator `:=` requires a type annotation. The receive operation uses `<-ch` as a unary operator on the *right* side, with `:=` or `=` for assignment.
 
 ### Example with Send and Receive
 
@@ -89,14 +99,14 @@ func producer(ch: any) {
 func consumer(ch: any) {
     var i: int = 0
     while i < 5 {
-        value <- ch
+        value: int := <-ch
         print("Received: " + str(value))
         i = i + 1
     }
 }
 
 func main() {
-    ch = make_channel(5)
+    var ch: any = make_channel(5)
     spawn producer(ch)
     consumer(ch)  # Run consumer in main task
 }
@@ -117,7 +127,7 @@ Make sure sends and receives are balanced:
 func main() {
     ch = make_channel(1)
     ch <- 42
-    value <- ch  # Will receive the value
+    value := <-ch  # Will receive the value
 }
 
 # Bad: will deadlock
@@ -164,12 +174,12 @@ func safe_worker(id: int, ch: any) {
 module parallel_computation
 
 func compute_square(n: int, result_ch: any) {
-    result = n * n
+    var result: int = n * n
     result_ch <- result
 }
 
 func main() {
-    ch = make_channel(5)
+    var ch: any = make_channel(5)
     
     # Spawn 5 workers
     var i: int = 0
@@ -182,7 +192,7 @@ func main() {
     var j: int = 0
     var total: int = 0
     while j < 5 {
-        result <- ch
+        result: int := <-ch
         total = total + result
         j = j + 1
     }
@@ -207,7 +217,7 @@ func generate_numbers(out: any) {
 func square(in: any, out: any) {
     var i: int = 0
     while i < 10 {
-        n <- in
+        n: int := <-in
         out <- (n * n)
         i = i + 1
     }
@@ -216,15 +226,15 @@ func square(in: any, out: any) {
 func print_results(in: any) {
     var i: int = 0
     while i < 10 {
-        result <- in
+        result: int := <-in
         print("Result: " + str(result))
         i = i + 1
     }
 }
 
 func main() {
-    ch1 = make_channel(5)
-    ch2 = make_channel(5)
+    var ch1: any = make_channel(5)
+    var ch2: any = make_channel(5)
     
     spawn generate_numbers(ch1)
     spawn square(ch1, ch2)
@@ -240,8 +250,8 @@ module fan_out_in
 func worker(id: int, jobs: any, results: any) {
     var i: int = 0
     while i < 3 {
-        job <- jobs
-        result = job * 2
+        job: int := <-jobs
+        var result: int = job * 2
         results <- result
         print("Worker " + str(id) + " processed: " + str(job))
         i = i + 1
@@ -249,8 +259,8 @@ func worker(id: int, jobs: any, results: any) {
 }
 
 func main() {
-    jobs = make_channel(10)
-    results = make_channel(10)
+    var jobs: any = make_channel(10)
+    var results: any = make_channel(10)
     
     # Start 3 workers (fan-out)
     spawn worker(1, jobs, results)
@@ -267,7 +277,7 @@ func main() {
     # Collect results (fan-in)
     var j: int = 0
     while j < 9 {
-        result <- results
+        result: int := <-results
         print("Got result: " + str(result))
         j = j + 1
     }
@@ -276,19 +286,35 @@ func main() {
 
 ## Implementation Details
 
+### Concurrency Runtime
+
+Ymir uses a `ConcurrencyRuntime` that manages:
+- Event loop (via Python's `asyncio` internally)
+- Spawned tasks
+- Channel operations
+- Context tracking for spawned tasks
+
 ### Backend
 
-Ymir's concurrency is implemented using Python's `asyncio` for I/O-bound tasks and `concurrent.futures.ThreadPoolExecutor` for CPU-bound tasks.
+- **Internal async**: Python's `asyncio` used internally for non-blocking I/O
+- **Channels**: `asyncio.Queue` with type safety wrappers  
+- **Event loop**: Automatically initialized and managed
+- **User API**: Pure Go-style (spawn + channels), no async/await exposed
 
-### Channels
+### Key Features
 
-Channels are implemented using `asyncio.Queue` with type safety wrappers.
+- **Go-style concurrency**: Only `spawn` and channels, no async/await keywords
+- **Automatic event loop**: Event loop starts on first spawn/channel operation
+- **Type safety**: Channels support type annotations
+- **Transparent blocking**: Channel operations block from user perspective, async internally
+- **No manual management**: Event loop lifecycle is automatic
 
 ### Performance
 
 - Spawned tasks have minimal overhead
 - Channels are optimized for throughput
 - Buffered channels reduce blocking
+- Internal async implementation ensures non-blocking I/O
 
 ## Future Enhancements
 

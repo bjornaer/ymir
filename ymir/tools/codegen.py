@@ -9,8 +9,6 @@ from ymir.core.ast import (
     ArrayAccess,
     ArrayLiteral,
     Assignment,
-    AsyncFunctionDef,
-    AwaitExpression,
     BinaryOp,
     Break,
     ChannelReceive,
@@ -40,8 +38,8 @@ from ymir.core.ast import (
 )
 from ymir.core.builtin_functions import create_builtin_functions
 from ymir.core.builtin_networking import create_networking_functions
+from ymir.core.concurrency import get_runtime
 from ymir.core.types import ArrayType, MapType, NilType, TupleType
-from ymir.tools.async_support import AsyncSupport
 
 
 class UnsupportedFeatureError(Exception):
@@ -58,8 +56,6 @@ class FeatureDetector:
         ChannelSend,  # Concurrency - channel send
         ChannelReceive,  # Concurrency - channel receive
         SelectStatement,  # Concurrency - select
-        AsyncFunctionDef,  # Async/await
-        AwaitExpression,  # Async/await
     )
 
     @classmethod
@@ -96,7 +92,8 @@ class CodeGenerator:
         self.local_scope: Dict[str, Any] = {}
         self.builtins = create_builtin_functions(self.module)
         self.networking = create_networking_functions(self.module)
-        self.async_support = AsyncSupport()
+        # Note: async/await is unsupported in LLVM mode, will fall back to interpreter
+        self.concurrency_runtime = get_runtime()
 
         # Track loop context for break/continue
         self.loop_stack = []  # Stack of (continue_block, break_block) tuples
@@ -169,8 +166,6 @@ class CodeGenerator:
         self.logger.debug(f"[CodeGen] In visit: {type(node)} - {repr(node)}")
         if isinstance(node, FunctionDef):
             self.visit_function_def(node)
-        elif isinstance(node, AsyncFunctionDef):
-            self.visit_async_function_def(node)
         elif isinstance(node, ClassDef):
             self.visit_class_def(node)
         elif isinstance(node, IfStatement):
@@ -185,8 +180,6 @@ class CodeGenerator:
             self.visit_continue(node)
         elif isinstance(node, Break):
             self.visit_break(node)
-        elif isinstance(node, AwaitExpression):
-            return self.visit_await_expression(node)
         elif isinstance(node, Expression):
             return self.visit_expression(node)
         elif isinstance(node, BinaryOp):
@@ -478,14 +471,93 @@ class CodeGenerator:
         self.builder.position_at_end(end_block)
 
     def visit_for_in_loop(self, node: ForInLoop):
-        """Generate code for for-in loops: for item in array {...}"""
-        # For now, for-in loops over arrays need to be unrolled at compile time
-        # or we need to generate iteration code. This is complex for runtime arrays.
+        """Generate code for for-in loops: for item in array {...}
 
-        raise UnsupportedFeatureError(
-            "For-in loops over runtime arrays not yet supported in LLVM mode. "
-            "Use C-style for loops or interpreter mode."
-        )
+        Supports compile-time known arrays (literals). Runtime arrays still
+        require interpreter mode.
+        """
+        # Check if iterable is a compile-time known array (ArrayLiteral)
+        if not isinstance(node.iterable, ArrayLiteral):
+            raise UnsupportedFeatureError(
+                "For-in loops over runtime arrays not yet supported in LLVM mode. "
+                "Only array literals are supported. Use C-style for loops or interpreter mode."
+            )
+
+        # Get the array elements
+        elements = node.iterable.elements
+        if not elements:
+            # Empty array, nothing to iterate
+            return
+
+        # Allocate a variable for the loop variable
+        loop_var_type = ir.IntType(32)  # Default to int32, could be inferred
+        loop_var_ptr = self.builder.alloca(loop_var_type, name=node.var)
+        self.local_scope[node.var] = loop_var_ptr
+
+        # Create basic blocks for loop
+        cond_block = self.function.append_basic_block(name="forin.cond")
+        body_block = self.function.append_basic_block(name="forin.body")
+        end_block = self.function.append_basic_block(name="forin.end")
+
+        # Push loop context
+        self.loop_stack.append((cond_block, end_block))
+
+        # Create an index variable to track position in array
+        index_ptr = self.builder.alloca(ir.IntType(32), name=f"{node.var}_index")
+        self.builder.store(ir.Constant(ir.IntType(32), 0), index_ptr)
+
+        # Jump to condition
+        self.builder.branch(cond_block)
+
+        # Generate condition block: check if index < array length
+        self.builder.position_at_end(cond_block)
+        index_val = self.builder.load(index_ptr)
+        array_len = ir.Constant(ir.IntType(32), len(elements))
+        cond = self.builder.icmp_signed("<", index_val, array_len)
+        self.builder.cbranch(cond, body_block, end_block)
+
+        # Generate body block
+        self.builder.position_at_end(body_block)
+
+        # Load the current element from the array
+        # For simplicity, evaluate elements dynamically and use a switch/select
+        # This is a simplified approach - better would be to store array in memory
+        index_load = self.builder.load(index_ptr)
+
+        # Create a phi node or use select chain for element values
+        # For now, use a simple approach: evaluate all elements and select based on index
+        element_values = []
+        for elem in elements:
+            elem_val = self.visit_expression(elem)
+            element_values.append(elem_val)
+
+        # Use the first element type as the loop variable type
+        if element_values:
+            # Create a simple select chain for small arrays
+            # For larger arrays, this becomes inefficient but works
+            current_val = element_values[0]
+            for i in range(1, len(element_values)):
+                is_index = self.builder.icmp_signed("==", index_load, ir.Constant(ir.IntType(32), i))
+                current_val = self.builder.select(is_index, element_values[i], current_val)
+
+            # Store the selected value in the loop variable
+            self.builder.store(current_val, loop_var_ptr)
+
+        # Execute loop body
+        for stmt in node.body:
+            self.visit(stmt)
+
+        # Increment index and loop back
+        if not self.builder.block.is_terminated:
+            index_next = self.builder.add(index_load, ir.Constant(ir.IntType(32), 1))
+            self.builder.store(index_next, index_ptr)
+            self.builder.branch(cond_block)
+
+        # Pop loop context
+        self.loop_stack.pop()
+
+        # Continue in end block
+        self.builder.position_at_end(end_block)
 
     def visit_expression(self, node: Expression) -> Union[ir.Value, ir.Constant]:
         """Visit and generate code for an expression node."""
@@ -620,9 +692,38 @@ class CodeGenerator:
             raise ValueError(f"Unsupported unary operator: {node.operator}")
 
     def visit_array_access(self, node: ArrayAccess) -> ir.Value:
-        """Generate code for array element access: arr[index]"""
+        """Generate code for array element access with bounds checking: arr[index]"""
         array = self.visit_expression(node.array)
         index = self.visit_expression(node.index)
+
+        # For array types, add bounds checking
+        if isinstance(array.type, ir.ArrayType):
+            array_len = ir.Constant(ir.IntType(32), array.type.count)
+
+            # Create blocks for bounds check
+            check_block = self.function.append_basic_block(name="bounds_check")
+            valid_block = self.function.append_basic_block(name="bounds_valid")
+            error_block = self.function.append_basic_block(name="bounds_error")
+
+            # Branch to check
+            self.builder.branch(check_block)
+
+            # Check if index >= 0 and index < length
+            self.builder.position_at_end(check_block)
+            index_non_neg = self.builder.icmp_signed(">=", index, ir.Constant(ir.IntType(32), 0))
+            index_in_bounds = self.builder.icmp_signed("<", index, array_len)
+            valid = self.builder.and_(index_non_neg, index_in_bounds)
+            self.builder.cbranch(valid, valid_block, error_block)
+
+            # Error block - for now, just return zero (in full implementation would throw exception)
+            self.builder.position_at_end(error_block)
+            # TODO: Properly throw out-of-bounds exception
+            # For now, return a zero value of the element type
+            zero_val = ir.Constant(array.type.element, 0)
+            self.builder.ret(zero_val)
+
+            # Valid block - perform actual access
+            self.builder.position_at_end(valid_block)
 
         # GEP to get pointer to element
         element_ptr = self.builder.gep(array, [ir.Constant(ir.IntType(32), 0), index])
@@ -767,28 +868,6 @@ class CodeGenerator:
 
     def visit_nil(self, _: NilType) -> ir.Constant:
         return ir.Constant(ir.VoidType(), None)  # Representing nil as void
-
-    def visit_async_function_def(self, node: AsyncFunctionDef):
-        param_types = [ir.PointerType(ir.IntType(32)) for _ in node.params]
-        return_type = self.get_ir_type(node.return_type)
-        func_type = ir.FunctionType(return_type, param_types)
-        func = ir.Function(self.module, func_type, name=node.name)
-        self.function = func
-        self.global_scope[node.name] = func
-        block = func.append_basic_block(name="entry")
-        self.builder = ir.IRBuilder(block)
-        for param, arg in zip(node.params, func.args):
-            arg.name = param
-            self.local_scope[param] = arg
-        for statement in node.body:
-            self.visit(statement)
-        if return_type == ir.VoidType():
-            self.builder.ret_void()
-        else:
-            self.builder.ret(self.visit_expression(node.body[-1]))
-
-        # Register the coroutine with the async support
-        self.async_support.register_coroutine(node.name, self.async_support.create_coroutine(self.run_function, func))
 
     def run_function(self, func, *args):
         llvm_ir = str(func.module)
