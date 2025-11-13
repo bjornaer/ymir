@@ -7,7 +7,7 @@ backend selection based on GPU availability.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, List, Tuple, Union
+from typing import Any, List, Union
 
 import numpy as np
 

@@ -5,8 +5,6 @@ Tests the Python-like string API including transformations, search,
 manipulation, validation, and utility methods.
 """
 
-import pytest
-
 from ymir.core.lexer import Lexer
 from ymir.core.parser import Parser
 from ymir.interpreter import YmirInterpreter

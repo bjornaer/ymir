@@ -86,7 +86,7 @@ func memory_example() {
 }
 
 # Function to demonstrate a C-style for loop with continue and break
-def sum_even_to_n(n: int) -> int {
+func sum_even_to_n(n: int) -> int {
     total = 0
     for (i = 0; i <= n; i++) {
         if (i % 2 != 0) {
@@ -101,7 +101,7 @@ def sum_even_to_n(n: int) -> int {
 }
 
 # Function to demonstrate a for .. in loop with continue and break
-def print_non_zero_elements(arr: array[int]) {
+func print_non_zero_elements(arr: array[int]) {
     for elem in arr {
         if (elem == 0) {
             continue
@@ -114,12 +114,13 @@ def print_non_zero_elements(arr: array[int]) {
 }
 
 # Example of error and nil types
-def divide(a: int, b: int) -> int, error {
-    if (b == 0) {
-        return 0, "division by zero"
-    }
-    return a / b, nil
-}
+# NOTE: Multiple return values (error handling) not yet fully implemented
+# func divide(a: int, b: int) -> int, error {
+#     if (b == 0) {
+#         return 0, "division by zero"
+#     }
+#     return a / b, nil
+# }
 
 # Main function
 func main() {
@@ -173,11 +174,12 @@ func main() {
     memory_example()
 
     # Error handling
-    result, err = divide(10, 0)
-    if (err != nil) {
-        panic(err)
-    }
-    print("Result: " + str(result))
+    # NOTE: Multiple return values not yet fully implemented
+    # result, err = divide(10, 0)
+    # if (err != nil) {
+    #     panic(err)
+    # }
+    # print("Result: " + str(result))
 }
 
 main()

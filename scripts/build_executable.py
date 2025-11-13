@@ -92,7 +92,7 @@ def build_executable():
 
     try:
         subprocess.run(cmd, check=True, cwd=project_root)
-        print(f"\n✓ Build successful!")
+        print("\n✓ Build successful!")
         print(f"Executable: {dist_dir / executable_name}")
 
         # Create a symlink without platform suffix

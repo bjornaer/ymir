@@ -9,7 +9,6 @@ from ymir.core.ast import (
     AwaitExpression,
     BinaryOp,
     Break,
-    ChannelReceive,
     ChannelSend,
     ClassDef,
     Continue,
@@ -152,10 +151,18 @@ class Parser:
         self.advance()  # skip 'while'
         self.skip_whitespace()
         self.logger.debug(f"Current token after 'while': {self.current_token()}")
-        self.expect_token(TokenType.PAREN_OPEN)
+
+        # Parentheses are optional around the condition (like Go/Rust)
+        has_parens = self.current_token().type == TokenType.PAREN_OPEN
+        if has_parens:
+            self.advance()  # skip '('
+
         condition = self.parse_expression()
         self.logger.debug(f"Parsed while condition: {condition}")
-        self.expect_token(TokenType.PAREN_CLOSE)
+
+        if has_parens:
+            self.expect_token(TokenType.PAREN_CLOSE)
+
         body = self.parse_block()
         self.logger.debug(f"Parsed while body: {body}")
         return WhileStatement(condition, body)
@@ -930,7 +937,7 @@ class Parser:
                 element_types = []
                 while self.current_token().type != TokenType.BRACKET_CLOSE:
                     element_types.append(self.parse_type_annotation())
-                    if self.current_token().type == TokenType.DELIMITER:
+                    if self.current_token().type == TokenType.COMMA:
                         self.advance()  # Skip comma
                 self.expect_token(TokenType.BRACKET_CLOSE, "]")
                 return TupleType(element_types)

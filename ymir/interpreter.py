@@ -53,7 +53,7 @@ class Module:
 
 
 class YmirInterpreter:
-    def __init__(self, verbosity: str = "INFO"):
+    def __init__(self, verbosity: str = "INFO", load_stdlib: bool = True):
         self.verbosity = verbosity
         self.logger = get_logger("ymir", verbosity)
         self.logger.setLevel(getattr(logging, verbosity))
@@ -74,7 +74,10 @@ class YmirInterpreter:
         # Register builtin functions
         self._register_builtin_functions()
 
-        self.load_standard_library()
+        if load_stdlib:
+            self.load_standard_library()
+        else:
+            self.logger.info("Skipping standard library loading (--no-stdlib)")
 
     def _register_builtin_functions(self):
         """Register common Python builtin functions in the global scope."""
@@ -190,15 +193,11 @@ class YmirInterpreter:
         # HTTP client functions
         def http_get(url: str, headers: dict = None):
             """Perform HTTP GET request."""
-            import asyncio
-
             client = get_http_client()
             return self.concurrency_runtime.run_until_complete(client.get(url, headers))
 
         def http_post(url: str, data: str = None, json_data: Any = None, headers: dict = None):
             """Perform HTTP POST request."""
-            import asyncio
-
             client = get_http_client()
             return self.concurrency_runtime.run_until_complete(client.post(url, data, json_data, headers))
 
@@ -213,6 +212,68 @@ class YmirInterpreter:
         for name, func in math.__dict__.items():
             if callable(func) and not name.startswith("__"):
                 self.global_scope[name] = func
+
+        # Networking functions (stub implementations for interpreted mode)
+        # These are primarily for LLVM-compiled code, but we provide stubs for interpretation
+        def stub_socket(af, sock_type, protocol):
+            """Stub socket function - not fully implemented in interpreted mode."""
+            self.logger.warning("socket() is not fully implemented in interpreted mode")
+            return None
+
+        def stub_connect(sock, host, port):
+            """Stub connect function - not fully implemented in interpreted mode."""
+            self.logger.warning("connect() is not fully implemented in interpreted mode")
+            return 0
+
+        def stub_send(sock, data, length):
+            """Stub send function - not fully implemented in interpreted mode."""
+            self.logger.warning("send() is not fully implemented in interpreted mode")
+            return length
+
+        def stub_recv(sock, buffer_size):
+            """Stub recv function - not fully implemented in interpreted mode."""
+            self.logger.warning("recv() is not fully implemented in interpreted mode")
+            return b""
+
+        def stub_close(sock):
+            """Stub close function - not fully implemented in interpreted mode."""
+            self.logger.warning("close() is not fully implemented in interpreted mode")
+            return 0
+
+        # Memory management functions (stub implementations)
+        def stub_allocate(size):
+            """Stub allocate function - not needed in interpreted mode."""
+            self.logger.warning("allocate() is not needed in interpreted mode (Python handles memory)")
+            return None
+
+        def stub_retain(obj):
+            """Stub retain function - not needed in interpreted mode."""
+            self.logger.warning("retain() is not needed in interpreted mode (Python handles memory)")
+            return None
+
+        def stub_release(obj):
+            """Stub release function - not needed in interpreted mode."""
+            self.logger.warning("release() is not needed in interpreted mode (Python handles memory)")
+            return None
+
+        # panic function
+        def panic(message):
+            """Panic function - raises a runtime error."""
+            raise RuntimeError(f"PANIC: {message}")
+
+        # Socket constants
+        self.global_scope["AF_INET"] = 2  # Address family: Internet
+        self.global_scope["SOCK_STREAM"] = 1  # Socket type: Stream (TCP)
+        self.global_scope["socket"] = stub_socket
+        self.global_scope["connect"] = stub_connect
+        self.global_scope["send"] = stub_send
+        self.global_scope["recv"] = stub_recv
+        self.global_scope["close"] = stub_close
+        self.global_scope["allocate"] = stub_allocate
+        self.global_scope["retain"] = stub_retain
+        self.global_scope["release"] = stub_release
+        self.global_scope["panic"] = panic
+        self.global_scope["nil"] = None
 
     def execute(self, llvm_ir: str) -> None:
         """Execute LLVM IR code by JIT compiling and running it.
@@ -294,32 +355,61 @@ class YmirInterpreter:
 
             return cfunc(*cargs)
 
-    def run_ymir_script(self, file_path: str) -> None:
-        self.logger.debug(f"Running Ymir script: {file_path}")
-        self.load_standard_library()
+    def run_ymir_script(self, file_path: str, mode: str = "auto") -> None:
+        """
+        Run a Ymir script with the specified execution mode.
+
+        Args:
+            file_path: Path to the Ymir script
+            mode: Execution mode - "auto" (try LLVM, fallback to interpret),
+                  "interpret" (pure interpretation), or "llvm" (LLVM only)
+        """
+        self.logger.debug(f"Running Ymir script: {file_path} (mode: {mode})")
         project_root = os.path.dirname(os.path.abspath(file_path))
         main_module = self.load_module(file_path, project_root, is_entry_point=True)
         self.logger.debug(f"Main module after loading: {main_module}")
-        # Don't try to access .body on Module objects
-        if hasattr(main_module, "body"):
-            self.logger.debug(f"Main module body: {main_module.body}")
-        else:
+
+        # Check if we have a body attribute (AST nodes) or just exports (Module object)
+        if not hasattr(main_module, "body"):
             self.logger.debug(f"Main module exports: {main_module.exports}")
+            self.logger.info("Script executed successfully via interpretation")
+            return
 
-        # Skip LLVM code generation and execution for now since interpretation is working
-        # and LLVM execution fails due to missing main function
-        self.logger.debug("Script executed successfully via interpretation")
+        self.logger.debug(f"Main module body: {main_module.body}")
 
-        # TODO: Fix LLVM code generation to create proper main function
-        # codegen_body = [node for node in main_module.body if not isinstance(node, ModuleDef)]
-        # self.logger.debug(f"Filtered codegen body: {codegen_body}")
-        # code_generator = CodeGenerator()
-        # self.logger.debug("Starting code generation...")
-        # llvm_ir = code_generator.generate_code(codegen_body)
-        # self.logger.debug(f"Generated LLVM IR:\n{llvm_ir}")
-        # self.logger.debug("Starting execution...")
-        # self.execute(llvm_ir)
-        # self.logger.debug("Execution finished.")
+        # Decide execution strategy based on mode
+        if mode == "interpret":
+            self.logger.info("Using pure interpretation mode")
+            self.logger.info("Script executed successfully via interpretation")
+            return
+
+        # Try LLVM execution
+        try:
+            if mode == "llvm" or mode == "auto":
+                self.logger.info(f"Attempting LLVM compilation and execution (mode: {mode})")
+                # Filter out module definitions for codegen
+                codegen_body = [node for node in main_module.body if not isinstance(node, ModuleDef)]
+                self.logger.debug(f"Filtered codegen body ({len(codegen_body)} nodes)")
+
+                code_generator = CodeGenerator()
+                self.logger.debug("Starting code generation...")
+                llvm_ir = code_generator.generate_code(codegen_body)
+                self.logger.debug(f"Generated LLVM IR ({len(llvm_ir)} bytes)")
+
+                self.logger.debug("Starting LLVM execution...")
+                self.execute(llvm_ir)
+                self.logger.info("✓ Script executed successfully via LLVM")
+                return
+        except Exception as e:
+            if mode == "llvm":
+                # In llvm-only mode, propagate the error
+                self.logger.error(f"LLVM execution failed: {e}")
+                raise
+            else:
+                # In auto mode, log warning and fall back to interpretation
+                self.logger.warning(f"LLVM execution failed ({e}), falling back to interpretation")
+                self.logger.info("Script executed successfully via interpretation (fallback)")
+                return
 
     def load_module(self, file_path: str, project_root: str, is_entry_point: bool = False) -> Module:
         canonical_path = os.path.realpath(file_path)
@@ -1062,14 +1152,11 @@ class YmirInterpreter:
                     if len(node.args) != 1:
                         raise TypeError("lastIndexOf() takes exactly 1 argument")
                     value = self.evaluate_expression(node.args[0])
-                    try:
-                        # Find last occurrence
-                        for i in range(len(instance) - 1, -1, -1):
-                            if instance[i] == value:
-                                return i
-                        return -1
-                    except:
-                        return -1
+                    # Find last occurrence
+                    for i in range(len(instance) - 1, -1, -1):
+                        if instance[i] == value:
+                            return i
+                    return -1
                 elif node.method_name == "contains":
                     if len(node.args) != 1:
                         raise TypeError("contains() takes exactly 1 argument")

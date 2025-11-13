@@ -10,14 +10,11 @@ Tests all language constructs including:
 - Module system
 """
 
-import pytest
-
 from ymir.core.ast import (
     Assignment,
     BinaryOp,
     ChannelSend,
     ClassDef,
-    Expression,
     ForCStyleLoop,
     ForInLoop,
     FunctionCall,
@@ -28,7 +25,7 @@ from ymir.core.ast import (
 )
 from ymir.core.lexer import Lexer, TokenType
 from ymir.core.parser import Parser
-from ymir.core.types import ArrayType, ChannelType, IntType, StringType
+from ymir.core.types import ArrayType, ChannelType, IntType
 
 
 class TestVariableDeclarations:

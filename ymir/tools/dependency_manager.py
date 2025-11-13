@@ -3,12 +3,9 @@ import json
 import logging
 import os
 import subprocess
-from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import toml
-
-from ymir.interpreter import YmirInterpreter
 
 logger = logging.getLogger("ymir.dependency_manager")
 

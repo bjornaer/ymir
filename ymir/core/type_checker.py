@@ -271,17 +271,14 @@ class TypeChecker:
             self.visit(statement)
 
     def visit_expression(self, node):
-        print(f"[DEBUG] visit_expression: node={node}, type={type(node)}")
         # Handle Expression node
         if isinstance(node, Expression):
-            print(f"[DEBUG] visit_expression - node.expression: {node.expression}, type: {type(node.expression)}")
             if isinstance(node.expression, int):
                 return IntType()
             elif isinstance(node.expression, str):
                 # Handle attribute access like e.message or exceptions.ValueError
                 if "." in node.expression:
                     var, attr = node.expression.split(".", 1)
-                    print(f"DEBUG: Attribute access - var: {var}, attr: {attr}")
                     if var in self.symbol_table:
                         obj = self.symbol_table[var]
                         # If obj is a module namespace, look up attr inside it

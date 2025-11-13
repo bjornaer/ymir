@@ -14,7 +14,7 @@ class TestChannel:
         """Test creating a channel."""
         ch = Channel(int, buffer_size=5)
         assert ch.buffer_size == 5
-        assert ch.element_type == int
+        assert ch.element_type is int
         assert not ch.closed
 
     def test_unbuffered_channel(self):
@@ -48,7 +48,7 @@ class TestConcurrencyRuntime:
         runtime = ConcurrencyRuntime()
         ch = runtime.create_channel(int, buffer_size=5)
         assert isinstance(ch, Channel)
-        assert ch.element_type == int
+        assert ch.element_type is int
         assert ch.buffer_size == 5
 
     def test_spawn_function(self):

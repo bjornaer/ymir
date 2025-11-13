@@ -21,11 +21,18 @@ def cli():
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
 @click.option("--verbosity", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="INFO")
-def run(file, verbosity):
+@click.option("--no-stdlib", is_flag=True, help="Skip loading the standard library (faster startup)")
+@click.option(
+    "--mode",
+    type=click.Choice(["auto", "interpret", "llvm"]),
+    default="auto",
+    help="Execution mode: auto (LLVM with fallback), interpret, or llvm",
+)
+def run(file, verbosity, no_stdlib, mode):
     """Run a Ymir script."""
     try:
-        interpreter = YmirInterpreter(verbosity=verbosity)
-        interpreter.run_ymir_script(file)
+        interpreter = YmirInterpreter(verbosity=verbosity, load_stdlib=not no_stdlib)
+        interpreter.run_ymir_script(file, mode=mode)
     except Exception as e:
         click.echo(f"Error running {file}: {e}")
 

@@ -5,7 +5,6 @@ Tests for Ymir CLI commands.
 import os
 import tempfile
 
-import pytest
 from click.testing import CliRunner
 
 from ymir.cli.ymir_cli import cli
@@ -116,9 +115,7 @@ class TestPackageManagerCommands:
 
     def test_add_dependency(self):
         """Test adding a dependency."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            dep_file = os.path.join(tmpdir, "test_deps.toml")
-
+        with tempfile.TemporaryDirectory():
             # This will try to clone, so we skip actual execution
             # Just test that the command is recognized
             result = self.runner.invoke(cli, ["add", "--help"])
@@ -162,7 +159,7 @@ main()
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 output_path = os.path.join(tmpdir, "test_output")
-                result = self.runner.invoke(cli, ["build", script_path, "--output", output_path])
+                self.runner.invoke(cli, ["build", script_path, "--output", output_path])
                 # Build may not be fully functional yet, so we just check command runs
                 # Exit code might be non-zero if build isn't implemented
         finally:

@@ -2,8 +2,6 @@
 Integration tests for HTTP client and server.
 """
 
-import asyncio
-
 import pytest
 
 from ymir.core.builtin_http import HTTPClient, HTTPServer, Request, Response
