@@ -3,7 +3,7 @@
   <img src="assets/ymir_logo.png" alt="Ymir Logo"/>
 </p>
 
-Ymir is a modern programming language inspired by Norse mythology, designed to be powerful and efficient for machine learning systems. Ymir combines Python's ease of use with Go's concurrency model, featuring advanced mathematical support with GPU acceleration.
+Ymir is a modern programming language inspired by Norse mythology, designed to be powerful and efficient for quantum computing simulations. Ymir combines Python's ease of use with Go's concurrency model, featuring advanced mathematical support with GPU acceleration.
 
 ## Features
 
@@ -25,6 +25,13 @@ brew tap bjornaer/ymir
 brew install ymir
 # to add gpu support, also install jax
 pip install jax jaxlib
+```
+
+Or install from source
+```bash
+poetry build
+pipx install /Users/YOUR_NAME/ymir/dist/ymir-X.X.X-py3-none-any.whl --force
+which ymir
 ```
 
 ## Development
@@ -109,24 +116,24 @@ func main() {
 
 ### Running Ymir Scripts
 
-Ymir compiles and executes scripts using LLVM by default for maximum performance:
+Ymir compiles and executes scripts using LLVM by default for maximum performance, if Ymir is installed simply execute the commands, otherwise prefix the commands with `poetry run`
 
 ```bash
 # Run with LLVM compilation (default)
-poetry run ymir run examples/main.ymr
+ymir run examples/main.ymr
 
 # Run with interpreter mode (useful for debugging)
-poetry run ymir run examples/main.ymr --interpreter
+ymir run examples/main.ymr --interpreter
 # or shorthand:
-poetry run ymir run examples/main.ymr -i
+ymir run examples/main.ymr -i
 
 # Skip standard library loading for faster startup
-poetry run ymir run examples/main.ymr --no-stdlib
+ymir run examples/main.ymr --no-stdlib
 
 # Set execution mode explicitly
-poetry run ymir run examples/main.ymr --mode llvm      # LLVM only (fail if compilation fails)
-poetry run ymir run examples/main.ymr --mode interpret # Pure interpretation
-poetry run ymir run examples/main.ymr --mode auto      # Try LLVM, fallback to interpreter
+ymir run examples/main.ymr --mode llvm      # LLVM only (fail if compilation fails)
+ymir run examples/main.ymr --mode interpret # Pure interpretation
+ymir run examples/main.ymr --mode auto      # Try LLVM, fallback to interpreter
 ```
 
 ### Execution Modes
@@ -157,22 +164,22 @@ See [LLVM_STATUS.md](LLVM_STATUS.md) for detailed feature support and known issu
 ### Building Binaries
 Build Ymir scripts into standalone executables:
 ```bash
-poetry run ymir build examples/main.ymr --output dist/myapp
+ymir build examples/main.ymr --output dist/myapp
 ```
 
 ### Package Management
 ```bash
 # Add a dependency from GitHub/GitLab
-poetry run ymir add github.com/user/awesome-lib
+ymir add github.com/user/awesome-lib
 
 # Install all dependencies
-poetry run ymir install
+ymir install
 
 # List dependencies
-poetry run ymir list
+ymir list
 
 # Remove a dependency
-poetry run ymir remove awesome-lib
+ymir remove awesome-lib
 ```
 
 ### Contributing
