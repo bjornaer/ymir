@@ -6,6 +6,7 @@ Tests complete workflows combining multiple features.
 
 import os
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -253,20 +254,24 @@ class TestExampleScripts:
 
     def test_example_script_exists(self):
         """Test that example script exists."""
-        example_path = "/Users/max/personal/ymir/examples/example.ymr"
-        assert os.path.exists(example_path), "Example script should exist"
+        repo_root = Path(__file__).parent.parent.parent
+        example_path = repo_root / "examples" / "example.ymr"
+        assert example_path.exists(), "Example script should exist"
 
     def test_concurrency_demo_exists(self):
         """Test that concurrency demo exists."""
-        demo_path = "/Users/max/personal/ymir/examples/concurrency_demo.ymr"
-        assert os.path.exists(demo_path), "Concurrency demo should exist"
+        repo_root = Path(__file__).parent.parent.parent
+        demo_path = repo_root / "examples" / "concurrency_demo.ymr"
+        assert demo_path.exists(), "Concurrency demo should exist"
 
     def test_gpu_matrix_demo_exists(self):
         """Test that GPU matrix demo exists."""
-        demo_path = "/Users/max/personal/ymir/examples/gpu_matrix_demo.ymr"
-        assert os.path.exists(demo_path), "GPU matrix demo should exist"
+        repo_root = Path(__file__).parent.parent.parent
+        demo_path = repo_root / "examples" / "gpu_matrix_demo.ymr"
+        assert demo_path.exists(), "GPU matrix demo should exist"
 
     def test_http_server_demo_exists(self):
         """Test that HTTP server demo exists."""
-        demo_path = "/Users/max/personal/ymir/examples/http_server_demo.ymr"
-        assert os.path.exists(demo_path), "HTTP server demo should exist"
+        repo_root = Path(__file__).parent.parent.parent
+        demo_path = repo_root / "examples" / "http_server_demo.ymr"
+        assert demo_path.exists(), "HTTP server demo should exist"
