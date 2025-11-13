@@ -3,8 +3,12 @@ from ymir.core.ast import (
     ArrayLiteral,
     Assignment,
     BinaryOp,
+    Break,
+    ChannelReceive,
+    ChannelSend,
     ClassDef,
     ClassInstance,
+    Continue,
     ExceptionDef,
     ExportDef,
     Expression,
@@ -17,10 +21,14 @@ from ymir.core.ast import (
     MethodCall,
     ModuleDef,
     ReturnStatement,
+    SelectCase,
+    SelectStatement,
+    SpawnStatement,
     StringLiteral,
     ThrowStatement,
     TryExceptStatement,
     TupleLiteral,
+    UnaryOp,
     WhileStatement,
 )
 from ymir.core.types import (
@@ -92,6 +100,25 @@ class TypeChecker:
         self.symbol_table["strlen"] = FunctionType([StringType()], IntType())
         self.symbol_table["strcmp"] = FunctionType([StringType(), StringType()], IntType())
         self.symbol_table["strcat"] = FunctionType([StringType(), StringType()], StringType())
+
+        # Networking functions
+        self.symbol_table["socket"] = FunctionType([IntType(), IntType(), IntType()], AnyType())
+        self.symbol_table["connect"] = FunctionType([AnyType(), StringType(), IntType()], IntType())
+        self.symbol_table["send"] = FunctionType([AnyType(), StringType(), IntType()], IntType())
+        self.symbol_table["recv"] = FunctionType([AnyType(), IntType()], AnyType())
+        self.symbol_table["close"] = FunctionType([AnyType()], IntType())
+
+        # Networking constants
+        self.symbol_table["AF_INET"] = IntType()
+        self.symbol_table["SOCK_STREAM"] = IntType()
+
+        # Memory management functions
+        self.symbol_table["allocate"] = FunctionType([IntType()], AnyType())
+        self.symbol_table["retain"] = FunctionType([AnyType()], None)
+        self.symbol_table["release"] = FunctionType([AnyType()], None)
+
+        # Panic function
+        self.symbol_table["panic"] = FunctionType([AnyType()], None)
 
     def check(self, ast):
         for node in ast:
@@ -185,6 +212,24 @@ class TypeChecker:
             return None
         elif isinstance(node, ExportDef):
             return self.visit_export_def(node)
+        elif isinstance(node, UnaryOp):
+            return self.visit_unary_op(node)
+        elif isinstance(node, Break):
+            pass  # Break statements don't need type checking
+        elif isinstance(node, Continue):
+            pass  # Continue statements don't need type checking
+        elif isinstance(node, SpawnStatement):
+            return self.visit_spawn_statement(node)
+        elif isinstance(node, ChannelSend):
+            return self.visit_channel_send(node)
+        elif isinstance(node, ChannelReceive):
+            return self.visit_channel_receive(node)
+        elif isinstance(node, SelectStatement):
+            return self.visit_select_statement(node)
+        elif isinstance(node, SelectCase):
+            return self.visit_select_case(node)
+        elif isinstance(node, ArrayAccess):
+            return self.visit_array_access(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -713,4 +758,49 @@ class TypeChecker:
         if hasattr(node, "body") and node.body:
             for stmt in node.body:
                 self.visit(stmt)
+        return None
+
+    def visit_unary_op(self, node: UnaryOp):
+        """Type check a unary operation."""
+        operand_type = self.visit(node.operand)
+        # Unary minus on int/float returns int/float
+        if node.operator == "-":
+            if operand_type in [IntType(), FloatType()]:
+                return operand_type
+        # Unary plus on int/float returns int/float
+        elif node.operator == "+":
+            if operand_type in [IntType(), FloatType()]:
+                return operand_type
+        # Logical not on bool returns bool
+        elif node.operator == "!":
+            return BoolType()
+        return AnyType()
+
+    def visit_spawn_statement(self, node: SpawnStatement):
+        """Type check a spawn statement."""
+        return self.visit(node.call)
+
+    def visit_channel_send(self, node: ChannelSend):
+        """Type check a channel send operation."""
+        self.visit_expression(node.channel)
+        self.visit_expression(node.value)
+        return None
+
+    def visit_channel_receive(self, node: ChannelReceive):
+        """Type check a channel receive operation."""
+        self.visit_expression(node.channel)
+        return AnyType()
+
+    def visit_select_statement(self, node: SelectStatement):
+        """Type check a select statement."""
+        for case in node.cases:
+            self.visit(case)
+        return None
+
+    def visit_select_case(self, node: SelectCase):
+        """Type check a select case."""
+        if node.operation:
+            self.visit(node.operation)
+        for statement in node.body:
+            self.visit(statement)
         return None

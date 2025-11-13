@@ -255,6 +255,39 @@ func safe_divide(a: int, b: int) -> int {
 }
 ```
 
+### TODO: Multiple Return Values (Go-style Error Handling)
+
+**Status**: Not yet implemented
+
+Go-style multiple return values for error handling are planned but not yet supported:
+
+```ymr
+# Planned syntax (not yet implemented):
+func divide(a: int, b: int) -> int, error {
+    if (b == 0) {
+        return 0, "division by zero"
+    }
+    return a / b, nil
+}
+
+# Usage:
+result, err = divide(10, 0)
+if (err != nil) {
+    panic(err)
+}
+```
+
+**Current Workaround**: Use `try-except` blocks or `panic()` for error handling:
+
+```ymr
+func divide(a: int, b: int) -> int {
+    if (b == 0) {
+        panic("division by zero")
+    }
+    return a / b
+}
+```
+
 ### Throwing Exceptions
 
 ```ymr

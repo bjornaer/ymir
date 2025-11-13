@@ -349,6 +349,8 @@ class Parser:
         self.logger.debug(f"Parsed parameter types: {param_types}")
 
         # Parse return type if present
+        # TODO(multiple-returns): Implement support for multiple return values (func() -> int, error)
+        # Currently only supports single return type
         return_type = None
         if self.current_token().type == TokenType.OPERATOR and self.current_token().value == "->":
             self.advance()  # Skip '->'

@@ -291,7 +291,8 @@ class YmirInterpreter:
         1. Initializes LLVM and native target
         2. Parses and verifies the LLVM IR module
         3. Creates a JIT compiler and execution engine
-        4. Retrieves and executes the main function
+        4. Registers runtime functions
+        5. Retrieves and executes the main function
         """
         binding.initialize()
         binding.initialize_native_target()
@@ -303,6 +304,27 @@ class YmirInterpreter:
         target_machine = binding.Target.from_default_triple().create_target_machine()
         with binding.create_mcjit_compiler(llvm_module, target_machine) as ee:
             ee.finalize_object()
+
+            # Register runtime functions with the execution engine
+            from ymir.core.runtime import get_runtime_function, memory_manager
+
+            # Register networking functions
+            for func_name in ["socket", "connect", "send", "recv", "close"]:
+                runtime_func = get_runtime_function(func_name)
+                if runtime_func:
+                    func_addr = ctypes.cast(runtime_func, ctypes.c_void_p).value
+                    ee.add_global_mapping(func_name, func_addr)
+
+            # Register memory management functions
+            allocate_func = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int)(memory_manager.allocate)
+            ee.add_global_mapping("allocate", ctypes.cast(allocate_func, ctypes.c_void_p).value)
+
+            retain_func = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(memory_manager.retain)
+            ee.add_global_mapping("retain", ctypes.cast(retain_func, ctypes.c_void_p).value)
+
+            release_func = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(memory_manager.release)
+            ee.add_global_mapping("release", ctypes.cast(release_func, ctypes.c_void_p).value)
+
             ee.run_static_constructors()
 
             main_func_ptr = ee.get_function_address("main")
@@ -366,7 +388,17 @@ class YmirInterpreter:
         """
         self.logger.debug(f"Running Ymir script: {file_path} (mode: {mode})")
         project_root = os.path.dirname(os.path.abspath(file_path))
-        main_module = self.load_module(file_path, project_root, is_entry_point=True)
+
+        # Decide execution strategy based on mode
+        if mode == "interpret":
+            # Load and evaluate immediately in interpretation mode
+            self.logger.info("Using pure interpretation mode")
+            main_module = self.load_module(file_path, project_root, is_entry_point=True)
+            self.logger.info("Script executed successfully via interpretation")
+            return
+
+        # For LLVM or auto mode, load without evaluating first
+        main_module = self.load_module(file_path, project_root, is_entry_point=False)
         self.logger.debug(f"Main module after loading: {main_module}")
 
         # Check if we have a body attribute (AST nodes) or just exports (Module object)
@@ -376,12 +408,6 @@ class YmirInterpreter:
             return
 
         self.logger.debug(f"Main module body: {main_module.body}")
-
-        # Decide execution strategy based on mode
-        if mode == "interpret":
-            self.logger.info("Using pure interpretation mode")
-            self.logger.info("Script executed successfully via interpretation")
-            return
 
         # Try LLVM execution
         try:
@@ -406,8 +432,11 @@ class YmirInterpreter:
                 self.logger.error(f"LLVM execution failed: {e}")
                 raise
             else:
-                # In auto mode, log warning and fall back to interpretation
+                # In auto mode, fall back to interpretation
                 self.logger.warning(f"LLVM execution failed ({e}), falling back to interpretation")
+                # Re-load and evaluate the module in interpretation mode
+                self.loaded_modules.clear()  # Clear cache to force re-evaluation
+                main_module = self.load_module(file_path, project_root, is_entry_point=True)
                 self.logger.info("Script executed successfully via interpretation (fallback)")
                 return
 
@@ -446,6 +475,9 @@ class YmirInterpreter:
         # Create a Module object to hold exports and cache it to handle cycles
         module_obj = Module(module_name)
         self.loaded_modules[canonical_path] = module_obj
+
+        # Attach the AST body for LLVM compilation
+        module_obj.body = module_body
 
         self.logger.debug(f"Module: {module_obj}")
         # First pass: register all classes and functions
@@ -1334,16 +1366,26 @@ class YmirInterpreter:
         """
         self.evaluate_expression(node.init)
         while self.evaluate_expression(node.condition):
-            for statement in node.body:
-                self.evaluate(statement)
+            try:
+                for statement in node.body:
+                    self.evaluate(statement)
+            except ContinueSignal:
+                pass  # Continue to increment and next iteration
+            except BreakSignal:
+                break  # Exit the loop
             self.evaluate_expression(node.increment)
 
     def evaluate_for_in_loop(self, node: ForInLoop) -> None:
         iterable = self.evaluate_expression(node.iterable)
         for item in iterable:
             self.local_scope[node.var] = item
-            for statement in node.body:
-                self.evaluate(statement)
+            try:
+                for statement in node.body:
+                    self.evaluate(statement)
+            except ContinueSignal:
+                continue  # Continue to next iteration
+            except BreakSignal:
+                break  # Exit the loop
 
     def evaluate_while_statement(self, node: WhileStatement) -> None:
         while self.evaluate_expression(node.condition):

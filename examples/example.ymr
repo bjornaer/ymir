@@ -113,14 +113,15 @@ func print_non_zero_elements(arr: array[int]) {
     }
 }
 
-# Example of error and nil types
-# NOTE: Multiple return values (error handling) not yet fully implemented
-# func divide(a: int, b: int) -> int, error {
-#     if (b == 0) {
-#         return 0, "division by zero"
-#     }
-#     return a / b, nil
-# }
+# Example of error handling
+# TODO(multiple-returns): Multiple return values (func() -> int, error) not yet implemented
+# Workaround: Use panic() for error handling
+func divide(a: int, b: int) -> int {
+    if (b == 0) {
+        panic("division by zero")
+    }
+    return a / b
+}
 
 # Main function
 func main() {
@@ -173,13 +174,13 @@ func main() {
     # Memory management
     memory_example()
 
-    # Error handling
-    # NOTE: Multiple return values not yet fully implemented
-    # result, err = divide(10, 0)
-    # if (err != nil) {
-    #     panic(err)
-    # }
-    # print("Result: " + str(result))
+    # Error handling - demonstrate panic
+    print("\n--- Error Handling Demo ---")
+    result = divide(10, 2)
+    print("10 / 2 = " + str(result))
+    
+    # This would panic: divide(10, 0)
+    # Uncomment to test: panic("division by zero")
 }
 
 main()

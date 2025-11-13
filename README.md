@@ -7,12 +7,14 @@ Ymir is a modern programming language inspired by Norse mythology, designed to b
 
 ## Features
 
+- **LLVM-Powered Execution:** JIT compilation via LLVM for high-performance native code execution
 - **Intuitive Hybrid Syntax:** Clean syntax combining Python's readability with Go's structure
 - **Go-Style Concurrency:** Spawn tasks and communicate via channels for easy parallel processing
 - **GPU-Accelerated Matrix Operations:** Built-in matrix support powered by JAX with automatic CPU fallback
 - **Async HTTP Server & Client:** Built on aiohttp for high-performance web applications
 - **Go-Style Package Management:** Install dependencies directly from GitHub/GitLab repos
 - **Type Safety:** Strongly typed with type inference and checking
+- **Dual Execution Modes:** LLVM compilation (default) or pure interpretation for debugging
 - **Standard Library:** Comprehensive stdlib including math, HTTP, server, collections, and more
 - **Cross-Platform:** Runs on Linux, macOS, and Windows
 
@@ -106,8 +108,25 @@ func main() {
 ## Usage
 
 ### Running Ymir Scripts
+
+Ymir compiles and executes scripts using LLVM by default for maximum performance:
+
 ```bash
+# Run with LLVM compilation (default)
 poetry run ymir run examples/main.ymr
+
+# Run with interpreter mode (useful for debugging)
+poetry run ymir run examples/main.ymr --interpreter
+# or shorthand:
+poetry run ymir run examples/main.ymr -i
+
+# Skip standard library loading for faster startup
+poetry run ymir run examples/main.ymr --no-stdlib
+
+# Set execution mode explicitly
+poetry run ymir run examples/main.ymr --mode llvm      # LLVM only (fail if compilation fails)
+poetry run ymir run examples/main.ymr --mode interpret # Pure interpretation
+poetry run ymir run examples/main.ymr --mode auto      # Try LLVM, fallback to interpreter
 ```
 
 ### Building Binaries

@@ -6,12 +6,17 @@ from ymir.core.ast import (
     Assignment,
     ASTNode,
     BinaryOp,
+    Break,
+    ChannelReceive,
+    ChannelSend,
     ClassDef,
+    Continue,
     ExceptClause,
     ExceptionDef,
     ExportDef,
     Expression,
     FinallyClause,
+    ForCStyleLoop,
     ForInLoop,
     FunctionCall,
     FunctionDef,
@@ -21,6 +26,9 @@ from ymir.core.ast import (
     MethodCall,
     ModuleDef,
     ReturnStatement,
+    SelectCase,
+    SelectStatement,
+    SpawnStatement,
     StringLiteral,
     ThrowStatement,
     TryExceptStatement,
@@ -52,6 +60,12 @@ class SemanticAnalyzer:
             self.visit_while_statement(node)
         elif isinstance(node, ForInLoop):
             self.visit_for_in_loop(node)
+        elif isinstance(node, ForCStyleLoop):
+            self.visit_for_cstyle_loop(node)
+        elif isinstance(node, Break):
+            pass  # Break statements don't need analysis
+        elif isinstance(node, Continue):
+            pass  # Continue statements don't need analysis
         elif isinstance(node, Assignment):
             self.visit_assignment(node)
         elif isinstance(node, Expression):
@@ -92,6 +106,16 @@ class SemanticAnalyzer:
             self.visit_unary_op(node)
         elif isinstance(node, ArrayAccess):
             self.visit_array_access(node)
+        elif isinstance(node, SpawnStatement):
+            self.visit_spawn_statement(node)
+        elif isinstance(node, ChannelSend):
+            self.visit_channel_send(node)
+        elif isinstance(node, ChannelReceive):
+            self.visit_channel_receive(node)
+        elif isinstance(node, SelectStatement):
+            self.visit_select_statement(node)
+        elif isinstance(node, SelectCase):
+            self.visit_select_case(node)
         else:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
@@ -266,3 +290,40 @@ class SemanticAnalyzer:
         """Visit an array access node."""
         self.visit(node.array)
         self.visit(node.index)
+
+    def visit_for_cstyle_loop(self, node: ForCStyleLoop) -> None:
+        """Visit a C-style for loop node."""
+        # Visit init, condition, increment
+        self.visit(node.init)
+        self.visit_expression(node.condition)
+        self.visit(node.increment)
+        # Enter scope for loop body
+        self.symbol_table.enter_scope()
+        for statement in node.body:
+            self.visit(statement)
+        self.symbol_table.exit_scope()
+
+    def visit_spawn_statement(self, node: SpawnStatement) -> None:
+        """Visit a spawn statement node."""
+        self.visit(node.call)
+
+    def visit_channel_send(self, node: ChannelSend) -> None:
+        """Visit a channel send node."""
+        self.visit_expression(node.channel)
+        self.visit_expression(node.value)
+
+    def visit_channel_receive(self, node: ChannelReceive) -> None:
+        """Visit a channel receive node."""
+        self.visit_expression(node.channel)
+
+    def visit_select_statement(self, node: SelectStatement) -> None:
+        """Visit a select statement node."""
+        for case in node.cases:
+            self.visit(case)
+
+    def visit_select_case(self, node: SelectCase) -> None:
+        """Visit a select case node."""
+        if node.operation:
+            self.visit(node.operation)
+        for statement in node.body:
+            self.visit(statement)
