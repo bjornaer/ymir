@@ -987,8 +987,17 @@ class Parser:
         self.expect_token(TokenType.IDENTIFIER)
         self.expect_token(TokenType.COLON, ":")
         var_type = self.parse_type_annotation()
-        self.expect_token(TokenType.OPERATOR, "=")
-        value = self.parse_expression()
+
+        # Initialization is optional
+        if self.current_token().type == TokenType.OPERATOR and self.current_token().value == "=":
+            self.advance()  # Skip '='
+            value = self.parse_expression()
+        else:
+            # No initialization - use nil as default value
+            from ymir.core.types import NilType
+
+            value = Expression(NilType())
+
         return Assignment(name_token.value, value, var_type)
 
     def parse_try_except_statement(self) -> TryExceptStatement:

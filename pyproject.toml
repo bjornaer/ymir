@@ -50,7 +50,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 120
-target-version = ['py310', 'py311']
+target-version = ['py312', 'py313']
 exclude = '''
 (
   /(
@@ -91,8 +91,8 @@ exclude = [
 # Same as Black.
 line-length = 120
 
-# Assume Python 3.11.
-target-version = "py311"
+# Assume Python 3.13
+target-version = "py313"
 
 [tool.ruff.lint]
 # Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.

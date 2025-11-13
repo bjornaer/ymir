@@ -41,7 +41,7 @@ from ymir.core.parser import Parser
 from ymir.core.semantic_analyzer import SemanticAnalyzer
 from ymir.core.type_checker import TypeChecker
 from ymir.logging import get_logger
-from ymir.tools.codegen import CodeGenerator
+from ymir.tools.codegen import CodeGenerator, UnsupportedFeatureError
 
 
 class Module:
@@ -304,27 +304,6 @@ class YmirInterpreter:
         target_machine = binding.Target.from_default_triple().create_target_machine()
         with binding.create_mcjit_compiler(llvm_module, target_machine) as ee:
             ee.finalize_object()
-
-            # Register runtime functions with the execution engine
-            from ymir.core.runtime import get_runtime_function, memory_manager
-
-            # Register networking functions
-            for func_name in ["socket", "connect", "send", "recv", "close"]:
-                runtime_func = get_runtime_function(func_name)
-                if runtime_func:
-                    func_addr = ctypes.cast(runtime_func, ctypes.c_void_p).value
-                    ee.add_global_mapping(func_name, func_addr)
-
-            # Register memory management functions
-            allocate_func = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_int)(memory_manager.allocate)
-            ee.add_global_mapping("allocate", ctypes.cast(allocate_func, ctypes.c_void_p).value)
-
-            retain_func = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(memory_manager.retain)
-            ee.add_global_mapping("retain", ctypes.cast(retain_func, ctypes.c_void_p).value)
-
-            release_func = ctypes.CFUNCTYPE(None, ctypes.c_void_p)(memory_manager.release)
-            ee.add_global_mapping("release", ctypes.cast(release_func, ctypes.c_void_p).value)
-
             ee.run_static_constructors()
 
             main_func_ptr = ee.get_function_address("main")
@@ -426,6 +405,17 @@ class YmirInterpreter:
                 self.execute(llvm_ir)
                 self.logger.info("✓ Script executed successfully via LLVM")
                 return
+        except UnsupportedFeatureError as e:
+            # Explicit unsupported feature - clean fallback message
+            if mode == "llvm":
+                self.logger.error(f"LLVM mode cannot execute this script: {e}")
+                raise
+            else:
+                self.logger.info(f"Falling back to interpreter: {e}")
+                self.loaded_modules.clear()
+                main_module = self.load_module(file_path, project_root, is_entry_point=True)
+                self.logger.info("Script executed successfully via interpretation (fallback)")
+                return
         except Exception as e:
             if mode == "llvm":
                 # In llvm-only mode, propagate the error
@@ -439,6 +429,24 @@ class YmirInterpreter:
                 main_module = self.load_module(file_path, project_root, is_entry_point=True)
                 self.logger.info("Script executed successfully via interpretation (fallback)")
                 return
+
+    def run_ymir_code(self, source_code: str, mode: str = "auto") -> None:
+        """Run Ymir code from a string by writing to a temporary file.
+
+        Args:
+            source_code: Ymir source code as a string
+            mode: Execution mode - "auto", "interpret", or "llvm"
+        """
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".ymr", delete=False) as f:
+            f.write(source_code)
+            temp_path = f.name
+
+        try:
+            self.run_ymir_script(temp_path, mode=mode)
+        finally:
+            os.remove(temp_path)
 
     def load_module(self, file_path: str, project_root: str, is_entry_point: bool = False) -> Module:
         canonical_path = os.path.realpath(file_path)
@@ -585,6 +593,8 @@ class YmirInterpreter:
             return self.evaluate_exception_def(node)
         elif isinstance(node, SpawnStatement):
             return self.evaluate_spawn_statement(node)
+        elif isinstance(node, ChannelSend):
+            return self.evaluate_channel_send(node)
         elif isinstance(node, ModuleDef):
             for stmt in node.body:
                 self.evaluate(stmt)
@@ -1610,6 +1620,41 @@ class YmirInterpreter:
         task_id = self.concurrency_runtime.spawn(task_wrapper)
         self.logger.info(f"[evaluate_spawn_statement] Spawned task {task_id} for function {func_name}")
         return task_id
+
+    def evaluate_channel_send(self, node: ChannelSend) -> None:
+        """Evaluate a channel send/receive operation.
+
+        Due to parser limitations, `var <- ch` is parsed as ChannelSend where
+        var is the "channel" and ch is the "value". We detect this and handle
+        it as a receive that assigns to a variable.
+        """
+        # Check if this is actually a receive: var <- channel
+        if isinstance(node.channel, Expression) and isinstance(node.channel.expression, str):
+            var_name = node.channel.expression
+            # If it's a simple identifier, check if it exists
+            is_new_var = var_name not in self.local_scope and var_name not in self.global_scope
+
+            if is_new_var:
+                # This is a receive: var <- channel
+                channel = self.evaluate_expression(node.value)
+                # Receive from channel (synchronously for now)
+                value = self.concurrency_runtime.run_until_complete(channel.receive())
+                # Assign to local scope
+                if self.local_scope is not None and len(self.local_scope) > 0:
+                    self.local_scope[var_name] = value
+                else:
+                    self.global_scope[var_name] = value
+                return
+
+        # Normal send: channel <- value
+        channel = self.evaluate_expression(node.channel)
+        value = self.evaluate_expression(node.value)
+        # Send to channel (asynchronously)
+        import asyncio
+
+        asyncio.create_task(channel.send(value))
+        self.logger.debug(f"[evaluate_channel_send] Sent {value} to channel")
+        return None
 
     def process_import(self, module_name: str, project_root: str):
         """Processes an import statement, creating nested module objects."""

@@ -1,17 +1,20 @@
 import ctypes
 import functools
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from llvmlite import binding, ir
 
 from ymir.core.ast import (
+    ArrayAccess,
     ArrayLiteral,
     Assignment,
     AsyncFunctionDef,
     AwaitExpression,
     BinaryOp,
     Break,
+    ChannelReceive,
+    ChannelSend,
     ClassDef,
     ClassInstance,
     Continue,
@@ -26,16 +29,62 @@ from ymir.core.ast import (
     MapLiteral,
     MethodCall,
     ModuleDef,
+    SelectStatement,
+    SpawnStatement,
     StringLiteral,
     ThrowStatement,
     TryExceptStatement,
     TupleLiteral,
+    UnaryOp,
     WhileStatement,
 )
 from ymir.core.builtin_functions import create_builtin_functions
 from ymir.core.builtin_networking import create_networking_functions
 from ymir.core.types import ArrayType, MapType, NilType, TupleType
 from ymir.tools.async_support import AsyncSupport
+
+
+class UnsupportedFeatureError(Exception):
+    """Raised when LLVM codegen encounters a feature that requires interpreter fallback."""
+
+    pass
+
+
+class FeatureDetector:
+    """Detects unsupported features in AST that require interpreter execution."""
+
+    UNSUPPORTED_NODES = (
+        SpawnStatement,  # Concurrency - spawn
+        ChannelSend,  # Concurrency - channel send
+        ChannelReceive,  # Concurrency - channel receive
+        SelectStatement,  # Concurrency - select
+        AsyncFunctionDef,  # Async/await
+        AwaitExpression,  # Async/await
+    )
+
+    @classmethod
+    def check_ast(cls, ast_nodes: List[Any]) -> Optional[str]:
+        """
+        Check if AST contains unsupported features.
+        Returns feature name if unsupported, None otherwise.
+        """
+        for node in ast_nodes:
+            if isinstance(node, cls.UNSUPPORTED_NODES):
+                return type(node).__name__
+            # Recursively check nested structures
+            if hasattr(node, "body") and isinstance(node.body, list):
+                nested = cls.check_ast(node.body)
+                if nested:
+                    return nested
+            if hasattr(node, "then_body"):
+                nested = cls.check_ast(node.then_body)
+                if nested:
+                    return nested
+            if hasattr(node, "else_body") and node.else_body:
+                nested = cls.check_ast(node.else_body)
+                if nested:
+                    return nested
+        return None
 
 
 class CodeGenerator:
@@ -49,6 +98,9 @@ class CodeGenerator:
         self.networking = create_networking_functions(self.module)
         self.async_support = AsyncSupport()
 
+        # Track loop context for break/continue
+        self.loop_stack = []  # Stack of (continue_block, break_block) tuples
+
         # Add exception handling tracking
         self.exception_handlers = []  # Stack of exception handlers
         self.current_try_block = None
@@ -59,12 +111,57 @@ class CodeGenerator:
 
     def generate_code(self, ast: List[Any]) -> str:
         self.logger.debug(f"[CodeGen] Generating code for AST: {ast}")
+
+        # Check for unsupported features first
+        unsupported = FeatureDetector.check_ast(ast)
+        if unsupported:
+            raise UnsupportedFeatureError(
+                f"Feature '{unsupported}' requires interpreter execution. "
+                f"Use --mode interpret or let auto mode fallback."
+            )
+
+        # Separate function definitions from top-level statements
+        function_defs = []
+        top_level_stmts = []
+
         for node in ast:
             if isinstance(node, ModuleDef):
                 self.logger.warning(f"[CodeGen] Skipping unexpected ModuleDef node: {repr(node)}")
                 continue
-            self.logger.debug(f"[CodeGen] Visiting node: {type(node)} - {repr(node)}")
-            self.visit(node)
+            if isinstance(node, FunctionDef):
+                function_defs.append(node)
+            else:
+                top_level_stmts.append(node)
+
+        # Check if user defined a main function and we have top-level statements
+        user_has_main = any(hasattr(func, "name") and func.name == "main" for func in function_defs)
+        self._rename_main = user_has_main and len(top_level_stmts) > 0
+
+        # Generate all function definitions first
+        for func_def in function_defs:
+            self.logger.debug(f"[CodeGen] Visiting function def: {type(func_def)} - {repr(func_def)}")
+            self.visit(func_def)
+
+        # If there are top-level statements, wrap them in a main function
+        if top_level_stmts:
+            self.logger.debug(f"[CodeGen] Wrapping {len(top_level_stmts)} top-level statements in main")
+
+            # Create the actual main entry point function
+            func_type = ir.FunctionType(ir.VoidType(), [])
+            entry_func = ir.Function(self.module, func_type, name="main")
+            self.function = entry_func
+            block = entry_func.append_basic_block(name="entry")
+            self.builder = ir.IRBuilder(block)
+
+            # Execute top-level statements
+            for stmt in top_level_stmts:
+                self.logger.debug(f"[CodeGen] Visiting top-level statement: {type(stmt)} - {repr(stmt)}")
+                self.visit(stmt)
+
+            # Add return
+            if not self.builder.block.is_terminated:
+                self.builder.ret_void()
+
         return str(self.module)
 
     @functools.lru_cache(maxsize=128)
@@ -98,6 +195,8 @@ class CodeGenerator:
             return self.visit_assignment(node)
         elif isinstance(node, FunctionCall):
             return self.visit_function_call(node)
+        elif hasattr(node, "__class__") and node.__class__.__name__ == "ReturnStatement":
+            return self.visit_return_statement(node)
         elif isinstance(node, ArrayLiteral):
             return self.visit_array_literal(node)
         elif isinstance(node, StringLiteral):
@@ -122,12 +221,30 @@ class CodeGenerator:
             raise TypeError(f"Unknown AST node type: {type(node)}")
 
     def visit_function_def(self, node: FunctionDef):
-        param_types = [ir.PointerType(ir.IntType(32)) for _ in node.params]
-        func_type = ir.FunctionType(ir.VoidType(), param_types)
         return_type = self.get_ir_type(node.return_type)
-        func = ir.Function(self.module, func_type, name=node.name)
+        # Get parameter types from annotations if available
+        param_types = []
+        for param in node.params:
+            if param in node.param_types:
+                param_types.append(self.get_ir_type(node.param_types[param]))
+            else:
+                # Default to i32 if no type annotation
+                param_types.append(ir.IntType(32))
+        func_type = ir.FunctionType(return_type, param_types)
+
+        # Store the original name for scope lookup, but potentially rename in LLVM
+        original_name = node.name
+        llvm_name = node.name
+
+        # Check if we need to rename this function (stored in temp attribute by generate_code)
+        if hasattr(self, "_rename_main") and self._rename_main and node.name == "main":
+            llvm_name = "_ymir_user_main"
+
+        func = ir.Function(self.module, func_type, name=llvm_name)
         self.function = func
-        self.global_scope[node.name] = func
+        self.global_scope[original_name] = func  # Store with original name for lookups
+        if llvm_name != original_name:
+            self.global_scope[llvm_name] = func  # Also store with LLVM name
         block = func.append_basic_block(name="entry")
         self.builder = ir.IRBuilder(block)
         for param, arg in zip(node.params, func.args):
@@ -135,10 +252,20 @@ class CodeGenerator:
             self.local_scope[param] = arg
         for statement in node.body:
             self.visit(statement)
-        if return_type == ir.VoidType():
-            self.builder.ret_void()
-        else:
-            self.builder.ret(self.visit_expression(node.body[-1]))
+        # Add return statement if needed
+        if not self.builder.block.is_terminated:
+            if return_type == ir.VoidType():
+                self.builder.ret_void()
+            else:
+                # If there's no explicit return and the function is non-void, return 0/null
+                if isinstance(return_type, ir.PointerType):
+                    self.builder.ret(ir.Constant(return_type, None))
+                elif isinstance(return_type, ir.IntType):
+                    self.builder.ret(ir.Constant(return_type, 0))
+                elif isinstance(return_type, ir.DoubleType):
+                    self.builder.ret(ir.Constant(return_type, 0.0))
+                else:
+                    self.builder.ret_void()
 
     def visit_class_def(self, node: ClassDef):
         class_name = node.name
@@ -178,7 +305,10 @@ class CodeGenerator:
             self.local_scope[member_name] = member_ptr
 
     def get_ir_type(self, ymir_type: str) -> ir.Type:
-        if isinstance(ymir_type, str):
+        # Handle None (no return type) as void
+        if ymir_type is None:
+            return ir.VoidType()
+        elif isinstance(ymir_type, str):
             if ymir_type == "int":
                 return ir.IntType(32)
             elif ymir_type == "float":
@@ -204,99 +334,230 @@ class CodeGenerator:
             element_types = [self.get_ir_type(t) for t in ymir_type.element_types]
             return ir.LiteralStructType(element_types)
         else:
-            raise TypeError(f"Unknown type: {ymir_type}")
+            # Handle Type objects from ymir.core.types
+            type_name = type(ymir_type).__name__
+            if type_name == "IntType":
+                return ir.IntType(32)
+            elif type_name == "FloatType":
+                return ir.DoubleType()
+            elif type_name == "StringType":
+                return ir.PointerType(ir.IntType(8))
+            elif type_name == "BoolType":
+                return ir.IntType(1)
+            elif type_name == "VoidType":
+                return ir.VoidType()
+            elif type_name == "NilType":
+                return ir.VoidType()
+            elif type_name == "AnyType":
+                return ir.PointerType(ir.IntType(8))  # Generic pointer
+            else:
+                raise TypeError(f"Unknown type: {ymir_type} (type name: {type_name})")
 
     def visit_if_statement(self, node: IfStatement):
+        """Generate code for if-else statements."""
         cond_val = self.visit_expression(node.condition)
-        then_block = self.function.append_basic_block(name="then")
-        else_block = self.function.append_basic_block(name="else")
-        merge_block = self.function.append_basic_block(name="ifcont")
-        self.builder.cbranch(cond_val, then_block, else_block)
 
+        # Convert to boolean if needed
+        if not isinstance(cond_val.type, ir.IntType) or cond_val.type.width != 1:
+            # Compare with zero for boolean conversion
+            if isinstance(cond_val.type, ir.IntType):
+                cond_val = self.builder.icmp_signed("!=", cond_val, ir.Constant(cond_val.type, 0))
+            elif isinstance(cond_val.type, ir.DoubleType):
+                cond_val = self.builder.fcmp_ordered("!=", cond_val, ir.Constant(cond_val.type, 0.0))
+
+        # Create basic blocks
+        then_block = self.function.append_basic_block(name="if.then")
+        else_block = self.function.append_basic_block(name="if.else") if node.else_body else None
+        merge_block = self.function.append_basic_block(name="if.end")
+
+        # Branch based on condition
+        if else_block:
+            self.builder.cbranch(cond_val, then_block, else_block)
+        else:
+            self.builder.cbranch(cond_val, then_block, merge_block)
+
+        # Generate then block
         self.builder.position_at_end(then_block)
-        for statement in node.then_body:
-            self.visit(statement)
-        self.builder.branch(merge_block)
+        for stmt in node.then_body:
+            self.visit(stmt)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(merge_block)
 
-        self.builder.position_at_end(else_block)
-        if node.else_body:
-            for statement in node.else_body:
-                self.visit(statement)
-        self.builder.branch(merge_block)
+        # Generate else block if present
+        if else_block:
+            self.builder.position_at_end(else_block)
+            for stmt in node.else_body:
+                self.visit(stmt)
+            if not self.builder.block.is_terminated:
+                self.builder.branch(merge_block)
 
+        # Continue in merge block
         self.builder.position_at_end(merge_block)
 
     def visit_while_statement(self, node: WhileStatement):
-        cond_block = self.function.append_basic_block(name="cond")
-        loop_block = self.function.append_basic_block(name="loop")
-        after_block = self.function.append_basic_block(name="afterloop")
+        """Generate code for while loops."""
+        # Create basic blocks
+        cond_block = self.function.append_basic_block(name="while.cond")
+        body_block = self.function.append_basic_block(name="while.body")
+        end_block = self.function.append_basic_block(name="while.end")
 
+        # Push loop context for break/continue
+        self.loop_stack.append((cond_block, end_block))
+
+        # Jump to condition
         self.builder.branch(cond_block)
+
+        # Generate condition block
         self.builder.position_at_end(cond_block)
         cond_val = self.visit_expression(node.condition)
-        self.builder.cbranch(cond_val, loop_block, after_block)
 
-        self.builder.position_at_end(loop_block)
-        for statement in node.body:
-            self.visit(statement)
-        self.builder.branch(cond_block)
+        # Convert to boolean
+        if not isinstance(cond_val.type, ir.IntType) or cond_val.type.width != 1:
+            if isinstance(cond_val.type, ir.IntType):
+                cond_val = self.builder.icmp_signed("!=", cond_val, ir.Constant(cond_val.type, 0))
 
-        self.builder.position_at_end(after_block)
+        self.builder.cbranch(cond_val, body_block, end_block)
+
+        # Generate body block
+        self.builder.position_at_end(body_block)
+        for stmt in node.body:
+            self.visit(stmt)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(cond_block)
+
+        # Pop loop context
+        self.loop_stack.pop()
+
+        # Continue in end block
+        self.builder.position_at_end(end_block)
 
     def visit_for_cstyle_loop(self, node: ForCStyleLoop):
-        self.visit_expression(node.init)
+        """Generate code for C-style for loops: for(init; cond; incr) {...}"""
+        # Execute initialization
+        self.visit(node.init)
 
-        cond_block = self.function.append_basic_block(name="cond")
-        loop_block = self.function.append_basic_block(name="loop")
-        after_block = self.function.append_basic_block(name="afterloop")
+        # Create basic blocks
+        cond_block = self.function.append_basic_block(name="for.cond")
+        body_block = self.function.append_basic_block(name="for.body")
+        incr_block = self.function.append_basic_block(name="for.incr")
+        end_block = self.function.append_basic_block(name="for.end")
 
+        # Push loop context (continue goes to increment, break goes to end)
+        self.loop_stack.append((incr_block, end_block))
+
+        # Jump to condition
         self.builder.branch(cond_block)
+
+        # Generate condition block
         self.builder.position_at_end(cond_block)
         cond_val = self.visit_expression(node.condition)
-        self.builder.cbranch(cond_val, loop_block, after_block)
 
-        self.builder.position_at_end(loop_block)
-        self.continue_block = cond_block
-        self.break_block = after_block
-        for statement in node.body:
-            self.visit(statement)
+        # Convert to boolean
+        if not isinstance(cond_val.type, ir.IntType) or cond_val.type.width != 1:
+            if isinstance(cond_val.type, ir.IntType):
+                cond_val = self.builder.icmp_signed("!=", cond_val, ir.Constant(cond_val.type, 0))
+
+        self.builder.cbranch(cond_val, body_block, end_block)
+
+        # Generate body block
+        self.builder.position_at_end(body_block)
+        for stmt in node.body:
+            self.visit(stmt)
+        if not self.builder.block.is_terminated:
+            self.builder.branch(incr_block)
+
+        # Generate increment block
+        self.builder.position_at_end(incr_block)
         self.visit_expression(node.increment)
         self.builder.branch(cond_block)
 
-        self.builder.position_at_end(after_block)
+        # Pop loop context
+        self.loop_stack.pop()
+
+        # Continue in end block
+        self.builder.position_at_end(end_block)
 
     def visit_for_in_loop(self, node: ForInLoop):
-        iterable = self.visit_expression(node.iterable)
-        iterator = iter(iterable)  # iterable is a Python list or tuple
+        """Generate code for for-in loops: for item in array {...}"""
+        # For now, for-in loops over arrays need to be unrolled at compile time
+        # or we need to generate iteration code. This is complex for runtime arrays.
 
-        loop_block = self.function.append_basic_block(name="loop")
-        after_block = self.function.append_basic_block(name="afterloop")
+        raise UnsupportedFeatureError(
+            "For-in loops over runtime arrays not yet supported in LLVM mode. "
+            "Use C-style for loops or interpreter mode."
+        )
 
-        self.continue_block = loop_block
-        self.break_block = after_block
+    def visit_expression(self, node: Expression) -> Union[ir.Value, ir.Constant]:
+        """Visit and generate code for an expression node."""
+        # Handle FunctionCall
+        if isinstance(node, FunctionCall):
+            return self.visit_function_call(node)
 
-        for item in iterator:
-            self.local_scope[node.var] = item
-            self.builder.branch(loop_block)
-            self.builder.position_at_end(loop_block)
-            for statement in node.body:
-                self.visit(statement)
-        self.builder.position_at_end(after_block)
+        # Handle BinaryOp
+        if isinstance(node, BinaryOp):
+            return self.visit_binary_op(node)
 
-    def visit_expression(self, node: Expression) -> Union[ir.Constant, Any, None]:
-        if isinstance(node.expression, int):
-            return ir.Constant(ir.IntType(32), node.expression)
-        elif isinstance(node.expression, str):
-            if node.expression in self.local_scope:
-                return self.local_scope[node.expression]
-            elif node.expression in self.global_scope:
-                return self.global_scope[node.expression]
-            raise NameError(f"Undefined variable: {node.expression}")
-        elif isinstance(node.expression, bool):
-            return ir.Constant(ir.IntType(1), int(node.expression))
-        elif isinstance(node.expression, NilType):
-            return ir.Constant(ir.VoidType(), None)  # Representing nil as void
-        return None
+        # Handle UnaryOp
+        if isinstance(node, UnaryOp):
+            return self.visit_unary_op(node)
+
+        # Handle ArrayAccess
+        if isinstance(node, ArrayAccess):
+            return self.visit_array_access(node)
+
+        # Handle ArrayLiteral
+        if isinstance(node, ArrayLiteral):
+            return self.visit_array_literal(node)
+
+        # Handle StringLiteral
+        if hasattr(node, "value") and isinstance(node, StringLiteral):
+            return self.visit_string_literal(node)
+
+        # Handle Expression wrapper with nested expression
+        if hasattr(node, "expression"):
+            inner = node.expression
+            if isinstance(inner, int):
+                return ir.Constant(ir.IntType(32), inner)
+            elif isinstance(inner, float):
+                return ir.Constant(ir.DoubleType(), inner)
+            elif isinstance(inner, str):
+                # Variable reference
+                return self._load_variable(inner)
+            elif isinstance(inner, bool):
+                return ir.Constant(ir.IntType(1), int(inner))
+            elif isinstance(inner, NilType):
+                return ir.Constant(ir.VoidType(), None)
+            else:
+                # Recursively handle nested expression
+                return self.visit_expression(inner)
+
+        # Handle direct constants
+        if isinstance(node, int):
+            return ir.Constant(ir.IntType(32), node)
+        if isinstance(node, float):
+            return ir.Constant(ir.DoubleType(), node)
+        if isinstance(node, str):
+            # Variable reference
+            return self._load_variable(node)
+
+        raise TypeError(f"Unsupported expression type: {type(node)}")
+
+    def _load_variable(self, name: str) -> ir.Value:
+        """Load a variable, handling pointer vs value correctly."""
+        if name in self.local_scope:
+            var = self.local_scope[name]
+            # If it's a pointer (alloca), load it
+            if isinstance(var.type, ir.PointerType):
+                return self.builder.load(var, name=name)
+            # Otherwise it's a direct value (function parameter)
+            return var
+        elif name in self.global_scope:
+            var = self.global_scope[name]
+            if hasattr(var, "type") and isinstance(var.type, ir.PointerType):
+                return self.builder.load(var, name=name)
+            return var
+        else:
+            raise NameError(f"Undefined variable: {name}")
 
     def visit_binary_op(self, node: BinaryOp):
         left = self.visit_expression(node.left)
@@ -321,12 +582,64 @@ class CodeGenerator:
             return self.builder.add(left, right, name="addtmp")
         elif node.operator == "%":
             return self.builder.srem(left, right, name="modtmp")
+        # Comparison operators
+        elif node.operator == "==":
+            return self.builder.icmp_signed("==", left, right, name="eqtmp")
+        elif node.operator == "!=":
+            return self.builder.icmp_signed("!=", left, right, name="netmp")
+        elif node.operator == "<":
+            return self.builder.icmp_signed("<", left, right, name="lttmp")
+        elif node.operator == "<=":
+            return self.builder.icmp_signed("<=", left, right, name="letmp")
+        elif node.operator == ">":
+            return self.builder.icmp_signed(">", left, right, name="gttmp")
+        elif node.operator == ">=":
+            return self.builder.icmp_signed(">=", left, right, name="getmp")
         else:
             raise ValueError(f"Unknown operator: {node.operator}")
 
+    def visit_unary_op(self, node: UnaryOp) -> ir.Value:
+        """Generate code for unary operations."""
+        operand = self.visit_expression(node.operand)
+
+        if node.operator == "-":
+            # Negate
+            if isinstance(operand.type, ir.IntType):
+                return self.builder.neg(operand, name="negtmp")
+            elif isinstance(operand.type, ir.DoubleType):
+                return self.builder.fneg(operand, name="fnegtmp")
+            else:
+                raise TypeError(f"Cannot negate type: {operand.type}")
+        elif node.operator == "!":
+            # Logical not
+            return self.builder.not_(operand, name="nottmp")
+        elif node.operator == "+":
+            # Unary plus is a no-op
+            return operand
+        else:
+            raise ValueError(f"Unsupported unary operator: {node.operator}")
+
+    def visit_array_access(self, node: ArrayAccess) -> ir.Value:
+        """Generate code for array element access: arr[index]"""
+        array = self.visit_expression(node.array)
+        index = self.visit_expression(node.index)
+
+        # GEP to get pointer to element
+        element_ptr = self.builder.gep(array, [ir.Constant(ir.IntType(32), 0), index])
+        # Load the element value
+        return self.builder.load(element_ptr, name="arr_elem")
+
     def visit_assignment(self, node: Assignment) -> ir.AllocaInstr:
         value = self.visit_expression(node.value)
-        if node.type:
+
+        # Check if variable already exists (reassignment)
+        if node.target in self.local_scope:
+            var_address = self.local_scope[node.target]
+            self.builder.store(value, var_address)
+            return var_address
+
+        # New variable - create alloca
+        if hasattr(node, "type") and node.type:
             var_type = self.get_ir_type(node.type)
             var_address = self.builder.alloca(var_type, name=node.target)
         else:
@@ -335,7 +648,41 @@ class CodeGenerator:
         self.local_scope[node.target] = var_address
         return var_address
 
+    def visit_return_statement(self, node):
+        """Handle return statements."""
+        if hasattr(node, "expression") and node.expression is not None:
+            return_value = self.visit_expression(node.expression)
+            self.builder.ret(return_value)
+        else:
+            self.builder.ret_void()
+
     def visit_function_call(self, node: FunctionCall) -> ir.CallInstr:
+        # Handle str() function specially for type conversion
+        if node.func_name == "str":
+            if len(node.args) != 1:
+                raise ValueError("str() takes exactly 1 argument")
+            arg = self.visit_expression(node.args[0])
+            if isinstance(arg.type, ir.IntType):
+                # Convert int to string using sprintf
+                buf_size = 32
+                buf = self.builder.alloca(ir.ArrayType(ir.IntType(8), buf_size), name="str_buf")
+                buf_ptr = self.builder.gep(buf, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+
+                # Create format string "%d"
+                fmt_str = ir.Constant(ir.ArrayType(ir.IntType(8), 3), bytearray(b"%d\0"))
+                fmt_global = ir.GlobalVariable(self.module, fmt_str.type, name=self.module.get_unique_name("fmt"))
+                fmt_global.global_constant = True
+                fmt_global.initializer = fmt_str
+                fmt_ptr = self.builder.gep(fmt_global, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
+
+                # Call sprintf
+                sprintf = self.builtins.get("sprintf")
+                self.builder.call(sprintf, [buf_ptr, fmt_ptr, arg])
+                return buf_ptr
+            else:
+                # For non-int types, just return the arg as-is for now
+                return arg
+
         func = self.local_scope.get(node.func_name) or self.global_scope.get(node.func_name)
         if not func:
             func = self.builtins.get(node.func_name)
@@ -354,9 +701,16 @@ class CodeGenerator:
 
     def visit_string_literal(self, node: StringLiteral) -> ir.Constant:
         string_value = node.value.strip('"')
-        return ir.Constant(
+        # Create a global constant string
+        string_const = ir.Constant(
             ir.ArrayType(ir.IntType(8), len(string_value) + 1), bytearray(string_value.encode("utf8") + b"\0")
         )
+        # Create a global variable to hold the string
+        global_str = ir.GlobalVariable(self.module, string_const.type, name=self.module.get_unique_name("str"))
+        global_str.global_constant = True
+        global_str.initializer = string_const
+        # Return a pointer to the first element of the array
+        return self.builder.gep(global_str, [ir.Constant(ir.IntType(32), 0), ir.Constant(ir.IntType(32), 0)])
 
     def visit_tuple_literal(self, node: TupleLiteral) -> ir.Constant:
         element_values = [self.visit_expression(element) for element in node.elements]
@@ -397,11 +751,19 @@ class CodeGenerator:
         self.local_scope = local_scope_backup
         return result
 
-    def visit_continue(self, _: Continue) -> None:
-        self.builder.branch(self.continue_block)
+    def visit_break(self, node: Break):
+        """Generate code for break statement."""
+        if not self.loop_stack:
+            raise SyntaxError("break outside loop")
+        _, break_block = self.loop_stack[-1]
+        self.builder.branch(break_block)
 
-    def visit_break(self, _: Break) -> None:
-        self.builder.branch(self.break_block)
+    def visit_continue(self, node: Continue):
+        """Generate code for continue statement."""
+        if not self.loop_stack:
+            raise SyntaxError("continue outside loop")
+        continue_block, _ = self.loop_stack[-1]
+        self.builder.branch(continue_block)
 
     def visit_nil(self, _: NilType) -> ir.Constant:
         return ir.Constant(ir.VoidType(), None)  # Representing nil as void

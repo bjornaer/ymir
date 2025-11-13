@@ -129,6 +129,31 @@ poetry run ymir run examples/main.ymr --mode interpret # Pure interpretation
 poetry run ymir run examples/main.ymr --mode auto      # Try LLVM, fallback to interpreter
 ```
 
+### Execution Modes
+
+Ymir supports dual execution modes for flexibility and performance:
+
+#### LLVM Mode (Default with Auto Fallback)
+- JIT compilation for maximum performance
+- Automatically falls back to interpreter for unsupported features
+- Best for production use
+- Supports: functions, arithmetic, control flow, basic types
+
+#### Interpreter Mode
+- Pure Python interpretation
+- Full feature support including concurrency, async, networking
+- Better error messages for debugging
+- Slower but more flexible
+
+#### Choosing a Mode
+```bash
+ymir run script.ymr              # Auto mode: LLVM with fallback (recommended)
+ymir run script.ymr --mode llvm  # LLVM only: fail on unsupported features
+ymir run script.ymr -i           # Interpreter only: full feature support
+```
+
+See [LLVM_STATUS.md](LLVM_STATUS.md) for detailed feature support and known issues.
+
 ### Building Binaries
 Build Ymir scripts into standalone executables:
 ```bash

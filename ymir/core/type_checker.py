@@ -781,7 +781,24 @@ class TypeChecker:
         return self.visit(node.call)
 
     def visit_channel_send(self, node: ChannelSend):
-        """Type check a channel send operation."""
+        """Type check a channel send operation.
+
+        Note: Due to parser limitations, `var <- ch` is parsed as ChannelSend
+        where var is the "channel" and ch is the "value". We need to detect this
+        case and treat it as a variable assignment from a channel receive.
+        """
+        # Check if this is actually a receive (var <- channel) vs send (channel <- value)
+        # If the "channel" is a simple identifier that doesn't exist, it's likely a receive
+        if isinstance(node.channel, Expression) and isinstance(node.channel.expression, str):
+            var_name = node.channel.expression
+            if var_name not in self.symbol_table:
+                # This is a receive: var <- channel
+                # Register the variable with AnyType (we don't know channel element type)
+                self.symbol_table[var_name] = AnyType()
+                self.visit_expression(node.value)  # Type check the actual channel
+                return None
+
+        # Normal send: channel <- value
         self.visit_expression(node.channel)
         self.visit_expression(node.value)
         return None
