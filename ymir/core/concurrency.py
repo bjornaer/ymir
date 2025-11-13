@@ -102,7 +102,7 @@ class ConcurrencyRuntime:
         """Initialize or get the event loop."""
         try:
             self.loop = asyncio.get_running_loop()
-            logger.info("Using existing event loop")
+            logger.debug("Using existing event loop")
         except RuntimeError:
             # No running loop, create a new one
             # Clear any tasks from a previous loop to avoid cross-loop issues
@@ -111,7 +111,7 @@ class ConcurrencyRuntime:
                 self.tasks.clear()
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
-            logger.info("Created new event loop")
+            logger.debug("Created new event loop")
 
     def spawn(self, func: Callable, *args, **kwargs) -> str:
         """
@@ -148,7 +148,7 @@ class ConcurrencyRuntime:
         task = self.loop.create_task(coro)
         self.tasks[task_id] = task
 
-        logger.info(f"Spawned task {task_id}")
+        logger.debug(f"Spawned task {task_id}")
         return task_id
 
     def create_channel(self, element_type: type = Any, buffer_size: int = 0) -> Channel:
@@ -163,7 +163,7 @@ class ConcurrencyRuntime:
             A new Channel instance
         """
         channel = Channel(element_type, buffer_size)
-        logger.info(f"Created channel: {channel}")
+        logger.debug(f"Created channel: {channel}")
         return channel
 
     async def wait_for_task(self, task_id: str) -> Any:
@@ -180,7 +180,7 @@ class ConcurrencyRuntime:
             raise ValueError(f"Unknown task: {task_id}")
 
         result = await self.tasks[task_id]
-        logger.info(f"Task {task_id} completed")
+        logger.debug(f"Task {task_id} completed")
         return result
 
     async def wait_all(self) -> None:
@@ -210,9 +210,9 @@ class ConcurrencyRuntime:
             # Gather only valid tasks
             if valid_tasks:
                 await asyncio.gather(*valid_tasks, return_exceptions=True)
-                logger.info(f"All {len(valid_tasks)} valid tasks completed")
+                logger.debug(f"All {len(valid_tasks)} valid tasks completed")
             else:
-                logger.info("No valid tasks to wait for")
+                logger.debug("No valid tasks to wait for")
 
     def run_until_complete(self, coro) -> Any:
         """
@@ -281,7 +281,7 @@ class ConcurrencyRuntime:
 
     def shutdown(self) -> None:
         """Shutdown the runtime, cleaning up resources."""
-        logger.info("Shutting down concurrency runtime")
+        logger.debug("Shutting down concurrency runtime")
 
         # Cancel all pending tasks
         for task_id, task in self.tasks.items():

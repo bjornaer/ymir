@@ -20,7 +20,8 @@ def cli():
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
-@click.option("--verbosity", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="INFO")
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output (show debug logs)")
+@click.option("--verbosity", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default=None, help="Set specific log level")
 @click.option("--no-stdlib", is_flag=True, help="Skip loading the standard library (faster startup)")
 @click.option(
     "--interpreter",
@@ -35,13 +36,21 @@ def cli():
     default=None,
     help="Override execution mode (default: llvm)",
 )
-def run(file, verbosity, no_stdlib, use_interpreter, mode):
+def run(file, verbose, verbosity, no_stdlib, use_interpreter, mode):
     """Run a Ymir script (uses LLVM compilation by default)."""
     try:
+        # Determine verbosity level
+        if verbosity:
+            log_level = verbosity
+        elif verbose:
+            log_level = "INFO"
+        else:
+            log_level = "WARNING"
+        
         # If --interpreter/-i flag is set, use interpret mode
         # Otherwise use mode if specified, else default to "llvm"
         execution_mode = "interpret" if use_interpreter else (mode or "llvm")
-        interpreter = YmirInterpreter(verbosity=verbosity, load_stdlib=not no_stdlib)
+        interpreter = YmirInterpreter(verbosity=log_level, load_stdlib=not no_stdlib)
         interpreter.run_ymir_script(file, mode=execution_mode)
     except Exception as e:
         click.echo(f"Error running {file}: {e}")

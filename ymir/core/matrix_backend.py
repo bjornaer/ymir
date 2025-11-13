@@ -107,7 +107,7 @@ class NumpyBackend(MatrixBackend):
     """NumPy-based matrix backend (CPU only)."""
 
     def __init__(self):
-        logger.info("Initializing NumPy backend (CPU)")
+        logger.debug("Initializing NumPy backend (CPU)")
 
     def is_gpu_available(self) -> bool:
         return False
@@ -179,11 +179,11 @@ class JAXBackend(MatrixBackend):
                 devices = jax.devices("gpu")
                 if devices:
                     self._gpu_available = True
-                    logger.info(f"JAX backend initialized with GPU support: {devices}")
+                    logger.debug(f"JAX backend initialized with GPU support: {devices}")
                 else:
-                    logger.info("JAX backend initialized (CPU only - no GPU devices found)")
+                    logger.debug("JAX backend initialized (CPU only - no GPU devices found)")
             except RuntimeError:
-                logger.info("JAX backend initialized (CPU only - GPU runtime not available)")
+                logger.debug("JAX backend initialized (CPU only - GPU runtime not available)")
 
         except ImportError as e:
             raise ImportError("JAX is not installed. Install it with: pip install jax jaxlib") from e
@@ -271,13 +271,13 @@ def get_matrix_backend(prefer_jax: bool = True) -> MatrixBackend:
     if prefer_jax:
         try:
             backend = JAXBackend()
-            logger.info("Using JAX backend for matrix operations")
+            logger.debug("Using JAX backend for matrix operations")
             return backend
         except ImportError:
-            logger.info("JAX not available, falling back to NumPy backend")
+            logger.debug("JAX not available, falling back to NumPy backend")
 
     backend = NumpyBackend()
-    logger.info("Using NumPy backend for matrix operations")
+    logger.debug("Using NumPy backend for matrix operations")
     return backend
 
 

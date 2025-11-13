@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ymir"
-version = "0.2.0"
+version = "0.2.1"
 description = "ymir is a programming language focused on machine learning systems"
 authors = ["bjornaer <max.schulkin@gmail.com>"]
 license = "MIT"

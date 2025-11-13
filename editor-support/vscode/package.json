@@ -1,0 +1,86 @@
+{
+    "name": "ymir-language",
+    "displayName": "Ymir Language Support",
+    "description": "Syntax highlighting, autocompletion, and diagnostics for the Ymir programming language",
+    "version": "0.1.0",
+    "publisher": "ymir",
+    "icon": "images/ymir-icon.png",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/bjornaer/ymir"
+    },
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "keywords": [
+        "ymir",
+        "programming language",
+        "syntax highlighting",
+        "autocompletion"
+    ],
+    "activationEvents": [
+        "onLanguage:ymir"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "languages": [
+            {
+                "id": "ymir",
+                "aliases": [
+                    "Ymir",
+                    "ymir"
+                ],
+                "extensions": [
+                    ".ymr"
+                ],
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./images/ymir-icon.png",
+                    "dark": "./images/ymir-icon.png"
+                }
+            }
+        ],
+        "grammars": [
+            {
+                "language": "ymir",
+                "scopeName": "source.ymir",
+                "path": "./syntaxes/ymir.tmLanguage.json"
+            }
+        ],
+        "configuration": {
+            "type": "object",
+            "title": "Ymir",
+            "properties": {
+                "ymir.diagnostics.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable/disable diagnostic error checking"
+                },
+                "ymir.completion.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable/disable autocompletion"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.75.0",
+        "@types/node": "16.x",
+        "@typescript-eslint/eslint-plugin": "^5.45.0",
+        "@typescript-eslint/parser": "^5.45.0",
+        "eslint": "^8.28.0",
+        "typescript": "^4.9.3"
+    }
+}

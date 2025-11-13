@@ -48,7 +48,7 @@ from ymir.logging import get_logger
 
 
 class TypeChecker:
-    def __init__(self, verbosity: str = "INFO"):
+    def __init__(self, verbosity: str = "WARNING"):
         self.symbol_table = {}
         self.logger = get_logger("ymir.core", verbosity)
 
@@ -350,7 +350,7 @@ class TypeChecker:
                         message = ""
 
                     return DummySelf()
-                print(f"DEBUG: Undefined variable: {node.expression}")
+                self.logger.debug(f"Undefined variable: {node.expression}")
                 raise NameError(f"Undefined variable: {node.expression}")
             elif isinstance(node.expression, MethodCall):
                 # Handle method calls like self.message
@@ -370,7 +370,7 @@ class TypeChecker:
         elif isinstance(node, StringLiteral):
             return StringType()
         elif isinstance(node, BinaryOp):
-            print(f"[DEBUG] visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
+            self.logger.debug(f"visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
             return self.visit_binary_op(node)
         # Handle ChannelReceive node (<-ch)
         elif isinstance(node, ChannelReceive):
@@ -386,20 +386,20 @@ class TypeChecker:
         return None
 
     def visit_binary_op(self, node: BinaryOp):
-        print(f"[DEBUG] visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
+        self.logger.debug(f"visit_binary_op: operator={node.operator}, left={node.left}, right={node.right}")
         # Only type check valid binary operators, not assignment
         if node.operator == "=":
             raise TypeError("Assignment '=' should not be handled as a binary operation. Use visit_assignment instead.")
         left_type = self.visit_expression(node.left)
         right_type = self.visit_expression(node.right)
-        print(f"DEBUG: BinaryOp {node.operator} - left: {left_type} ({node.left}), right: {right_type} ({node.right}))")
+        self.logger.debug(f"BinaryOp {node.operator} - left: {left_type} ({node.left}), right: {right_type} ({node.right}))")
 
         # Comparison operators return boolean
         comparison_operators = ["==", "!=", "<", "<=", ">", ">="]
         if node.operator in comparison_operators:
             if type(left_type) is not type(right_type):
                 raise TypeError(f"Type mismatch in comparison: {left_type} {node.operator} {right_type}")
-            print(f"[DEBUG] visit_binary_op: returning BoolType for operator {node.operator}")
+            self.logger.debug(f"visit_binary_op: returning BoolType for operator {node.operator}")
             return BoolType()
 
         # Arithmetic operators
@@ -435,7 +435,7 @@ class TypeChecker:
         # Fallback: require exact type match
         if type(left_type) is not type(right_type):
             raise TypeError(f"Type mismatch: {left_type} {node.operator} {right_type}")
-        print(f"[DEBUG] visit_binary_op: returning {left_type} for operator {node.operator}")
+        self.logger.debug(f"visit_binary_op: returning {left_type} for operator {node.operator}")
         return left_type
 
     def visit_assignment(self, node: Assignment):

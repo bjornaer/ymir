@@ -53,7 +53,7 @@ class Module:
 
 
 class YmirInterpreter:
-    def __init__(self, verbosity: str = "INFO", load_stdlib: bool = True):
+    def __init__(self, verbosity: str = "WARNING", load_stdlib: bool = True):
         self.verbosity = verbosity
         self.logger = get_logger("ymir", verbosity)
         self.logger.setLevel(getattr(logging, verbosity))
@@ -64,12 +64,12 @@ class YmirInterpreter:
 
         # Initialize matrix backend
         self.matrix_backend = get_matrix_backend()
-        self.logger.info(f"Matrix backend initialized: GPU available = {self.matrix_backend.is_gpu_available()}")
+        self.logger.debug(f"Matrix backend initialized: GPU available = {self.matrix_backend.is_gpu_available()}")
 
         # Initialize concurrency runtime
         self.concurrency_runtime = get_concurrency_runtime()
         self.concurrency_runtime.initialize()
-        self.logger.info("Concurrency runtime initialized")
+        self.logger.debug("Concurrency runtime initialized")
 
         # Register builtin functions
         self._register_builtin_functions()
@@ -77,7 +77,7 @@ class YmirInterpreter:
         if load_stdlib:
             self.load_standard_library()
         else:
-            self.logger.info("Skipping standard library loading (--no-stdlib)")
+            self.logger.debug("Skipping standard library loading (--no-stdlib)")
 
     def _register_builtin_functions(self):
         """Register common Python builtin functions in the global scope."""
@@ -371,9 +371,9 @@ class YmirInterpreter:
         # Decide execution strategy based on mode
         if mode == "interpret":
             # Load and evaluate immediately in interpretation mode
-            self.logger.info("Using pure interpretation mode")
+            self.logger.debug("Using pure interpretation mode")
             main_module = self.load_module(file_path, project_root, is_entry_point=True)
-            self.logger.info("Script executed successfully via interpretation")
+            self.logger.debug("Script executed successfully via interpretation")
             return
 
         # For LLVM or auto mode, load without evaluating first
@@ -383,7 +383,7 @@ class YmirInterpreter:
         # Check if we have a body attribute (AST nodes) or just exports (Module object)
         if not hasattr(main_module, "body"):
             self.logger.debug(f"Main module exports: {main_module.exports}")
-            self.logger.info("Script executed successfully via interpretation")
+            self.logger.debug("Script executed successfully via interpretation")
             return
 
         self.logger.debug(f"Main module body: {main_module.body}")
@@ -391,7 +391,7 @@ class YmirInterpreter:
         # Try LLVM execution
         try:
             if mode == "llvm" or mode == "auto":
-                self.logger.info(f"Attempting LLVM compilation and execution (mode: {mode})")
+                self.logger.debug(f"Attempting LLVM compilation and execution (mode: {mode})")
                 # Filter out module definitions for codegen
                 codegen_body = [node for node in main_module.body if not isinstance(node, ModuleDef)]
                 self.logger.debug(f"Filtered codegen body ({len(codegen_body)} nodes)")
@@ -403,7 +403,7 @@ class YmirInterpreter:
 
                 self.logger.debug("Starting LLVM execution...")
                 self.execute(llvm_ir)
-                self.logger.info("✓ Script executed successfully via LLVM")
+                self.logger.debug("✓ Script executed successfully via LLVM")
                 return
         except UnsupportedFeatureError as e:
             # Explicit unsupported feature - clean fallback message
@@ -411,10 +411,10 @@ class YmirInterpreter:
                 self.logger.error(f"LLVM mode cannot execute this script: {e}")
                 raise
             else:
-                self.logger.info(f"Falling back to interpreter: {e}")
+                self.logger.debug(f"Falling back to interpreter: {e}")
                 self.loaded_modules.clear()
                 main_module = self.load_module(file_path, project_root, is_entry_point=True)
-                self.logger.info("Script executed successfully via interpretation (fallback)")
+                self.logger.debug("Script executed successfully via interpretation (fallback)")
                 return
         except Exception as e:
             if mode == "llvm":
@@ -427,7 +427,7 @@ class YmirInterpreter:
                 # Re-load and evaluate the module in interpretation mode
                 self.loaded_modules.clear()  # Clear cache to force re-evaluation
                 main_module = self.load_module(file_path, project_root, is_entry_point=True)
-                self.logger.info("Script executed successfully via interpretation (fallback)")
+                self.logger.debug("Script executed successfully via interpretation (fallback)")
                 return
 
     def run_ymir_code(self, source_code: str, mode: str = "auto") -> None:
@@ -1775,7 +1775,7 @@ class YmirInterpreter:
 
             task_id = self.concurrency_runtime.spawn(task_wrapper)
 
-        self.logger.info(f"[evaluate_spawn_statement] Spawned task {task_id} for function {func_name}")
+        self.logger.debug(f"[evaluate_spawn_statement] Spawned task {task_id} for function {func_name}")
         return task_id
 
     def evaluate_channel_send(self, node: ChannelSend) -> Any:

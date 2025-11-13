@@ -182,6 +182,6 @@ We welcome contributions to Ymir! Please read our CONTRIBUTING.md for guidelines
 Ymir is licensed under the MIT License. See the LICENSE file for more information.
 
 ### Contact
-For any questions or feedback, please feel free to open an issue or contact us at max.schulkin@gmail.com.
+For any questions or feedback, please feel free to open an issue or contact me at max@schlk.in.
 
 ![Ymir Banner](assets/ymir_banner.png)
