@@ -4,25 +4,35 @@ Thank you for your interest in contributing to Ymir! This document provides guid
 
 ## Getting Started
 
+> **Ymir is mid-rewrite.** Read [`PLAN.md`](PLAN.md) before starting — it has the
+> current phase, what is blocked, and what is not worth working on yet. The language
+> itself is defined by [`docs/spec/`](docs/spec/), which is normative.
+
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/ymir.git`
-3. Install dependencies: `poetry install`
-4. Create a new branch: `git checkout -b feature/your-feature-name`
+3. Create a new branch: `git checkout -b feature/your-feature-name`
+
+The Python implementation in `ymir-legacy-py/` is **frozen**. Please do not send
+fixes for it — its bugs are documentation for the rewrite, catalogued in
+[`ymir-legacy-py/README.md`](ymir-legacy-py/README.md).
 
 ## Development Guidelines
 
 ### Code Style
-- Follow PEP 8 style guidelines
+- Go code: standard `gofmt`, no exceptions
 - Use meaningful variable and function names
 - Add docstrings to functions and classes
 - Keep functions focused and single-purpose
 - Use type hints where possible
 
 ### Testing
-- Write unit tests for new features
-- Ensure all tests pass before submitting: `poetry run pytest`
-- Aim for good test coverage
-- Include edge cases in your tests
+- Language behavior is tested by the conformance suite, not by unit tests:
+  `python3 conformance/run.py --ymir "./bin/ymir run"`
+- **Any change to language behavior needs a conformance case.** A rule with no case
+  is not a rule. See [`conformance/README.md`](conformance/README.md).
+- Never weaken a conformance case to make code pass. Fix the code, or change the
+  spec deliberately and say so in the commit message.
+- Unit tests are for compiler internals, where the conformance suite cannot reach.
 
 ### Commit Messages
 - Use clear and descriptive commit messages
@@ -77,10 +87,17 @@ When reporting bugs:
 
 When working on language features:
 
-1. Follow the parser implementation in `ymir/core/parser.py`
-2. Maintain consistency with existing syntax
-3. Document new language features thoroughly
-4. Include examples in test files
+1. **Find the rule in [`docs/spec/`](docs/spec/) first.** If the behavior is not
+   specified, that is the finding — open it as an open question rather than deciding
+   it in code. Inventing semantics in an implementation is how the previous one
+   ended up with two of them.
+2. Changing the language means changing the spec chapter **and** the conformance
+   cases, in a commit that says what it invalidates.
+3. Do not add a second execution engine or a fallback fast path. The legacy
+   implementation's worst bug — `func main()` running under one engine and silently
+   doing nothing under the other — came from exactly that.
+4. Check the locked decisions in [`docs/spec/00-overview.md`](docs/spec/00-overview.md)
+   before proposing anything that contradicts one.
 
 ## Questions or Need Help?
 
