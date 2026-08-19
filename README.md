@@ -159,7 +159,7 @@ ymir run script.ymr --mode llvm  # LLVM only: fail on unsupported features
 ymir run script.ymr -i           # Interpreter only: full feature support
 ```
 
-See [LLVM_STATUS.md](LLVM_STATUS.md) for detailed feature support and known issues.
+See [LLVM_STATUS.md](ymir-legacy-py/LLVM_STATUS.md) for detailed feature support and known issues.
 
 ### Building Binaries
 Build Ymir scripts into standalone executables:
