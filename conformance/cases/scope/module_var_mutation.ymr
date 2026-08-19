@@ -1,0 +1,18 @@
+#@ case scope/module_var_mutation
+#@ spec 03-declarations.md#scope
+#@ exit 0
+#@ stdout
+#@ | 10
+
+module module_var_mutation
+
+var total: int = 0
+
+func bump() {
+    total = total + 10
+}
+
+func main() {
+    bump()
+    print(total)
+}

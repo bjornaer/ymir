@@ -1,0 +1,15 @@
+#@ case errors/unhandled_is_compile_error
+#@ spec 06-errors.md#unhandled-errors-are-a-compile-error
+
+#@ compile-error
+#@ | divide
+
+module unhandled_is_compile_error
+
+func divide(a: int, b: int) -> (int, error) {
+    return a / b, nil
+}
+
+func main() {
+    divide(10, 2)
+}

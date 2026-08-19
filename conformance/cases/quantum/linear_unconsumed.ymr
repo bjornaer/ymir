@@ -1,0 +1,11 @@
+#@ case quantum/linear_unconsumed
+#@ spec 08-quantum.md#allocation-and-disposal
+#@ skip quantum fragment unimplemented (PLAN.md phase 7)
+#@ compile-error
+#@ | not consumed
+
+module linear_unconsumed
+
+func main() {
+    q := qubit()
+}

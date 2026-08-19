@@ -1,0 +1,23 @@
+#@ case match/exhaustiveness
+#@ spec 05-statements.md#exhaustiveness
+#@ compile-error
+#@ | Point
+
+module exhaustiveness
+
+enum Shape {
+    Circle(float),
+    Rect(float, float),
+    Point,
+}
+
+func area(s: Shape) -> float {
+    match s {
+        Circle(r)  => return 3.14159 * r * r,
+        Rect(w, h) => return w * h,
+    }
+}
+
+func main() {
+    print(area(Circle(1.0)))
+}

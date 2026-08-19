@@ -1,0 +1,27 @@
+#@ case errors/error_value_roundtrip
+#@ spec 06-errors.md#the-convention
+#@ exit 0
+#@ stdout
+#@ | division by zero
+#@ | 5
+
+module error_value_roundtrip
+
+func divide(a: int, b: int) -> (int, error) {
+    if b == 0 {
+        return 0, Error("division by zero")
+    }
+    return a / b, nil
+}
+
+func main() {
+    _, err := divide(10, 0)
+    if err != nil {
+        print(err.message)
+    }
+
+    ok, err2 := divide(10, 2)
+    if err2 == nil {
+        print(ok)
+    }
+}

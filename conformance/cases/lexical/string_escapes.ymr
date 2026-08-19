@@ -1,0 +1,14 @@
+#@ case lexical/string_escapes
+#@ spec 01-lexical.md#string
+#@ exit 0
+#@ stdout
+#@ | a
+#@ | b
+#@ | say "hi"
+
+module string_escapes
+
+func main() {
+    print("a\nb")
+    print("say \"hi\"")
+}
