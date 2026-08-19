@@ -204,6 +204,45 @@ the mechanism that makes a forgotten measurement outcome or error case a compile
 
 Enums are unrestricted unless a payload is linear, in which case the enum is linear.
 
+An enum has **no zero value** and **no `nil`**. `var s: Shape` without an initializer
+is a compile error, and `s == nil` is a type error. This is what keeps `match` on an
+ordinary enum free of a `nil` arm.
+
+## Union types
+
+A **union** is written `A | B` and denotes a value that is one of its members.
+
+```ymr
+IOError | ParseError
+```
+
+Members **MUST** all be enum types. `int | string` is not a type. Ymir has no general
+union types; this restriction keeps unions implementable with the tagged-union
+representation enums already need.
+
+Unions are **sets**: `A | B` and `B | A` are the same type, `A | A` is `A`, and
+`(A | B) | C` is `A | B | C`. Two unions are identical when they have the same members.
+A single enum `A` is the one-member union `A`.
+
+Unions exist for one purpose — the error position (chapter 06) — and carry two
+properties that apply only there:
+
+**Nullability.** A union or enum in the **error position** (the final component of a
+function's result type) is an *error set*, and `nil` is a value of it. Elsewhere,
+neither unions nor enums are nullable. The rule is positional; the wart is
+acknowledged in chapter 06 and revisited by open question Q10.
+
+**Subtyping.** An error set `S` is assignable to an error set `T` when **S ⊆ T**:
+
+```ymr
+var e: IOError | ParseError = someIOError    # legal
+var f: IOError = someUnionValue              # ERROR: not a subset
+```
+
+This subset rule is the **only** subtyping relation in the language. Everywhere else,
+assignability requires identical types (§Assignability below). It exists so a
+function's error set can be the union of its callees' without manual wrapping.
+
 ## Linearity rules
 
 These apply to any value whose type is linear. In v1 that is `qubit`, `qreg[N]`, and
@@ -271,7 +310,8 @@ ys := []                    # ERROR: cannot infer element type
 ## Assignability
 
 A value of type `S` is assignable to a location of type `T` only if `S` and `T` are
-**identical**. There is no subtyping, no coercion, and no numeric promotion. Type
+**identical**, with one exception: error sets, where `S ⊆ T` suffices (§Union types).
+There is no other subtyping, no coercion, and no numeric promotion. Type
 identity is structural for `array`, `map`, `tuple`, `chan`, `func`, and `matrix`; it is
 nominal for `struct` and `enum` — two structs with identical fields but different names
 are different types.
@@ -282,8 +322,9 @@ are different types.
 above, plus: `array` and `map` are empty, `struct` is field-wise zero, `chan` and
 `func` are `nil`).
 
-Types with **no** zero value: `enum` (no privileged variant) and every linear type.
-A `var` of such a type **MUST** have an initializer.
+Types with **no** zero value: `enum` and unions used outside the error position (no
+privileged variant), and every linear type. A `var` of such a type **MUST** have an
+initializer. An error set's zero value is `nil`.
 
 ## Open questions affecting this chapter
 

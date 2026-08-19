@@ -36,7 +36,9 @@ VarDecl      = "var" ident ( ":" Type [ "=" Expr ] | ":=" Expr ) .
 
 (* --- types --- *)
 
-Type         = TypeName
+Type         = UnionType .
+UnionType    = BaseType { "|" BaseType } .        (* members must all be enum types *)
+BaseType     = TypeName
              | "array" "[" Type "]"
              | "map" "[" Type "," Type "]"
              | "tuple" "[" Type { "," Type } "]"
@@ -73,7 +75,8 @@ SimpleStmt   = ShortVarDecl | Assignment | IncDecStmt | ExprStmt .
 
 MatchStmt    = "match" Expr "{" { MatchArm } "}" .
 MatchArm     = Pattern "=>" ( Stmt "," | Block ) .
-Pattern      = "_" | ident [ "(" PatternElem { "," PatternElem } ")" ] .
+Pattern      = "_" | "nil"
+             | [ ident "." ] ident [ "(" PatternElem { "," PatternElem } ")" ] .
 PatternElem  = ident | "_" .
 
 SelectStmt   = "select" "{" { SelectCase } "}" .
@@ -98,7 +101,9 @@ RelExpr      = AddExpr { ( "<" | "<=" | ">" | ">=" ) AddExpr } .
 AddExpr      = MulExpr { ( "+" | "-" ) MulExpr } .
 MulExpr      = PowExpr { ( "*" | "/" | "%" | "@" ) PowExpr } .
 PowExpr      = UnaryExpr [ "**" PowExpr ] .            (* right-associative *)
-UnaryExpr    = [ "-" | "!" | "<-" ] PostfixExpr .
+UnaryExpr    = [ "-" | "!" | "<-" ] PostfixExpr
+             | TryExpr .
+TryExpr      = "try" PostfixExpr .                (* operand must be a call *)
 PostfixExpr  = PrimaryExpr { CallSuffix | IndexSuffix | SelectorSuffix } .
 CallSuffix   = "(" [ ExprList [ "," ] ] ")" .
 IndexSuffix  = "[" Expr "]" .
@@ -136,3 +141,10 @@ Literal      = IntLit | FloatLit | ComplexLit | StringLit | "true" | "false" | "
 
 4. **`ExprStmt = CallExpr`** deliberately excludes other expressions — chapter 05
    makes a bare `x + 1` statement a compile error.
+
+5. **`|` in `UnionType` vs. `||`.** Maximal munch (chapter 01) lexes `||` as one token,
+   so a union separator is never confused with logical-or. They also never occur in the
+   same position: `UnionType` appears only where a `Type` is expected.
+
+6. **`try` binds tighter than any binary operator.** `try f() + 1` is `(try f()) + 1`.
+   Its operand must be a call, so `try x` for a non-call `x` is a syntax error.

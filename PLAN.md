@@ -6,7 +6,7 @@ sections whenever you do meaningful work.
 
 - **Last updated:** 2026-08-20
 - **Current phase:** Phase 0 — complete. Phase 1 not started.
-- **Blocking:** open question Q1 must be answered before Phase 2.
+- **Blocking:** nothing blocks Phase 1. Q10 should be settled during Phase 2; Q6 blocks Phase 5.
 
 ---
 
@@ -106,10 +106,13 @@ Go module, lexer, parser, AST. No types, no execution.
 - **Done when:** every `.ymr` file in `conformance/cases/` parses or reports a syntax
   error with an accurate position, and chapter 09's grammar is implemented in full.
 
-### Phase 2 — Type checker  🚧 BLOCKED on Q1
+### Phase 2 — Type checker
 
 - Deliverables: `compiler/types`, `compiler/check`. Scope resolution, local inference,
   assignability, exhaustiveness checking, definite assignment.
+- **Error sets (R1) are the expensive part of this phase**, more so than linearity:
+  union normalization, subset assignability, exhaustiveness over a union, nil narrowing,
+  and `try`'s subset check. Budget accordingly.
 - **Build the linearity machinery now** (chapter 02, rules L1–L6) even though no linear
   type exists until Phase 7. Decision D3 exists for this reason. The move/consume
   bookkeeping in the checker is the expensive part; adding `qubit` later is then small.
@@ -177,14 +180,20 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 
 | # | Question | Blocks | Status |
 |---|---|---|---|
-| Q1 | How do user types satisfy `error`? Interfaces (a), open enum (b), or closed as spec'd (c)? | **Phase 2** | open |
-| Q2 | Is `Result[T,E]` in the stdlib alongside `(T, error)`? | Phase 6 | open, leaning no |
+| R1 | How do user types occupy the `error` position? | — | **resolved: error sets** |
+| R2 | Error propagation operator | — | **resolved: `try`** |
+| Q2 | Is `Result[T,E]` in the stdlib alongside `(T, error)`? | Phase 6 | open, largely mooted by R1 |
 | Q3 | User-facing generics in v1? | Phase 2 | open |
 | Q4 | Does `main` return `int` or `error`? | Phase 3 | open |
 | Q5 | Integer overflow: wrap, trap, or saturate? | Phase 3 | open |
 | Q6 | Data races on shared `array`/`map` between tasks | **Phase 5** | open |
 | Q7 | Structured concurrency instead of Go's detached `spawn`? | Phase 5 | open |
 | Q8 | Immutability by default for locals (`let`/`mut`)? | Phase 2 | open |
+| Q10 | Should error-position nullability be written into the type? | Phase 2 | open |
+| Q11 | Should error sets be inferred? | Phase 2 | open, leaning explicit-first |
+
+R1 and R2 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with
+the reasoning and the rejected alternatives. Do not reopen them without reading that.
 
 ## 7. Standing rules
 
@@ -213,4 +222,23 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   new path (278 passed).
 - Wrote `docs/spec/` chapters 00–09 (~1,900 lines) and `conformance/` with 17 cases.
 - Recorded the legacy baseline: 2 passed, 15 failed.
-- **Next:** answer Q1, then start Phase 1 (Go frontend). Nothing is committed yet.
+- Committed as four commits on `rewrite/phase-0-spec-and-conformance`.
+
+### 2026-08-20 — Q1 resolved: error sets and `try`
+
+- The first draft's error design did not work. `error` as a concrete `{message, kind}`
+  struct left no type to name when a function calls two fallible things from different
+  modules, and chapter 06's own example was incoherent — `ParseError` had no success
+  variant, so a successful `parseInt` had nothing to return.
+- Resolved as **error sets** (R1): the error position holds an enum or a union of enums,
+  assignable by subset, so a function's set is the union of its callees'. Rejected
+  interfaces because recovering the concrete type needs RTTI, which Ymir does not have.
+  Prior art is Zig.
+- Adopted **`try`** (R2) alongside it. Go's verbosity reputation is about lacking this
+  operator, not about its error interface.
+- Rewrote chapter 06; updated 01 (`try` keyword), 02 (union types, subset assignability,
+  enums have no `nil`), 05 (matching a union, `nil` arm), 09 (grammar). Added Q10
+  (positional nullability is a wart) and Q11 (set inference).
+- Conformance: 23 cases, up from 17. Six new for error sets and `try`; the old
+  `error_value_roundtrip` was rewritten since it predated the design.
+- **Next:** Phase 1, the Go frontend. Nothing blocks it.

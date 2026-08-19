@@ -43,6 +43,9 @@ per length.
 | 2 | `:=` `==` `!=` `<=` `>=` `&&` `\|\|` `->` `=>` `<-` `**` `+=` `-=` `*=` `/=` `%=` `++` `--` |
 | 1 | `+` `-` `*` `/` `%` `=` `<` `>` `!` `@` `&` `\|` |
 
+`\|` is both logical-or's second character and the union type separator (chapter 02);
+they never occur in the same syntactic position.
+
 Delimiters: `(` `)` `[` `]` `{` `}` `,` `.` `:` `;`
 
 `<-` is the channel operator and is **always** lexed as one token. Consequently
@@ -58,8 +61,10 @@ Reserved; **MUST NOT** be used as identifiers.
 break     case      const     continue  else      enum      export
 false     for       func      if        import    in        match
 module    mut       nil       return    select    spawn     struct
-true      var       while
+true      try       var       while
 ```
+
+`try` is the error-propagation expression (chapter 06), **not** a try/catch block.
 
 Reserved for the quantum fragment (chapter 08), unusable as identifiers even before
 implementation:

@@ -35,9 +35,14 @@ choice serves making that fragment usable.
 
 Do not relitigate these. If a task seems to require it, stop and say so.
 
-- **D1 — Errors are values.** `-> (T, error)`, checked by the caller. No exceptions, no
-  `try`/`except`, no `recover`. *Why:* the VM needs no unwinding, callers cannot skip a
+- **D1 — Errors are values.** `-> (T, E)` where `E` is an **error set** (an enum or a
+  union of enums, assignable by subset), checked by the caller or propagated with `try`.
+  No exceptions, no `recover`. *Why:* the VM needs no unwinding, callers cannot skip a
   failure path, and unwinding through a scope holding a live qubit has no good answer.
+  *Why error sets over interfaces:* recovering the concrete type from an interface needs
+  runtime type information, which Ymir does not have — you would only ever get a string
+  back. Sets stay static and reuse enum machinery. Prior art: Zig. Full reasoning is in
+  `docs/spec/00-overview.md` under R1; do not reopen without reading it.
 - **D2 — Structs and enums, destructured by `match`.** No classes, no inheritance.
   `match` is exhaustive. *Why:* exhaustiveness makes a forgotten measurement outcome or
   error case a compile error.
@@ -90,10 +95,16 @@ its behavior as authoritative — much of it is what we are correcting.
 
 ## Open questions
 
-Q1 (how user types satisfy `error`) blocks Phase 2. Q6 (data races on shared
-`array`/`map`) blocks Phase 5. The full list with status is `PLAN.md` §6. If a task
-depends on an open question, say which one and what you assumed rather than quietly
-picking an answer.
+R1 (error sets) and R2 (`try`) are **resolved**; they are recorded with their rejected
+alternatives in `docs/spec/00-overview.md`. Q6 (data races on shared `array`/`map`)
+blocks Phase 5. Q10 (positional nullability of the error position is a known wart) and
+Q11 (error set inference) should be settled during Phase 2. The full list with status is
+`PLAN.md` §6. If a task depends on an open question, say which one and what you assumed
+rather than quietly picking an answer.
+
+Error sets are the expensive part of the type checker — union normalization, subset
+assignability, exhaustiveness over a union, nil narrowing, and `try`'s subset check —
+more so than linearity. Do not underestimate this phase.
 
 ## Reporting back
 

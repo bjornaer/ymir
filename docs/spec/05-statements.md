@@ -118,11 +118,31 @@ match outcome {
 | `Variant` | a payload-free variant |
 | `Variant(a, b)` | a variant with payload, binding each position |
 | `Variant(_, b)` | as above, discarding a position |
+| `Enum.Variant(a)` | a variant qualified by its enum; required when matching a union |
+| `nil` | the absent value of an un-narrowed error set |
 | `_` | anything — the catch-all arm |
 
 Bindings introduced by a pattern are scoped to that arm. Patterns do not nest in v1:
 `Circle(Rect(w, h))` is not expressible. There are no literal patterns, no guards, and
 no or-patterns. All three are candidates for v2.
+
+### Matching a union
+
+Matching a union (chapter 02) covers every variant of every member. Patterns qualify
+the variant with its enum, since two members may share a variant name:
+
+```ymr
+match err {
+    IOError.NotFound(p)             => print("missing: " + p),
+    IOError.PermissionDenied(p)     => print("denied: " + p),
+    ParseError.UnexpectedChar(l, c) => print("bad char"),
+    ParseError.UnexpectedEOF        => print("truncated"),
+}
+```
+
+Matching an **error set** that has not been narrowed also requires a `nil` arm. Inside
+a block guarded by `err != nil`, the checker narrows it and the `nil` arm is neither
+required nor permitted. See chapter 06 §Nil narrowing.
 
 ### Exhaustiveness
 

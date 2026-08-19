@@ -1,0 +1,19 @@
+#@ case errors/match_unnarrowed_needs_nil
+#@ spec 06-errors.md#nil-narrowing
+#@ compile-error
+#@ | nil
+
+module match_unnarrowed_needs_nil
+
+enum IOError { NotFound(string), }
+
+func readFile(path: string) -> (string, IOError) {
+    return "", nil
+}
+
+func main() {
+    _, err := readFile("x")
+    match err {
+        IOError.NotFound(p) => print(p),
+    }
+}

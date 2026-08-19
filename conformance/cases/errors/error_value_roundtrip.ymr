@@ -1,5 +1,5 @@
 #@ case errors/error_value_roundtrip
-#@ spec 06-errors.md#the-convention
+#@ spec 06-errors.md#checking
 #@ exit 0
 #@ stdout
 #@ | division by zero
@@ -17,7 +17,9 @@ func divide(a: int, b: int) -> (int, error) {
 func main() {
     _, err := divide(10, 0)
     if err != nil {
-        print(err.message)
+        match err {
+            Msg(m) => print(m),
+        }
     }
 
     ok, err2 := divide(10, 2)
