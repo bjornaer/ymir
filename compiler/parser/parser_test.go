@@ -393,3 +393,46 @@ func TestDiagnosticsHavePositionAndExcerpt(t *testing.T) {
 		}
 	}
 }
+
+// `?T` is a general type former, not a rule about position (spec 02 §Nullable
+// types). It may appear on results, parameters, and collection elements alike.
+func TestNullableTypes(t *testing.T) {
+	f := parseOK(t, `module m
+
+func find(xs: array[int]) -> ?int {
+    return nil
+}
+
+func describe(e: ?IOError, tags: array[?string]) -> ?string {
+    return nil
+}
+
+func load(p: string) -> (int, ?(IOError | ParseError)) {
+    return 0, nil
+}
+`)
+	find := f.Decls[0].(*ast.FuncDecl)
+	if _, ok := find.Results[0].(*ast.NullableType); !ok {
+		t.Errorf("result of find is %T, want *ast.NullableType", find.Results[0])
+	}
+
+	desc := f.Decls[1].(*ast.FuncDecl)
+	if _, ok := desc.Params[0].Type.(*ast.NullableType); !ok {
+		t.Error("nullable parameter not parsed")
+	}
+	elem := desc.Params[1].Type.(*ast.GenericType).Args[0]
+	if _, ok := elem.(*ast.NullableType); !ok {
+		t.Error("nullable array element not parsed")
+	}
+
+	// `?(A | B)` parenthesizes the union; `?A | B` is not the same shape, which
+	// is why the grammar requires the parens.
+	load := f.Decls[2].(*ast.FuncDecl)
+	n, ok := load.Results[1].(*ast.NullableType)
+	if !ok {
+		t.Fatalf("error position is %T, want *ast.NullableType", load.Results[1])
+	}
+	if u, ok := n.Elem.(*ast.UnionType); !ok || len(u.Members) != 2 {
+		t.Error("?(A | B) did not parse as a nullable union")
+	}
+}

@@ -440,6 +440,19 @@ func (p *parser) parseType() ast.Type {
 }
 
 func (p *parser) parseBaseType() ast.Type {
+	// `?T` is the nullable type former (spec 02 §Nullable types). It takes a
+	// single base type or a parenthesized type: `?(A | B)`, never `?A | B`,
+	// so there is no precedence question between `?` and `|`.
+	if p.at(token.QUESTION) {
+		q := p.next().Pos
+		if p.accept(token.LPAREN) {
+			inner := p.parseType()
+			p.expect(token.RPAREN, "after the nullable type")
+			return &ast.NullableType{Question: q, Elem: inner}
+		}
+		return &ast.NullableType{Question: q, Elem: p.parseBaseType()}
+	}
+
 	switch p.kind() {
 	case token.FUNC:
 		return p.parseFuncType()

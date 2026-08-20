@@ -177,6 +177,47 @@ because the checker work overlaps and because R1 without it is most of the cost 
 less of the benefit. Go's verbosity reputation is overwhelmingly about lacking this
 operator, not about its error interface.
 
+### R3 — Nullability → **`?T`, a general type former** (2026-08-20)
+
+R1's first draft made nullability **positional**: a union or enum in the final component
+of a result type was nullable, the same type elsewhere was not. That is one type name
+meaning two things depending on where it sits — invisible at a use site — and it barred
+parameters, fields, and collection elements from ever being absent, for no reason.
+
+**Resolution: `?T` is a general type former**, written wherever a type may appear.
+`?int`, `array[?string]`, `func describe(e: ?IOError)`. `nil` belongs only to nullable
+types, so `match` on an ordinary enum still needs no `nil` arm. Narrowing (`if x != nil`)
+is a general rule rather than an error-specific one. `?` requires an unrestricted type:
+`?qubit` is rejected, since a value that may be absent cannot be consumed exactly once.
+
+The error position is then just `?E` with no special rule: `-> (Config, ?(IOError | ParseError))`.
+Three characters per fallible signature, in exchange for a rule with no exceptions.
+
+*Consequence to watch, flagged for Phase 3:* `?int` cannot be a bare 64-bit integer at
+runtime. Nullable primitives need either a tagged representation or boxing, which is a
+VM representation decision, not a checker one. Chapter 02 §Nullable types is normative;
+how the VM represents it is not yet decided.
+
+### R4 — Error set inference → **explicit, for now** (2026-08-20)
+
+Error sets are written out. Zig infers them (`!T`), which removes real annotation
+burden — the set is mechanically derivable, and writing it by hand means updating it up
+the whole call chain whenever a leaf gains a failure mode.
+
+Rejected for v1 because inference makes a function's failure modes invisible at its
+signature, and because adding a variant to a private helper's enum then silently changes
+the **public** type of everything that transitively `try`s it: callers' `match`
+statements break with no edit to any signature.
+
+Decisive: inference is purely **additive** later — a compiler can always begin computing
+what people currently write, and existing code keeps working. The reverse is not true.
+Explicit-first is the reversible choice.
+
+*Implementation consequence:* with inference, error sets cannot be resolved
+declaration-by-declaration; it becomes a fixed-point computation over the call graph
+with an iterate-to-convergence pass for recursion. Staying explicit keeps Phase 2's
+checker a single pass.
+
 ## Open questions
 
 Unresolved. Do not treat any of these as decided.
@@ -222,20 +263,6 @@ its worst concurrency decision.
 
 Bindings are currently mutable by default with no `let`/`mut` distinction.
 Immutability-by-default is the better default but changes every example in this spec.
-
-### Q10 — Should error-position nullability be written into the type?
-
-R1 makes nullability **positional**: a union or enum in the final component of a result
-type is nullable, the same type elsewhere is not. This is a wart. The alternative is an
-explicit marker — `-> (Config, ?(IOError | ParseError))` — which is honest but noisier
-on every fallible signature. Decide before Phase 2 finalizes the type representation.
-
-### Q11 — Should error sets be inferred?
-
-v1 requires sets to be written explicitly. Zig infers them (`!T`), which removes the
-annotation burden but makes a function's failure modes invisible at its signature and
-turns any change to a callee into a silent change in the caller's public type. Inference
-is additive later; explicit-first is the reversible choice.
 
 ## Relationship to the legacy implementation
 

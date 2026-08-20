@@ -134,7 +134,7 @@ match e {
 | `Variant(a, b)` | a variant with payload, binding each position |
 | `Variant(_, b)` | as above, discarding a position |
 | `Enum.Variant(a)` | a variant qualified by its enum; required when matching a union |
-| `nil` | the absent value of an un-narrowed error set |
+| `nil` | the absent value of an un-narrowed `?T` |
 | `_` | anything — the catch-all arm |
 
 Bindings introduced by a pattern are scoped to that arm. Patterns do not nest in v1:
@@ -155,9 +155,9 @@ match err {
 }
 ```
 
-Matching an **error set** that has not been narrowed also requires a `nil` arm. Inside
-a block guarded by `err != nil`, the checker narrows it and the `nil` arm is neither
-required nor permitted. See chapter 06 §Nil narrowing.
+Matching an un-narrowed nullable (`?T`, chapter 02 §Nullable types) requires exactly
+one `nil` arm. Inside a block guarded by `x != nil` the checker narrows it, and the
+`nil` arm is then neither required nor permitted.
 
 ### Exhaustiveness
 

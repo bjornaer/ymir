@@ -8,7 +8,7 @@ module match_union_exhaustive
 enum IOError    { NotFound(string), }
 enum ParseError { UnexpectedEOF, }
 
-func report(e: IOError | ParseError) {
+func report(e: ?(IOError | ParseError)) {
     match e {
         IOError.NotFound(p) => print(p),
     }

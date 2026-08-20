@@ -7,7 +7,7 @@ module match_unnarrowed_needs_nil
 
 enum IOError { NotFound(string), }
 
-func readFile(path: string) -> (string, IOError) {
+func readFile(path: string) -> (string, ?IOError) {
     return "", nil
 }
 

@@ -46,7 +46,10 @@ per length.
 `\|` is both logical-or's second character and the union type separator (chapter 02);
 they never occur in the same syntactic position.
 
-Delimiters: `(` `)` `[` `]` `{` `}` `,` `.` `:` `;`
+Delimiters: `(` `)` `[` `]` `{` `}` `,` `.` `:` `;` `?`
+
+`?` is the nullable type former (chapter 02), not an operator; no operator begins
+with it.
 
 `<-` is the channel operator and is **always** lexed as one token. Consequently
 `a<-b` is a channel send, never `a < -b`. Write `a < -b` with spaces for the

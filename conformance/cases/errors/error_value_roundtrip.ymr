@@ -7,7 +7,7 @@
 
 module error_value_roundtrip
 
-func divide(a: int, b: int) -> (int, error) {
+func divide(a: int, b: int) -> (int, ?error) {
     if b == 0 {
         return 0, Error("division by zero")
     }

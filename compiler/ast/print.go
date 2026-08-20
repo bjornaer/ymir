@@ -363,6 +363,13 @@ func typeStr(t Type) string {
 			parts[i] = typeStr(a)
 		}
 		return x.Name.Name + "[" + strings.Join(parts, ", ") + "]"
+	case *NullableType:
+		// Parenthesize a union so the rendering round-trips: `?A | B` would
+		// read as a union of `?A` and `B`.
+		if _, isUnion := x.Elem.(*UnionType); isUnion {
+			return "?(" + typeStr(x.Elem) + ")"
+		}
+		return "?" + typeStr(x.Elem)
 	case *UnionType:
 		parts := make([]string, len(x.Members))
 		for i, m := range x.Members {

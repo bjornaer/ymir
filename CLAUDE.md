@@ -12,8 +12,8 @@ For deep compiler work, use the `ymir-compiler` agent (`.claude/agents/`).
 ## What this project is
 
 Ymir is being rewritten from Python to Go: a statically typed language with ADTs,
-**error sets** (errors as values, `-> (T, IOError | ParseError)`, propagated with
-`try`), Go-style concurrency, and a **linearly typed quantum fragment** where
+**error sets** (errors as values, `-> (T, ?(IOError | ParseError))`, propagated with
+`try`), **nullable types** (`?T`, general), Go-style concurrency, and a **linearly typed quantum fragment** where
 no-cloning and use-after-measurement are compile errors. Execution is a bytecode VM
 shipped as one static binary.
 

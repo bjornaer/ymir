@@ -105,6 +105,7 @@ const (
 	COMMA
 	PERIOD
 	COLON
+	QUESTION // ?T, the nullable type former (spec 02)
 )
 
 var kindNames = map[Kind]string{
@@ -128,7 +129,7 @@ var kindNames = map[Kind]string{
 	ARROW: "->", FATARROW: "=>", CHAN_OP: "<-",
 
 	LPAREN: "(", RPAREN: ")", LBRACK: "[", RBRACK: "]", LBRACE: "{",
-	RBRACE: "}", COMMA: ",", PERIOD: ".", COLON: ":",
+	RBRACE: "}", COMMA: ",", PERIOD: ".", COLON: ":", QUESTION: "?",
 }
 
 func (k Kind) String() string {

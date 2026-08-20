@@ -289,6 +289,20 @@ func (t *FuncType) Pos() token.Position { return t.Keyword }
 func (t *FuncType) End() token.Position { return t.end }
 func (t *FuncType) typeNode()           {}
 
+// NullableType is `?T`: T, or nil.
+//
+// A general type former, not a rule about position. `?` requires an unrestricted
+// type; `?qubit` is rejected by the checker, since a linear value that may be
+// absent cannot be consumed exactly once (spec 02).
+type NullableType struct {
+	Question token.Position
+	Elem     Type
+}
+
+func (t *NullableType) Pos() token.Position { return t.Question }
+func (t *NullableType) End() token.Position { return t.Elem.End() }
+func (t *NullableType) typeNode()           {}
+
 // UnionType is `A | B`. Members must all be enum types; the parser records the
 // syntax and the checker enforces that (spec 02 §Union types).
 type UnionType struct {

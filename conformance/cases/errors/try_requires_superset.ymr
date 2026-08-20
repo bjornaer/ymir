@@ -8,11 +8,11 @@ module try_requires_superset
 enum IOError    { NotFound(string), }
 enum ParseError { UnexpectedEOF, }
 
-func parse(data: string) -> (int, ParseError) {
+func parse(data: string) -> (int, ?ParseError) {
     return 0, ParseError.UnexpectedEOF
 }
 
-func load() -> (int, IOError) {
+func load() -> (int, ?IOError) {
     n := try parse("x")
     return n, nil
 }

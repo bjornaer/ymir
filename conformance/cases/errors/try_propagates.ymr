@@ -9,15 +9,15 @@ module try_propagates
 enum IOError    { NotFound(string), }
 enum ParseError { UnexpectedEOF, }
 
-func readFile(path: string) -> (string, IOError) {
+func readFile(path: string) -> (string, ?IOError) {
     return "", IOError.NotFound(path)
 }
 
-func parse(data: string) -> (int, ParseError) {
+func parse(data: string) -> (int, ?ParseError) {
     return 7, nil
 }
 
-func load(path: string) -> (int, IOError | ParseError) {
+func load(path: string) -> (int, ?(IOError | ParseError)) {
     data := try readFile(path)
     n := try parse(data)
     return n, nil

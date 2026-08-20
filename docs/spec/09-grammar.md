@@ -38,7 +38,8 @@ VarDecl      = "var" ident ( ":" Type [ "=" Expr ] | ":=" Expr ) .
 
 Type         = UnionType .
 UnionType    = BaseType { "|" BaseType } .        (* members must all be enum types *)
-BaseType     = TypeName
+BaseType     = "?" ( BaseType | "(" Type ")" )    (* nullable; ?A|B not accepted *)
+             | TypeName
              | "array" "[" Type "]"
              | "map" "[" Type "," Type "]"
              | "tuple" "[" Type { "," Type } "]"
@@ -146,5 +147,9 @@ Literal      = IntLit | FloatLit | ComplexLit | StringLit | "true" | "false" | "
    so a union separator is never confused with logical-or. They also never occur in the
    same position: `UnionType` appears only where a `Type` is expected.
 
-6. **`try` binds tighter than any binary operator.** `try f() + 1` is `(try f()) + 1`.
+6. **`?` takes a base type or a parenthesized type**, never a bare union: write
+   `?(A | B)`, not `?A | B`. There is therefore no precedence relation between `?`
+   and `|` to define.
+
+7. **`try` binds tighter than any binary operator.** `try f() + 1` is `(try f()) + 1`.
    Its operand must be a call, so `try x` for a non-call `x` is a syntax error.

@@ -6,7 +6,7 @@ sections whenever you do meaningful work.
 
 - **Last updated:** 2026-08-20
 - **Current phase:** Phase 1 — complete. Phase 2 not started.
-- **Blocking:** nothing blocks Phase 2. Q10 and Q11 should be settled during it; Q6 blocks Phase 5.
+- **Blocking:** nothing. Q10 and Q11 are resolved (R3, R4); Q6 blocks Phase 5.
 
 ---
 
@@ -232,12 +232,12 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | Q6 | Data races on shared `array`/`map` between tasks | **Phase 5** | open |
 | Q7 | Structured concurrency instead of Go's detached `spawn`? | Phase 5 | open |
 | Q8 | Immutability by default for locals (`let`/`mut`)? | Phase 2 | open |
-| Q10 | Should error-position nullability be written into the type? | Phase 2 | open |
-| Q11 | Should error sets be inferred? | Phase 2 | open, leaning explicit-first |
+| R3 | Should error-position nullability be written into the type? | — | **resolved: `?T`, general** |
+| R4 | Should error sets be inferred? | — | **resolved: explicit for now** |
 | Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
 
-R1 and R2 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with
-the reasoning and the rejected alternatives. Do not reopen them without reading that.
+R1–R4 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
+reasoning and the rejected alternatives. Do not reopen them without reading that.
 
 ## 7. Standing rules
 
@@ -307,9 +307,27 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - Spec gap noted, not yet resolved: `as` (import alias) and `default` (select) are
   parsed as contextual identifiers rather than keywords, which chapter 01's keyword
   list does not mention. Either reserve them or document them as contextual.
-- **Next:** Phase 2, the type checker. Settle Q10 and Q11 early — both change the
-  type representation.
+- **Next:** Phase 2, the type checker.
 - Added Phase 9 (editor support and distribution) as the deliberate last phase, and
   moved distribution out of Phase 6. The load-bearing decision recorded there: ship
   one LSP server and one tree-sitter grammar rather than per-editor plugins, so
   editor diagnostics are the compiler's own and cannot drift. Q12 filed from Phase 1.
+
+### 2026-08-20 — Q10 and Q11 resolved (R3, R4)
+
+- **R3: `?T` is a general nullable type former**, not a positional rule. The earlier
+  design made only the error position nullable, so one type name meant two things
+  depending on where it sat, and parameters and fields could never be absent. Now
+  `?int`, `array[?string]`, `func f(e: ?IOError)` all work, and the error position is
+  just `?E`. `nil` belongs only to nullable types, so `match` on an ordinary enum still
+  needs no `nil` arm. Narrowing is general. `?qubit` is rejected (rule N5).
+- **R4: error sets stay explicit.** Inference is additive later and the reverse is not,
+  so explicit-first is the reversible choice. It also keeps Phase 2's checker a single
+  pass rather than a fixed-point computation over the call graph.
+- Implemented `?` end to end: token, lexer, `ast.NullableType`, parser, printer. Spec
+  chapters 00, 01, 02, 05, 06, 09 updated. All conformance cases and `examples/tour.ymr`
+  moved to `?` notation; three cases added for narrowing, use-before-narrowing, and
+  `nil` on a non-nullable type. 26 cases total.
+- **Flagged for Phase 3, not yet decided:** `?int` cannot be a bare int64 at runtime.
+  Nullable primitives need a tagged representation or boxing. That is a VM
+  representation decision; chapter 02 is normative on semantics only.

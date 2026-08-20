@@ -224,15 +224,7 @@ Unions are **sets**: `A | B` and `B | A` are the same type, `A | A` is `A`, and
 `(A | B) | C` is `A | B | C`. Two unions are identical when they have the same members.
 A single enum `A` is the one-member union `A`.
 
-Unions exist for one purpose — the error position (chapter 06) — and carry two
-properties that apply only there:
-
-**Nullability.** A union or enum in the **error position** (the final component of a
-function's result type) is an *error set*, and `nil` is a value of it. Elsewhere,
-neither unions nor enums are nullable. The rule is positional; the wart is
-acknowledged in chapter 06 and revisited by open question Q10.
-
-**Subtyping.** An error set `S` is assignable to an error set `T` when **S ⊆ T**:
+**Subtyping.** A union `S` is assignable to a union `T` when **S ⊆ T**:
 
 ```ymr
 var e: IOError | ParseError = someIOError    # legal
@@ -241,7 +233,74 @@ var f: IOError = someUnionValue              # ERROR: not a subset
 
 This subset rule is the **only** subtyping relation in the language. Everywhere else,
 assignability requires identical types (§Assignability below). It exists so a
-function's error set can be the union of its callees' without manual wrapping.
+function's error set can be the union of its callees' without manual wrapping
+(chapter 06).
+
+## Nullable types
+
+`?T` is the type of a value that is either a `T` or **`nil`**.
+
+```ymr
+var found: ?int = nil
+func lookup(k: string) -> ?string
+func describe(e: ?IOError, tags: array[?string]) -> ?string
+```
+
+`?` is a **general type former**, not a rule about position. It may appear anywhere a
+type may: parameters, results, fields, collection elements, and variables. Nullability
+is always written, never inferred from where a type sits.
+
+*This replaced an earlier design in which the last component of a result type was
+implicitly nullable and the same type elsewhere was not.* One type name meaning two
+things depending on position is exactly the kind of rule that is invisible at a use
+site, and there is no reason a parameter or a field should be barred from being absent.
+
+### Rules
+
+**N1 — `?` takes a base type or a parenthesized type.** Write `?IOError` or
+`?(IOError | ParseError)`. `?A | B` is not accepted, so no precedence relation between
+`?` and `|` needs to exist.
+
+**N2 — `?` is idempotent.** `??T` is `?T`.
+
+**N3 — `nil` belongs only to nullable types.** `nil` is assignable to any `?T` and is
+its zero value. `int`, `string`, `struct`, `enum`, and bare unions have no `nil` and
+**MUST NOT** be compared to it. This is what keeps `match` on an ordinary enum free of
+a `nil` arm:
+
+```ymr
+match outcome {          # outcome: bit
+    Zero => ...,
+    One  => ...,         # complete; `bit` is never absent
+}
+```
+
+**N4 — `T` is assignable to `?T`.** Not the reverse. A `?T` **MUST** be narrowed before
+it is used as a `T`; `x + 1` where `x: ?int` is a type error.
+
+**N5 — `?` requires an unrestricted type.** `?qubit` is rejected: a linear value that
+may be absent cannot be consumed exactly once, and every branch would have to prove
+which case it was in (rule L4).
+
+**N6 — Narrowing.** Comparing a nullable binding against `nil` narrows it in the
+corresponding branch:
+
+```ymr
+v := lookup(key)         # v: ?string
+if v != nil {
+    print(v + "!")       # v: string here
+}
+```
+
+Narrowing applies when an `if` condition is exactly `x != nil` or `x == nil` for a
+binding `x` of nullable type, and only within the matching branch. It is deliberately
+minimal: not general flow typing, and it does not survive reassignment of `x`.
+`match` on a narrowed `?Enum` needs no `nil` arm; on an un-narrowed one it requires
+exactly one.
+
+Nullable types make absence a property the checker tracks rather than a runtime
+surprise, which is the same argument as linear types for qubits and exhaustive `match`
+for enums.
 
 ## Linearity rules
 
@@ -310,8 +369,9 @@ ys := []                    # ERROR: cannot infer element type
 ## Assignability
 
 A value of type `S` is assignable to a location of type `T` only if `S` and `T` are
-**identical**, with one exception: error sets, where `S ⊆ T` suffices (§Union types).
-There is no other subtyping, no coercion, and no numeric promotion. Type
+**identical**, with two exceptions: unions, where `S ⊆ T` suffices (§Union types), and
+nullables, where `T` is assignable to `?T` (§Nullable types). There is no other
+subtyping, no coercion, and no numeric promotion. Type
 identity is structural for `array`, `map`, `tuple`, `chan`, `func`, and `matrix`; it is
 nominal for `struct` and `enum` — two structs with identical fields but different names
 are different types.
@@ -322,9 +382,9 @@ are different types.
 above, plus: `array` and `map` are empty, `struct` is field-wise zero, `chan` and
 `func` are `nil`).
 
-Types with **no** zero value: `enum` and unions used outside the error position (no
-privileged variant), and every linear type. A `var` of such a type **MUST** have an
-initializer. An error set's zero value is `nil`.
+Types with **no** zero value: `enum` and bare unions (no privileged variant), and every
+linear type. A `var` of such a type **MUST** have an initializer. The zero value of any
+`?T` is `nil`.
 
 ## Open questions affecting this chapter
 

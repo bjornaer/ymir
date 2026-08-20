@@ -34,9 +34,9 @@ enum ParseError {
     UnexpectedEOF,
 }
 
-func readFile(path: string) -> (string, IOError)
-func parse(data: string) -> (Config, ParseError)
-func loadConfig(path: string) -> (Config, IOError | ParseError)
+func readFile(path: string) -> (string, ?IOError)
+func parse(data: string) -> (Config, ?ParseError)
+func loadConfig(path: string) -> (Config, ?(IOError | ParseError))
 ```
 
 The members of a union **MUST** all be enum types. `int | string` is not a type; Ymir
@@ -45,16 +45,18 @@ with the tagged-union machinery enums already require.
 
 ### The error position
 
-The **error position** is the final component of a function's result type, when that
-component is an enum or union type. A type in the error position is an error set and is
-**nullable**: `nil` is a value of it, meaning "no error".
+The **error position** is the final component of a function's result type. Its type is
+written `?E` for an error set `E`, using the general nullable former (chapter 02
+§Nullable types) — `nil` there means "no error".
 
-Nullability attaches to the error position, **not** to enums generally. A `bit` or a
-`Shape` used as an ordinary value has no `nil`, so `match` on one needs no `nil` arm.
+```ymr
+func readFile(path: string) -> (string, ?IOError)
+func loadConfig(path: string) -> (Config, ?(IOError | ParseError))
+```
 
-*This is a wart, and it is recorded as one.* The rule is positional rather than written
-into the type. The alternative — an explicit marker, `-> (Config, ?(IOError | ParseError))`
-— is noisier on every signature. **Open question Q10** revisits it.
+There is nothing positional about it. `?IOError` means the same thing in a result, a
+parameter, or a field, and an error type not written `?` cannot be `nil`. This costs
+three characters per fallible signature and buys a rule with no exceptions.
 
 ### Set algebra
 
@@ -69,27 +71,26 @@ Two error sets are identical when they contain the same members.
 
 ### Assignability
 
-An error set `S` is assignable to an error set `T` when **S ⊆ T**. This is the only
-subtyping relation in Ymir, and it exists solely for error sets.
+An error set `S` is assignable to an error set `T` when **S ⊆ T** (chapter 02
+§Union types), and `E` is assignable to `?E`.
 
 ```ymr
-var e: IOError | ParseError = someIOError    # legal: {IOError} ⊆ {IOError, ParseError}
-var f: IOError = someConfigError             # ERROR: {IOError, ParseError} ⊄ {IOError}
+var e: ?(IOError | ParseError) = someIOError  # legal: {IOError} ⊆ {IOError, ParseError}
+var f: ?IOError = someConfigError             # ERROR: not a subset
+var g: ?IOError = nil                         # legal
 ```
-
-`nil` is assignable to every error set.
 
 This is what makes errors compose. A function's error set is the union of the sets of
 everything it calls, and returning a callee's error directly typechecks without wrapping:
 
 ```ymr
-func loadConfig(path: string) -> (Config, IOError | ParseError) {
-    data, err := readFile(path)          # err: IOError
+func loadConfig(path: string) -> (Config, ?(IOError | ParseError)) {
+    data, err := readFile(path)          # err: ?IOError
     if err != nil {
-        return zeroConfig, err           # legal: IOError ⊆ IOError | ParseError
+        return zeroConfig, err           # legal: {IOError} ⊆ {IOError, ParseError}
     }
 
-    cfg, err2 := parse(data)             # err2: ParseError
+    cfg, err2 := parse(data)             # err2: ?ParseError
     if err2 != nil {
         return zeroConfig, err2          # legal
     }
@@ -112,7 +113,7 @@ enum error {
 ```
 
 `Error(s)` is sugar for `error.Msg(s)`. Because `error` is an ordinary enum, it
-participates in unions like any other: `IOError | error` is a valid error set.
+participates in unions like any other: `?(IOError | error)` is a valid error position.
 
 There is no privileged "any error" type. `error` is a convenience, not a supertype.
 
@@ -128,13 +129,14 @@ if err != nil {
 }
 ```
 
-`==` and `!=` against `nil` are the **only** operations on an un-narrowed error set.
+`==` and `!=` against `nil` are the **only** operations on an un-narrowed `?E`.
 Matching one requires knowing it is non-nil.
 
 ### Nil narrowing
 
-Inside a block guarded by `err != nil`, the checker narrows `err` to its non-nullable
-form, so `match` needs no `nil` arm:
+Narrowing is the general rule N6 of chapter 02, not an error-specific one. Inside a
+block guarded by `err != nil` the checker narrows `err` from `?E` to `E`, so `match`
+needs no `nil` arm:
 
 ```ymr
 if err != nil {
@@ -152,7 +154,7 @@ Narrowing is deliberately minimal. It applies when the condition of an `if` is e
 corresponding branch. It is not general flow typing, and it does not survive
 reassignment of `x`.
 
-An un-narrowed `match` **MUST** include a `nil` arm:
+A `match` on an un-narrowed `?E` **MUST** include exactly one `nil` arm:
 
 ```ymr
 match err {
@@ -187,7 +189,7 @@ immediately from the enclosing function, with that error in the error position a
 **zero value** of every other result.
 
 ```ymr
-func loadConfig(path: string) -> (Config, IOError | ParseError) {
+func loadConfig(path: string) -> (Config, ?(IOError | ParseError)) {
     data := try readFile(path)
     cfg  := try parse(data)
     return cfg, nil

@@ -198,7 +198,7 @@ var delimiters = map[byte]token.Kind{
 	'[': token.LBRACK, ']': token.RBRACK,
 	'{': token.LBRACE, '}': token.RBRACE,
 	',': token.COMMA, '.': token.PERIOD, ';': token.SEMI,
-	':': token.COLON,
+	':': token.COLON, '?': token.QUESTION,
 }
 
 // number lexes an int, float, or complex literal.

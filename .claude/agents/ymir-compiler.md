@@ -35,7 +35,7 @@ choice serves making that fragment usable.
 
 Do not relitigate these. If a task seems to require it, stop and say so.
 
-- **D1 — Errors are values.** `-> (T, E)` where `E` is an **error set** (an enum or a
+- **D1 — Errors are values.** `-> (T, ?E)` where `E` is an **error set** (an enum or a
   union of enums, assignable by subset), checked by the caller or propagated with `try`.
   No exceptions, no `recover`. *Why:* the VM needs no unwinding, callers cannot skip a
   failure path, and unwinding through a scope holding a live qubit has no good answer.
@@ -95,12 +95,21 @@ its behavior as authoritative — much of it is what we are correcting.
 
 ## Open questions
 
-R1 (error sets) and R2 (`try`) are **resolved**; they are recorded with their rejected
+R1 (error sets), R2 (`try`), R3 (`?T` as a general nullable type former), and R4
+(error sets stay explicit) are **resolved**, and are recorded with their rejected
 alternatives in `docs/spec/00-overview.md`. Q6 (data races on shared `array`/`map`)
-blocks Phase 5. Q10 (positional nullability of the error position is a known wart) and
-Q11 (error set inference) should be settled during Phase 2. The full list with status is
-`PLAN.md` §6. If a task depends on an open question, say which one and what you assumed
-rather than quietly picking an answer.
+blocks Phase 5. The full list with status is `PLAN.md` §6. If a task depends on an open
+question, say which one and what you assumed rather than quietly picking an answer.
+
+Two consequences worth holding:
+
+- **`?T` is general, never positional.** `?int`, `array[?string]`, `func f(e: ?IOError)`.
+  `nil` belongs only to nullable types, which is what keeps `match` on an ordinary enum
+  free of a `nil` arm. The error position is just `?E`. `?qubit` is rejected (rule N5):
+  a value that may be absent cannot be consumed exactly once.
+- **`?int` cannot be a bare int64 at runtime.** Nullable primitives need a tagged
+  representation or boxing. That is a Phase 3 VM decision and is not yet made; chapter
+  02 is normative on semantics only.
 
 Error sets are the expensive part of the type checker — union normalization, subset
 assignability, exhaustiveness over a union, nil narrowing, and `try`'s subset check —

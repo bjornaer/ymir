@@ -15,15 +15,15 @@ enum ParseError {
     UnexpectedEOF,
 }
 
-func readFile(path: string) -> (string, IOError) {
+func readFile(path: string) -> (string, ?IOError) {
     return "", IOError.NotFound(path)
 }
 
-func parse(data: string) -> (int, ParseError) {
+func parse(data: string) -> (int, ?ParseError) {
     return 0, ParseError.UnexpectedEOF
 }
 
-func load(path: string) -> (int, IOError | ParseError) {
+func load(path: string) -> (int, ?(IOError | ParseError)) {
     data, err := readFile(path)
     if err != nil {
         return 0, err
@@ -35,7 +35,7 @@ func load(path: string) -> (int, IOError | ParseError) {
     return n, nil
 }
 
-func report(e: IOError | ParseError) {
+func report(e: ?(IOError | ParseError)) {
     match e {
         IOError.NotFound(p)      => print("missing: " + p),
         ParseError.UnexpectedEOF => print("truncated"),

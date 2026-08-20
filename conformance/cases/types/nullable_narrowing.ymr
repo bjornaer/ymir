@@ -1,0 +1,31 @@
+#@ case types/nullable_narrowing
+#@ spec 02-types.md#rules
+#@ exit 0
+#@ stdout
+#@ | found: 7
+#@ | absent
+
+module nullable_narrowing
+
+func find(xs: array[int], target: int) -> ?int {
+    for x in xs {
+        if x == target {
+            return x
+        }
+    }
+    return nil
+}
+
+func report(xs: array[int], target: int) {
+    v := find(xs, target)
+    if v != nil {
+        print("found: " + str(v))
+    } else {
+        print("absent")
+    }
+}
+
+func main() {
+    report([1, 7, 9], 7)
+    report([1, 7, 9], 4)
+}

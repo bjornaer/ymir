@@ -6,7 +6,7 @@
 
 module unhandled_is_compile_error
 
-func divide(a: int, b: int) -> (int, error) {
+func divide(a: int, b: int) -> (int, ?error) {
     return a / b, nil
 }
 
