@@ -5,8 +5,8 @@ where the project stands and what happens next. Update the *Status* and *Session
 sections whenever you do meaningful work.
 
 - **Last updated:** 2026-08-20
-- **Current phase:** Phase 0 — complete. Phase 1 not started.
-- **Blocking:** nothing blocks Phase 1. Q10 should be settled during Phase 2; Q6 blocks Phase 5.
+- **Current phase:** Phase 1 — complete. Phase 2 not started.
+- **Blocking:** nothing blocks Phase 2. Q10 and Q11 should be settled during it; Q6 blocks Phase 5.
 
 ---
 
@@ -94,17 +94,16 @@ phase before its predecessor's criteria are met.
 - [x] Baseline recorded against legacy
 - [x] `CLAUDE.md` and the `ymir-compiler` agent
 
-### Phase 1 — Frontend in Go
+### Phase 1 — Frontend in Go ✅ COMPLETE (2026-08-20)
 
-Go module, lexer, parser, AST. No types, no execution.
-
-- Deliverables: `compiler/lexer`, `compiler/ast`, `compiler/parser`, `cmd/ymir` with
-  a `ymir parse <file>` subcommand that dumps the AST or a syntax error.
-- Identifiers are **AST nodes**, never strings. A call's callee is an **expression**,
-  never a string. These two are non-negotiable; they are the legacy's fatal flaws.
-- Error messages carry file, line, column, and a source excerpt from day one.
-- **Done when:** every `.ymr` file in `conformance/cases/` parses or reports a syntax
-  error with an accurate position, and chapter 09's grammar is implemented in full.
+- [x] `compiler/token`, `compiler/lexer`, `compiler/ast`, `compiler/parser`,
+      `compiler/diag`, `cmd/ymir`
+- [x] `ymir parse [-tokens] [-q] <file>` dumps the tree or reports syntax errors
+- [x] Identifiers are `*ast.Ident` nodes; a call's callee is an `ast.Expr`
+- [x] Diagnostics carry file, line, column, a source excerpt, and a caret
+- [x] All 23 conformance cases parse; `examples/tour.ymr` exercises the full grammar
+- [x] Go tests for both packages, plus `TestConformanceCasesParse` as the exit gate
+- [x] CI: gofmt, vet, test, and a parse pass over every conformance case
 
 ### Phase 2 — Type checker
 
@@ -242,3 +241,26 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - Conformance: 23 cases, up from 17. Six new for error sets and `try`; the old
   `error_value_roundtrip` was rewritten since it predated the design.
 - **Next:** Phase 1, the Go frontend. Nothing blocks it.
+
+### 2026-08-20 — Phase 1: the Go frontend
+
+- Go module `github.com/bjornaer/ymir`, Go 1.26. Packages: `compiler/token`,
+  `compiler/lexer`, `compiler/ast`, `compiler/parser`, `compiler/diag`, `cmd/ymir`.
+- `ymir parse` prints the syntax tree, or diagnostics with a source excerpt and a
+  caret, exiting non-zero. All 23 conformance cases parse.
+- Three legacy defects are foreclosed structurally rather than fixed: operators are
+  matched by longest prefix over a closed set (`x==-3` lexes correctly), string
+  escapes are decoded in the lexer, and comments never reach the parser.
+- Two spec deviations found by implementing:
+  - **Unary vs `**` precedence.** Spec 04 says `-x ** 2` is `-(x ** 2)`, so `**` binds
+    tighter than unary minus. The obvious recursive-descent shape gets this wrong;
+    a unary operand is parsed at the exponent level. Test `TestPrecedence` pins it.
+  - **Match arms and multi-value return.** `A => return x, B => ...` and
+    `A => return x, y` are the same shape and cannot be told apart without knowing
+    the enum. A single-statement arm now cannot return multiple values; use a block.
+    Spec 05 gained an §Arms section saying so.
+- Spec gap noted, not yet resolved: `as` (import alias) and `default` (select) are
+  parsed as contextual identifiers rather than keywords, which chapter 01's keyword
+  list does not mention. Either reserve them or document them as contextual.
+- **Next:** Phase 2, the type checker. Settle Q10 and Q11 early — both change the
+  type representation.

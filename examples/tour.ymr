@@ -1,0 +1,138 @@
+module tour
+
+import stdlib.math
+import stdlib.io as io
+
+const PI: float = 3.141592653589793
+
+struct Point {
+    x: float,
+    y: float,
+}
+
+enum Shape {
+    Circle(float),
+    Rect(float, float),
+    Origin,
+}
+
+enum IOError {
+    NotFound(string),
+    Denied(string),
+}
+
+enum ParseError {
+    UnexpectedEOF,
+    BadChar(int, string),
+}
+
+func (p: Point) magnitude() -> float {
+    return math.sqrt(p.x ** 2.0 + p.y ** 2.0)
+}
+
+func (p: mut Point) scale(k: float) {
+    p.x = p.x * k
+    p.y = p.y * k
+}
+
+func area(s: Shape) -> float {
+    match s {
+        Circle(r)  => return PI * r * r,
+        Rect(w, h) => return w * h,
+        Origin     => return 0.0,
+    }
+}
+
+func readFile(path: string) -> (string, IOError) {
+    return "", IOError.NotFound(path)
+}
+
+func parse(data: string) -> (int, ParseError) {
+    return 0, nil
+}
+
+func load(path: string) -> (int, IOError | ParseError) {
+    data := try readFile(path)
+    n := try parse(data)
+    return n, nil
+}
+
+func apply(xs: array[int], f: func(int) -> int) -> array[int] {
+    var out: array[int] = []
+    for x in xs {
+        append(out, f(x))
+    }
+    return out
+}
+
+func counter() -> func() -> int {
+    count := 0
+    return func() -> int {
+        count = count + 1
+        return count
+    }
+}
+
+func worker(id: int, jobs: chan[int], results: chan[int]) {
+    for j in jobs {
+        results <- j * 2
+    }
+}
+
+func main() {
+    p := Point{x: 3.0, y: 4.0}
+    print(p.magnitude())
+
+    var shapes: array[Shape] = [Circle(1.0), Rect(2.0, 3.0), Origin]
+    for s in shapes {
+        print(area(s))
+    }
+
+    doubled := apply([1, 2, 3], func(x: int) -> int { return x * 2 })
+    print(doubled[0])
+
+    c := counter()
+    print(c())
+    print(c())
+
+    _, err := load("/nope")
+    if err != nil {
+        match err {
+            IOError.NotFound(path)  => print("missing: " + path),
+            IOError.Denied(path)    => print("denied: " + path),
+            ParseError.UnexpectedEOF => print("truncated"),
+            ParseError.BadChar(i, c) => print("bad char"),
+        }
+    }
+
+    jobs := make_chan[int](10)
+    results := make_chan[int](10)
+    for w in range(1, 4) {
+        spawn worker(w, jobs, results)
+    }
+    for j in range(1, 10) {
+        jobs <- j
+    }
+    close(jobs)
+
+    select {
+        case v := <-results: print(v)
+        case default:       print("nothing ready")
+    }
+
+    m := {"a": 1, "b": 2}
+    v, ok := m["a"]
+    if ok {
+        print(v)
+    }
+
+    t := (1, "one")
+    print(t.0)
+
+    for i := 0; i < 3; i = i + 1 {
+        if i == 1 {
+            continue
+        }
+        print(i)
+    }
+}

@@ -111,6 +111,21 @@ match outcome {
 }
 ```
 
+### Arms
+
+A single-statement arm **MUST NOT** return multiple values. The comma that
+terminates the arm would be indistinguishable from the comma separating return
+values — `A => return x, B => ...` and `A => return x, y` have the same shape, and
+telling them apart requires knowing the enum, which the parser does not. Use a
+block arm:
+
+```ymr
+match e {
+    A => { return 1, 2 },        # multiple values need a block
+    B => return 3,               # single value is fine
+}
+```
+
 ### Patterns
 
 | Pattern | Matches |
