@@ -5,7 +5,7 @@ where the project stands and what happens next. Update the *Status* and *Session
 sections whenever you do meaningful work.
 
 - **Last updated:** 2026-08-20
-- **Current phase:** Phase 1 — complete. Phase 2 not started.
+- **Current phase:** Phase 1 — complete and merged (PR #1). Phase 2 not started.
 - **Blocking:** nothing. Q10 and Q11 are resolved (R3, R4); Q6 blocks Phase 5.
 
 ---
@@ -53,14 +53,25 @@ executable reference. Its defect catalogue is in its README.
 ## 3. Repository layout
 
 ```
-docs/spec/          NORMATIVE language definition. Chapters 00-09.
-conformance/        Executable form of the spec. run.py + cases/.
-ymir-legacy-py/     Frozen Python implementation. Reference only. Delete at Phase 8.
-compiler/           (Phase 1) Go: lexer, parser, checker, bytecode compiler.
-vm/                 (Phase 3) Go: the bytecode virtual machine.
-cmd/ymir/           (Phase 1) Go: the CLI.
-editor-support/     VSCode extension. Needs updating at Phase 6.
-docs/               Older prose docs. Superseded by docs/spec/ where they conflict.
+docs/spec/            NORMATIVE language definition. Chapters 00-09.
+conformance/          Executable form of the spec. run.py + 26 cases.
+examples/tour.ymr     Exercises the full grammar. Keep it parsing.
+ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
+
+compiler/token/       EXISTS. Token kinds, closed operator set, positions.
+compiler/lexer/       EXISTS. Maximal munch, escape decoding. Has tests.
+compiler/ast/         EXISTS. Syntax tree + a tree printer.
+compiler/parser/      EXISTS. Recursive descent over chapter 09. Has tests.
+compiler/diag/        EXISTS. Errors with position, source excerpt, caret.
+cmd/ymir/             EXISTS. CLI; `parse` is the only subcommand so far.
+
+compiler/types/       PHASE 2. Semantic types, distinct from ast.Type.
+compiler/check/       PHASE 2. Scope resolution, inference, assignability.
+compiler/bytecode/    PHASE 3.
+vm/                   PHASE 3.
+
+editor-support/       VSCode extension, outdated. Retargeted at Phase 9.
+docs/                 Older prose docs. Superseded by docs/spec/ where they conflict.
 ```
 
 `docs/context.md`, `docs/syntax_guidelines.md`, `docs/concurrency.md`, and
@@ -105,19 +116,72 @@ phase before its predecessor's criteria are met.
 - [x] Go tests for both packages, plus `TestConformanceCasesParse` as the exit gate
 - [x] CI: gofmt, vet, test, and a parse pass over every conformance case
 
-### Phase 2 — Type checker
+### Phase 2 — Type checker  ← START HERE
 
-- Deliverables: `compiler/types`, `compiler/check`. Scope resolution, local inference,
-  assignability, exhaustiveness checking, definite assignment.
-- **Error sets (R1) are the expensive part of this phase**, more so than linearity:
-  union normalization, subset assignability, exhaustiveness over a union, nil narrowing,
-  and `try`'s subset check. Budget accordingly.
-- **Build the linearity machinery now** (chapter 02, rules L1–L6) even though no linear
-  type exists until Phase 7. Decision D3 exists for this reason. The move/consume
-  bookkeeping in the checker is the expensive part; adding `qubit` later is then small.
-- **Done when:** every `compile-error` case in the suite reports the right error, and
-  the `types/`, `scope/`, `decl/`, and `match/` categories pass their compile-time
-  assertions.
+**What Phase 1 left you.** A parsed `*ast.File` with positions on every node, and
+`compiler/diag` for reporting. `ast.Type` is *syntax only* — what was written, not what
+it means. Phase 2 introduces `compiler/types` for semantic types and resolves one to the
+other. Nothing in the AST carries semantic information yet, and it should not; keep
+resolved types in a side table keyed by node, so the AST stays a faithful record of the
+source (this is what lets `ymir fmt` and the LSP reuse it later).
+
+**Deliverables:** `compiler/types`, `compiler/check`, and a `ymir check <file>`
+subcommand alongside `parse`.
+
+**Scope of the work,** roughly in dependency order:
+
+1. **Semantic types** — primitives, `array`/`map`/`tuple`/`matrix`/`chan`/`func`,
+   named struct and enum types, unions, nullables. Identity is structural for the
+   built-ins and nominal for struct and enum (chapter 02 §Assignability).
+2. **Scope resolution** — the five scope levels of chapter 03. A real scope chain, not
+   two flat maps. Module-level `var` must be visible inside every function in the
+   module; case `scope/module_var_mutation` exists because legacy got this wrong.
+3. **Local inference** — `:=` and `var x := e` only. Signatures are always annotated,
+   so there is no global inference and no unification.
+4. **Assignability** — identity, plus the two exceptions: union subset (`S ⊆ T`) and
+   `T` → `?T`.
+5. **Exhaustiveness** — over a single enum and over a union. Must name the missing
+   variants in the error.
+6. **Nullable handling (R3)** — rules N1–N6 of chapter 02: `?` is idempotent, `nil`
+   belongs only to `?T`, `?T` must be narrowed before use as `T`, `?` rejects linear
+   types, and narrowing on `if x != nil`.
+7. **Definite assignment** — a function with a declared result must return on every
+   path. Legacy returned "the last evaluated value", so a function's result depended on
+   the shape of its final statement.
+8. **Linearity (L1–L6)** — build it now, per decision D3, even though `qubit` does not
+   arrive until Phase 7. The move/consume bookkeeping is the expensive part; adding the
+   type to a checker already built around it is small. Retrofitting it is not.
+
+**Two things that will cost more than expected:**
+
+- **Error sets and unions (R1).** Union normalization, subset assignability,
+  exhaustiveness across members, and `try`'s subset check. Harder than linearity.
+- **Narrowing (R3/N6).** Deliberately minimal — exactly `x != nil` / `x == nil` on a
+  binding, that branch only, not surviving reassignment. Resist generalizing it into
+  flow typing; that is a much larger commitment and is not specified.
+
+**Explicitly NOT in this phase:** error set inference (R4 — sets are written out, which
+keeps this a single pass rather than a fixed-point over the call graph), user-facing
+generics (Q3, undecided), and any execution.
+
+**Decide early, both affect the type representation:** Q3 (generics) and Q5 (integer
+overflow). Q12 (`as` and `default` as contextual identifiers) can wait for Phase 6.
+
+**Done when:** every `compile-error` case reports the right error at the right position.
+The suite has 13 such cases of 26; two are `quantum/` and stay skipped until Phase 7, so
+**11 are in scope for this phase**:
+
+```
+decl/undefined_variable          scope/block_scope
+types/no_implicit_conversion     types/nil_not_on_plain_type
+types/nullable_needs_narrowing   match/exhaustiveness
+errors/match_union_exhaustive    errors/match_unnarrowed_needs_nil
+errors/error_set_not_superset    errors/try_requires_superset
+errors/unhandled_is_compile_error
+```
+
+Add cases as you go — the suite is thin on the type system and should roughly double
+during this phase.
 
 ### Phase 3 — Bytecode and VM, minimal slice
 
@@ -331,3 +395,18 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - **Flagged for Phase 3, not yet decided:** `?int` cannot be a bare int64 at runtime.
   Nullable primitives need a tagged representation or boxing. That is a VM
   representation decision; chapter 02 is normative on semantics only.
+
+### 2026-08-20 — Merged, and handoff audit
+
+- PR #1 merged to `main`. Feature branch deleted; `main` is the working branch again.
+- Verified from a clean clone: `go build`, `go test ./...`, and all 26 conformance cases
+  parsing. 173 tracked files, `.claude/agents/` included.
+- Handoff gaps found and closed: `CLAUDE.md` had no Go commands at all (a fresh session
+  could not build); `PLAN.md` §3 described `compiler/` as planned rather than existing;
+  the Phase 2 brief predated Phase 1 and mentioned neither R3's nullable work nor what
+  the parser hands over.
+- Phase 2 is now marked **START HERE** with a full brief: what Phase 1 left, the eight
+  work items in dependency order, the two that will cost more than expected (unions and
+  narrowing), what is explicitly out of scope, and the 11 conformance cases that define
+  done.
+- **Next session: read `PLAN.md`, then start Phase 2.** Nothing blocks it.

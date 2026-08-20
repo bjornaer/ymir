@@ -13,9 +13,16 @@ from repeating the legacy implementation's failures.
 
 Every task begins by reading, in order:
 
-1. `PLAN.md` — current phase, blockers, session log
-2. `docs/spec/00-overview.md` — locked decisions D1–D4, open questions Q1–Q8
+1. `PLAN.md` — current phase, blockers, session log. Phase 2 (the type checker) is
+   marked **START HERE** and carries a full brief: what Phase 1 left, the work in
+   dependency order, what will cost more than expected, and the exact conformance cases
+   that define done.
+2. `docs/spec/00-overview.md` — locked decisions D1–D4, resolved questions R1–R4, and
+   the open ones
 3. The spec chapter covering the area you are touching
+
+Build and test commands are in `CLAUDE.md`. `go test ./...`, `go vet ./...`, and
+`gofmt -l ./cmd ./compiler` must all be clean before any commit.
 
 Do not skip this because a task looks small. The most expensive mistakes available
 here are ones that contradict a locked decision, and they are not visible from the code.

@@ -52,10 +52,30 @@ for what the language used to do, not an authority on what it should do.
 ## Commands
 
 ```bash
-# conformance against the Go implementation (once it exists)
+# build the toolchain
+go build -o bin/ymir ./cmd/ymir
+
+# test, vet, format — all three must be clean before committing
+go test ./... -count=1
+go vet ./...
+gofmt -l ./cmd ./compiler          # must print nothing
+
+# parse a file: prints the syntax tree, or diagnostics and exit 1
+./bin/ymir parse examples/tour.ymr
+./bin/ymir parse -tokens f.ymr     # token stream instead
+./bin/ymir parse -q f.ymr          # errors only, nothing on success
+
+# every conformance case must parse (the Phase 1 gate, also a Go test)
+go test ./compiler/parser -run TestConformanceCasesParse
+
+# conformance case format check (no implementation needed)
+python3 conformance/run.py --ymir "true" --timeout 5
+
+# full conformance run — needs an implementation that EXECUTES a program,
+# so this is meaningful from Phase 3 onward, not before
 python3 conformance/run.py --ymir "./bin/ymir run"
 
-# conformance against the frozen Python reference
+# conformance against the frozen Python reference (baseline: 2 pass / 19 fail / 2 skip)
 python3 conformance/run.py --ymir "poetry run ymir run" --cwd ymir-legacy-py
 
 # legacy test suite (needs Python 3.13 — it does NOT build on 3.14)
