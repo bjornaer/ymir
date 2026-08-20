@@ -1,0 +1,14 @@
+#@ case quantum/no_cloning
+#@ spec 08-quantum.md#no-cloning
+#@ skip quantum fragment unimplemented (PLAN.md phase 7)
+#@ compile-error
+#@ | moved
+
+module no_cloning
+
+func main() {
+    q1 := qubit()
+    q2 := q1
+    h(q1)
+    discard(q2)
+}

@@ -1,0 +1,51 @@
+#@ case errors/error_set_subset
+#@ spec 06-errors.md#assignability
+#@ exit 0
+#@ stdout
+#@ | missing: /nope
+#@ | truncated
+
+module error_set_subset
+
+enum IOError {
+    NotFound(string),
+}
+
+enum ParseError {
+    UnexpectedEOF,
+}
+
+func readFile(path: string) -> (string, ?IOError) {
+    return "", IOError.NotFound(path)
+}
+
+func parse(data: string) -> (int, ?ParseError) {
+    return 0, ParseError.UnexpectedEOF
+}
+
+func load(path: string) -> (int, ?(IOError | ParseError)) {
+    data, err := readFile(path)
+    if err != nil {
+        return 0, err
+    }
+    n, err2 := parse(data)
+    if err2 != nil {
+        return 0, err2
+    }
+    return n, nil
+}
+
+func report(e: ?(IOError | ParseError)) {
+    match e {
+        IOError.NotFound(p)      => print("missing: " + p),
+        ParseError.UnexpectedEOF => print("truncated"),
+    }
+}
+
+func main() {
+    _, err := load("/nope")
+    if err != nil {
+        report(err)
+    }
+    report(ParseError.UnexpectedEOF)
+}

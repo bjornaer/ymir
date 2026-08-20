@@ -1,0 +1,15 @@
+#@ case types/nullable_needs_narrowing
+#@ spec 02-types.md#rules
+#@ compile-error
+#@ | ?int
+
+module nullable_needs_narrowing
+
+func find() -> ?int {
+    return nil
+}
+
+func main() {
+    v := find()
+    print(v + 1)
+}

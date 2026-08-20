@@ -1,0 +1,22 @@
+#@ case errors/try_requires_superset
+#@ spec 06-errors.md#rules
+#@ compile-error
+#@ | ParseError
+
+module try_requires_superset
+
+enum IOError    { NotFound(string), }
+enum ParseError { UnexpectedEOF, }
+
+func parse(data: string) -> (int, ?ParseError) {
+    return 0, ParseError.UnexpectedEOF
+}
+
+func load() -> (int, ?IOError) {
+    n := try parse("x")
+    return n, nil
+}
+
+func main() {
+    _, _ = load()
+}

@@ -1,5 +1,10 @@
 # Ymir Concurrency Guide
 
+> **SUPERSEDED.** This document describes the frozen Python implementation in
+> `/ymir-legacy-py/`, and contains claims that have since been disproved by direct
+> execution. It is kept for history. The normative definition of Ymir is
+> [`/docs/spec/`](spec/), and the migration plan is [`/PLAN.md`](../PLAN.md).
+
 Ymir provides Go-style concurrency primitives that make parallel programming intuitive and safe.
 
 ## Table of Contents

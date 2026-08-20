@@ -1,5 +1,10 @@
 # Ymir Standard Library Reference
 
+> **SUPERSEDED.** This document describes the frozen Python implementation in
+> `/ymir-legacy-py/`, and contains claims that have since been disproved by direct
+> execution. It is kept for history. The normative definition of Ymir is
+> [`/docs/spec/`](spec/), and the migration plan is [`/PLAN.md`](../PLAN.md).
+
 Complete reference for Ymir's standard library, including string methods, collection methods, and operators.
 
 ## Table of Contents

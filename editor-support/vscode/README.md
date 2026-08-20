@@ -1,5 +1,10 @@
 # Ymir Language Support for Visual Studio Code
 
+> **OUTDATED.** This extension targets the legacy Python implementation's syntax and
+> does not match [`/docs/spec/`](../../docs/spec/). It is retargeted in **Phase 9**
+> ([`/PLAN.md`](../../PLAN.md)), where it becomes a thin client for `ymir lsp` rather
+> than a standalone grammar. Do not extend it before then.
+
 Provides rich language support for the Ymir programming language.
 
 ## Features

@@ -3,6 +3,22 @@
   <img src="assets/ymir_logo.png" alt="Ymir Logo"/>
 </p>
 
+
+> ## Status: being rewritten
+>
+> Ymir is moving from its Python implementation to a **bytecode VM written in Go**,
+> with a redesigned language: algebraic data types, errors as values, and a
+> **linearly typed quantum fragment** where no-cloning and use-after-measurement are
+> compile errors.
+>
+> - **[`docs/spec/`](docs/spec/)** — the normative language definition
+> - **[`PLAN.md`](PLAN.md)** — migration plan, current phase, open questions
+> - **[`conformance/`](conformance/)** — the executable form of the spec
+>
+> The documentation below describes the **frozen Python implementation**, now at
+> [`ymir-legacy-py/`](ymir-legacy-py/). It has known defects catalogued in that
+> directory's README, and it is a reference — not a description of where Ymir is going.
+
 Ymir is a modern programming language inspired by Norse mythology, designed to be powerful and efficient for quantum computing simulations. Ymir combines Python's ease of use with Go's concurrency model, featuring advanced mathematical support with GPU acceleration.
 
 ## Features
@@ -159,7 +175,7 @@ ymir run script.ymr --mode llvm  # LLVM only: fail on unsupported features
 ymir run script.ymr -i           # Interpreter only: full feature support
 ```
 
-See [LLVM_STATUS.md](LLVM_STATUS.md) for detailed feature support and known issues.
+See [LLVM_STATUS.md](ymir-legacy-py/LLVM_STATUS.md) for detailed feature support and known issues.
 
 ### Building Binaries
 Build Ymir scripts into standalone executables:

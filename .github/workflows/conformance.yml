@@ -1,0 +1,41 @@
+name: Conformance
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-cases:
+    name: Validate conformance case format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Parses every case header and fails on a malformed or mis-ided case.
+      # `true` is a no-op runner: no implementation is required to validate format.
+      - name: Validate case headers
+        run: python3 conformance/run.py --ymir "true" --timeout 5 || true
+      - name: Fail on malformed cases
+        run: |
+          if python3 conformance/run.py --ymir "true" --timeout 5 2>&1 | grep -q MALFORMED; then
+            echo "::error::One or more conformance cases are malformed"
+            exit 1
+          fi
+
+  # Enabled at Phase 3, when the Go implementation can execute a program.
+  # Until then it is documentation of the intended gate.
+  run-suite:
+    name: Run conformance suite (Go implementation)
+    runs-on: ubuntu-latest
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: go build -o bin/ymir ./cmd/ymir
+      - run: python3 conformance/run.py --ymir "./bin/ymir run"

@@ -1,5 +1,9 @@
 name: Release
 
+defaults:
+  run:
+    working-directory: ymir-legacy-py
+
 on:
   release:
     types: [published]

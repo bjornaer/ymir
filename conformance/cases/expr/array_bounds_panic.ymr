@@ -1,0 +1,10 @@
+#@ case expr/array_bounds_panic
+#@ spec 02-types.md#arrayt
+#@ exit nonzero
+
+module array_bounds_panic
+
+func main() {
+    xs := [1, 2, 3]
+    print(xs[10])
+}

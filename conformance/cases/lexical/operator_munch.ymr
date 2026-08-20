@@ -1,0 +1,14 @@
+#@ case lexical/operator_munch
+#@ spec 01-lexical.md#tokenization-maximal-munch-over-a-closed-operator-set
+#@ exit 0
+#@ stdout
+#@ | true
+#@ | false
+
+module operator_munch
+
+func main() {
+    x := 3
+    print(x == -3 + 6)
+    print(x == -3)
+}

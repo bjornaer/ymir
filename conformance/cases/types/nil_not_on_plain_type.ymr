@@ -1,0 +1,13 @@
+#@ case types/nil_not_on_plain_type
+#@ spec 02-types.md#rules
+#@ compile-error
+#@ | nil
+
+module nil_not_on_plain_type
+
+func main() {
+    var n: int = 0
+    if n == nil {
+        print("never")
+    }
+}

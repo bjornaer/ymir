@@ -1,0 +1,47 @@
+name: Go
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build, vet, and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l ./cmd ./compiler)
+          if [ -n "$unformatted" ]; then
+            echo "::error::these files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1
+
+      - name: build
+        run: go build -o bin/ymir ./cmd/ymir
+
+      # Phase 1 exit criterion: every conformance case is syntactically valid.
+      - name: parse every conformance case
+        run: |
+          fail=0
+          for f in $(find conformance/cases -name '*.ymr' | sort); do
+            if ! ./bin/ymir parse -q "$f"; then
+              echo "::error file=$f::case does not parse"
+              fail=1
+            fi
+          done
+          exit $fail

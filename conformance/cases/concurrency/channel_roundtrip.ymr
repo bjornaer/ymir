@@ -1,0 +1,29 @@
+#@ case concurrency/channel_roundtrip
+#@ spec 07-concurrency.md#channels
+#@ exit 0
+#@ stdout
+#@ | 2
+#@ | 4
+
+module channel_roundtrip
+
+func worker(id: int, out: chan[int]) {
+    out <- id * 2
+}
+
+func main() {
+    ch := make_chan[int](2)
+    spawn worker(1, ch)
+    spawn worker(2, ch)
+
+    a := <-ch
+    b := <-ch
+
+    if a < b {
+        print(a)
+        print(b)
+    } else {
+        print(b)
+        print(a)
+    }
+}

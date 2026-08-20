@@ -1,0 +1,22 @@
+#@ case errors/error_set_not_superset
+#@ spec 06-errors.md#assignability
+#@ compile-error
+#@ | IOError
+
+module error_set_not_superset
+
+enum IOError    { NotFound(string), }
+enum ParseError { UnexpectedEOF, }
+
+func wide() -> (int, ?(IOError | ParseError)) {
+    return 0, ParseError.UnexpectedEOF
+}
+
+func narrow() -> (int, ?IOError) {
+    n, err := wide()
+    return n, err
+}
+
+func main() {
+    _, _ = narrow()
+}

@@ -1,4 +1,8 @@
-name: Tests
+name: Legacy Python Tests
+
+defaults:
+  run:
+    working-directory: ymir-legacy-py
 
 on:
   push:

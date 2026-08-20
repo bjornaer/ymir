@@ -1,0 +1,19 @@
+#@ case errors/match_union_exhaustive
+#@ spec 05-statements.md#matching-a-union
+#@ compile-error
+#@ | UnexpectedEOF
+
+module match_union_exhaustive
+
+enum IOError    { NotFound(string), }
+enum ParseError { UnexpectedEOF, }
+
+func report(e: ?(IOError | ParseError)) {
+    match e {
+        IOError.NotFound(p) => print(p),
+    }
+}
+
+func main() {
+    report(IOError.NotFound("x"))
+}

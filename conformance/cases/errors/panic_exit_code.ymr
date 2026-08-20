@@ -1,0 +1,9 @@
+#@ case errors/panic_exit_code
+#@ spec 06-errors.md#panic
+#@ exit nonzero
+
+module panic_exit_code
+
+func main() {
+    panic("deliberate")
+}

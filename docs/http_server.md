@@ -1,5 +1,10 @@
 # Ymir HTTP Server Guide
 
+> **SUPERSEDED.** This document describes the frozen Python implementation in
+> `/ymir-legacy-py/`, and contains claims that have since been disproved by direct
+> execution. It is kept for history. The normative definition of Ymir is
+> [`/docs/spec/`](spec/), and the migration plan is [`/PLAN.md`](../PLAN.md).
+
 Ymir provides a built-in HTTP server based on aiohttp, making it easy to create web APIs and services.
 
 ## Table of Contents

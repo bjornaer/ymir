@@ -1,0 +1,14 @@
+#@ case scope/block_scope
+#@ spec 03-declarations.md#scope
+#@ compile-error
+#@ | inner
+
+module block_scope
+
+func main() {
+    if true {
+        inner := 1
+        print(inner)
+    }
+    print(inner)
+}

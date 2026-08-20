@@ -1,0 +1,11 @@
+#@ case decl/undefined_variable
+#@ spec 03-declarations.md#variables
+#@ compile-error
+#@ | cuont
+
+module undefined_variable
+
+func main() {
+    var count: int = 5
+    print(cuont + 1)
+}

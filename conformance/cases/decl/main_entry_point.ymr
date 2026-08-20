@@ -1,0 +1,11 @@
+#@ case decl/main_entry_point
+#@ spec 03-declarations.md#main
+#@ exit 0
+#@ stdout
+#@ | main ran
+
+module main_entry_point
+
+func main() {
+    print("main ran")
+}

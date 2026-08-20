@@ -1,0 +1,12 @@
+#@ case types/no_implicit_conversion
+#@ spec 02-types.md#numeric-conversion
+#@ compile-error
+#@ | int
+
+module no_implicit_conversion
+
+func main() {
+    x := 1
+    y := 2.0
+    print(x + y)
+}

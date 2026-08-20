@@ -1,0 +1,15 @@
+#@ case types/float_literal_arithmetic
+#@ spec 02-types.md#primitive-types
+#@ exit 0
+#@ stdout
+#@ | 3.5
+
+module float_literal_arithmetic
+
+func half(x: float) -> float {
+    return x / 2.0
+}
+
+func main() {
+    print(half(7.0))
+}
