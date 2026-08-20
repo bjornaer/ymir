@@ -145,16 +145,14 @@ Structs, enums, `match`, arrays, maps, strings, tuples, closures, methods, error
 - **Done when:** the `concurrency/` category passes, plus a stress case run under
   repetition without flaking.
 
-### Phase 6 — Stdlib, tooling, distribution
+### Phase 6 — Stdlib and tooling
 
 - Stdlib written **in Ymir** where possible, in Go where it must be. Ported against the
   conformance suite, not against the legacy sources.
 - `ymir run`, `ymir build`, `ymir fmt`, `ymir test`. Correct exit codes throughout —
   this is what legacy got wrong.
-- Cross-compiled release binaries, updated Homebrew tap, VSCode extension pointed at
-  the new grammar.
-- **Done when:** `brew install ymir` yields a working binary on macOS and Linux, and
-  the extension highlights the current syntax.
+- **Done when:** a non-trivial program can be written using only the stdlib, and
+  `ymir fmt` is idempotent over every file in the repository.
 
 ### Phase 7 — Quantum fragment
 
@@ -173,6 +171,52 @@ Structs, enums, `match`, arrays, maps, strings, tuples, closures, methods, error
 - Optional and explicitly **not** a prerequisite: a native AOT backend, gated on
   passing the identical conformance suite.
 
+### Phase 9 — Editor support and distribution  ← the last phase
+
+Deliberately last. Every item here is a wrapper around a language that must already be
+finished; doing any of it earlier means redoing it when the syntax moves.
+
+**The architectural decision that makes this cheap: do not write N editor plugins.**
+Write two things and let every editor consume them.
+
+1. **`ymir lsp`** — a Language Server Protocol server, a subcommand of the same binary.
+   It reuses `compiler/parser` and `compiler/check` directly, so diagnostics in the
+   editor are the *same* diagnostics the compiler emits, and can never drift from them.
+   Start with diagnostics, go-to-definition, hover types, and completion.
+2. **`tree-sitter-ymir`** — a grammar in its own repository, for syntax highlighting
+   and structural selection.
+
+With those two, editor support is thin glue:
+
+| Editor | What is actually needed |
+|---|---|
+| Neovim | `nvim-lspconfig` entry + `nvim-treesitter` parser registration. Both upstream PRs, no plugin of our own. |
+| Vim (8/legacy) | `ftdetect` + `syntax/ymir.vim`, hand-written regex highlighting. The only place a separate grammar is unavoidable. |
+| VS Code | Thin extension that launches `ymir lsp`. The existing TextMate grammar in `editor-support/vscode/` is retargeted; it predates this spec and is wrong today. |
+| Helix, Zed, Emacs (eglot) | Configuration only, given the LSP server and tree-sitter grammar. |
+
+**Distribution.** Go cross-compiles from one machine, which is most of why D4 chose it.
+
+- **GitHub Releases** — `ymir_<version>_<os>_<arch>.tar.gz` for
+  darwin/{amd64,arm64}, linux/{amd64,arm64}, windows/amd64, built in CI on tag, with
+  checksums. Everything below is a thin wrapper over these artifacts.
+- **curl installer** — `curl -fsSL https://ymir-lang.org/install.sh | sh`: detect
+  os/arch, download, verify the checksum, install to `~/.local/bin` or `/usr/local/bin`.
+  Must be readable in one screen and must fail loudly rather than half-installing.
+- **Homebrew** — replace the existing `bjornaer/homebrew-ymir` formula. The current one
+  is a Python virtualenv formula and does not survive the rewrite; the new one is a
+  binary formula, which is far simpler.
+- **Windows** — **Scoop** manifest and **WinGet** package, both of which are a JSON/YAML
+  file pointing at the release archive. Do **not** build an MSI; it is disproportionate
+  effort for a CLI, and neither manifest requires code signing to start. Confirm the
+  binary works under both PowerShell and Git Bash before publishing.
+- **`go install github.com/bjornaer/ymir/cmd/ymir@latest`** works for free and should be
+  documented as the zero-infrastructure path.
+
+**Done when:** on a clean macOS, Linux, and Windows machine, a user can install Ymir by
+a single command, run `ymir version`, open a `.ymr` file in Neovim and VS Code, and see
+type errors inline from `ymir lsp`.
+
 ## 6. Open questions
 
 Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
@@ -190,6 +234,7 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | Q8 | Immutability by default for locals (`let`/`mut`)? | Phase 2 | open |
 | Q10 | Should error-position nullability be written into the type? | Phase 2 | open |
 | Q11 | Should error sets be inferred? | Phase 2 | open, leaning explicit-first |
+| Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
 
 R1 and R2 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with
 the reasoning and the rejected alternatives. Do not reopen them without reading that.
@@ -264,3 +309,7 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   list does not mention. Either reserve them or document them as contextual.
 - **Next:** Phase 2, the type checker. Settle Q10 and Q11 early — both change the
   type representation.
+- Added Phase 9 (editor support and distribution) as the deliberate last phase, and
+  moved distribution out of Phase 6. The load-bearing decision recorded there: ship
+  one LSP server and one tree-sitter grammar rather than per-editor plugins, so
+  editor diagnostics are the compiler's own and cannot drift. Q12 filed from Phase 1.
