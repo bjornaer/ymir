@@ -483,8 +483,12 @@ func (c *checker) returnStmt(scope *Scope, x *ast.ReturnStmt) {
 			return
 		}
 	} else {
-		for _, r := range x.Results {
-			got = append(got, c.expr(scope, r))
+		for i, r := range x.Results {
+			var w types.Type
+			if i < len(want) {
+				w = want[i]
+			}
+			got = append(got, c.exprWant(scope, r, w))
 		}
 	}
 
@@ -597,8 +601,14 @@ func (c *checker) rhsValues(scope *Scope, s *ast.AssignStmt) []types.Type {
 				plural(len(s.Lhs), "name"), plural(len(values), "value"))
 		}
 	} else {
-		for _, r := range s.Rhs {
-			values = append(values, c.expr(scope, r))
+		for i, r := range s.Rhs {
+			// An `=` to a known location supplies the expected type, which is
+			// what lets `xs = []` and `m = {}` be written at all.
+			var want types.Type
+			if s.Tok == token.ASSIGN && i < len(s.Lhs) {
+				want = c.targetType(scope, s.Lhs[i])
+			}
+			values = append(values, c.exprWant(scope, r, want))
 		}
 		if len(s.Rhs) != len(s.Lhs) {
 			c.errorf(s.TokPos, "assignment mismatch: %s on the left, %s on the right",
@@ -612,12 +622,45 @@ func (c *checker) rhsValues(scope *Scope, s *ast.AssignStmt) []types.Type {
 	return values
 }
 
+// rootOf walks a selector chain down to the binding it starts from.
+func rootOf(e ast.Expr) ast.Expr {
+	for {
+		sel, ok := e.(*ast.SelectorExpr)
+		if !ok {
+			return e
+		}
+		e = sel.X
+	}
+}
+
+// targetType peeks at an assignment target's type without reporting, so the
+// right-hand side can be typed against it.
+func (c *checker) targetType(scope *Scope, l ast.Expr) types.Type {
+	id, ok := l.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+	o, _ := scope.LookupParent(id.Name)
+	if o == nil {
+		return nil
+	}
+	return o.Type
+}
+
 // assignTarget checks the left side of an `=`, which must be assignable to.
 func (c *checker) assignTarget(scope *Scope, l ast.Expr, value types.Type, s *ast.AssignStmt) {
 	target := c.expr(scope, l)
 
 	if s.Tok == token.ASSIGN {
 		c.assignableTo(l.Pos(), value, target, "an assignment")
+	}
+
+	if sel, ok := l.(*ast.SelectorExpr); ok {
+		// "Assignment to an index or field is legal where the base is
+		// mutable" (chapter 04). A struct has value semantics, so writing a
+		// field through a non-mut parameter writes to a copy. array and map
+		// have reference semantics, so indexing through one is fine.
+		c.requireMutable(rootOf(sel), "assign to "+sel.Sel.Name)
 	}
 
 	if id, ok := l.(*ast.Ident); ok {

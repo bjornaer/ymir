@@ -59,20 +59,28 @@ func (c *checker) call(scope *Scope, x *ast.CallExpr) []types.Type {
 		}
 	}
 
-	// An ordinary value that must be callable.
+	// An ordinary value that must be callable. The callee is typed first, so
+	// the arguments can be typed against its parameters.
 	fnType := c.expr(scope, x.Fun)
-	args := c.argTypes(scope, x)
-
 	if types.IsInvalid(fnType) {
+		c.argTypes(scope, x)
 		return []types.Type{types.Invalid}
 	}
 	sig, ok := fnType.(*types.Func)
 	if !ok {
+		c.argTypes(scope, x)
 		c.errorf(x.Fun.Pos(), "cannot call %s, which is not a function", fnType)
 		return []types.Type{types.Invalid}
 	}
+	args := c.argTypesWant(scope, x, sig.Params)
 	c.checkArgs(x, calleeName(x.Fun), sig.Params, args)
 	return sig.Results
+}
+
+// callWithParams types arguments against known parameter types and checks them.
+func (c *checker) callWithParams(scope *Scope, x *ast.CallExpr, name string, params []types.Type) {
+	args := c.argTypesWant(scope, x, params)
+	c.checkArgs(x, name, params, args)
 }
 
 // qualifiedCall handles `a.b(...)`: a module member, a qualified enum variant,
@@ -99,8 +107,7 @@ func (c *checker) qualifiedCall(scope *Scope, x *ast.CallExpr, sel *ast.Selector
 						c.argTypes(scope, x)
 						return []types.Type{types.Invalid}, true
 					}
-					args := c.argTypes(scope, x)
-					c.checkArgs(x, named.Name+"."+v.Name, v.Payload, args)
+					c.callWithParams(scope, x, named.Name+"."+v.Name, v.Payload)
 					return []types.Type{named}, true
 				}
 			}
@@ -119,8 +126,7 @@ func (c *checker) qualifiedCall(scope *Scope, x *ast.CallExpr, sel *ast.Selector
 		// path below handles.
 		return nil, false
 	}
-	args := c.argTypes(scope, x)
-	c.checkArgs(x, recv.String()+"."+sel.Sel.Name, m.sig.Params, args)
+	c.callWithParams(scope, x, recv.String()+"."+sel.Sel.Name, m.sig.Params)
 	if m.mutRecv {
 		c.requireMutable(sel.X, "call "+sel.Sel.Name+", which takes a mut receiver")
 	}
@@ -137,8 +143,7 @@ func (c *checker) variantCall(scope *Scope, x *ast.CallExpr, o *Object, name str
 	if v == nil {
 		return []types.Type{types.Invalid}
 	}
-	args := c.argTypes(scope, x)
-	c.checkArgs(x, named.Name+"."+name, v.Payload, args)
+	c.callWithParams(scope, x, named.Name+"."+name, v.Payload)
 	return []types.Type{named}
 }
 
@@ -240,9 +245,19 @@ func exprAsTypeNode(e ast.Expr) ast.Type {
 // argTypes types every argument, left to right, which is the normative
 // evaluation order (chapter 04 §Evaluation order).
 func (c *checker) argTypes(scope *Scope, x *ast.CallExpr) []types.Type {
+	return c.argTypesWant(scope, x, nil)
+}
+
+// argTypesWant types arguments against the parameter types, so a composite
+// literal argument can be typed from the parameter it fills.
+func (c *checker) argTypesWant(scope *Scope, x *ast.CallExpr, params []types.Type) []types.Type {
 	args := make([]types.Type, len(x.Args))
 	for i, a := range x.Args {
-		args[i] = c.expr(scope, a)
+		var want types.Type
+		if i < len(params) {
+			want = params[i]
+		}
+		args[i] = c.exprWant(scope, a, want)
 	}
 	return args
 }

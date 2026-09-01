@@ -78,6 +78,12 @@ var expected = map[string][]want{
 	"errors/error_set_not_superset": {{17, 15, []string{"?(IOError | ParseError)", "?IOError"}}},
 
 	// M6 — composite literals and indexing.
+	"types/array_is_homogeneous":             {{9, 15, []string{"same type", "float", "int"}}},
+	"types/empty_literal_needs_annotation":   {{9, 11, []string{"cannot infer the element type"}}},
+	"types/matrix_rows_must_match":           {{9, 44, []string{"same length"}}},
+	"decl/struct_literal_must_be_exhaustive": {{14, 22, []string{"Point literal is missing y"}}},
+	"expr/struct_literal_unknown_field":      {{14, 32, []string{"Point has no field z"}}},
+	"expr/tuple_index_out_of_range":          {{10, 13, []string{"no element 2"}}},
 	// M6 — nullables and narrowing.
 	// M7 — match exhaustiveness.
 	// M8 — error sets, try, unhandled errors.

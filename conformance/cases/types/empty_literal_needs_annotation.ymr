@@ -1,0 +1,11 @@
+#@ case types/empty_literal_needs_annotation
+#@ spec 02-types.md#type-inference
+#@ compile-error
+#@ | cannot infer
+
+module empty_literal_needs_annotation
+
+func main() {
+    ys := []
+    print(len(ys))
+}

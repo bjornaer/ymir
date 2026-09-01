@@ -18,8 +18,19 @@ import (
 // time; the conformance gate's "cases without a compile-error must check
 // clean" half is what stops a half-written rule from shipping.
 
+// expr types an expression with no expected type from context.
 func (c *checker) expr(scope *Scope, e ast.Expr) types.Type {
-	t := c.exprInternal(scope, e)
+	return c.exprWant(scope, e, nil)
+}
+
+// exprWant types an expression against an expected type.
+//
+// want is consulted only by composite literals, which chapter 04 says are typed
+// from context where it supplies one: "Where the context supplies an expected
+// type, that type wins." Everything else ignores it, because everything else has
+// a type of its own and assignability is checked at the site, not here.
+func (c *checker) exprWant(scope *Scope, e ast.Expr, want types.Type) types.Type {
+	t := c.exprInternal(scope, e, want)
 	if e != nil {
 		c.info.Types[e] = t
 	}
@@ -45,15 +56,16 @@ func (c *checker) multiExpr(scope *Scope, e ast.Expr) (values []types.Type, know
 	case *ast.TryExpr:
 		return c.tryResults(scope, x), true
 	case *ast.IndexExpr:
-		// `v, ok := m[k]` is the two-value map form (chapter 04 §Indexing).
-		// Whether this index is one of those depends on the base's type, which
-		// arrives with indexing in M6.
-		return []types.Type{c.expr(scope, e)}, false
+		// `v, ok := m[k]` is the two-value map form (chapter 04 §Indexing). It
+		// is the only index that yields two values.
+		rs := c.indexResults(scope, x)
+		c.info.Types[e] = rs[0]
+		return rs, true
 	}
 	return []types.Type{c.expr(scope, e)}, true
 }
 
-func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
+func (c *checker) exprInternal(scope *Scope, e ast.Expr, want types.Type) types.Type {
 	switch x := e.(type) {
 	case nil, *ast.BadExpr:
 		return types.Invalid
@@ -73,7 +85,7 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 		return types.Nil
 
 	case *ast.ParenExpr:
-		return c.expr(scope, x.X)
+		return c.exprWant(scope, x.X, want)
 
 	case *ast.UnaryExpr:
 		return c.unaryExpr(scope, x)
@@ -106,44 +118,27 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 		return firstOrInvalid(rs)
 
 	case *ast.IndexExpr:
-		c.expr(scope, x.X)
-		c.expr(scope, x.Index)
-		return types.Invalid // M5
+		return c.indexExpr(scope, x)
 
 	case *ast.SelectorExpr:
 		return c.selector(scope, x)
 
 	case *ast.TupleIndexExpr:
-		c.expr(scope, x.X)
-		return types.Invalid // M5
+		return c.tupleIndex(scope, x)
 
 	case *ast.ArrayLit:
-		for _, el := range x.Elements {
-			c.expr(scope, el)
-		}
-		return types.Invalid // M5
+		return c.arrayLit(scope, x, want)
 
 	case *ast.MapLit:
-		for _, kv := range x.Entries {
-			c.expr(scope, kv.Key)
-			c.expr(scope, kv.Value)
-		}
-		return types.Invalid // M5
+		return c.mapLit(scope, x, want)
 
 	case *ast.TupleLit:
-		for _, el := range x.Elements {
-			c.expr(scope, el)
-		}
-		return types.Invalid // M5
+		return c.tupleLit(scope, x, want)
 
 	case *ast.StructLit:
 		// The literal's head is a type, not an expression, and a field name is
 		// a field name — neither is a scope lookup.
-		c.resolveType(scope, x.Type)
-		for _, f := range x.Fields {
-			c.expr(scope, f.Value)
-		}
-		return types.Invalid // M5
+		return c.structLit(scope, x)
 
 	case *ast.FuncLit:
 		sig := c.litSignature(scope, x)
@@ -228,7 +223,21 @@ func (c *checker) ident(scope *Scope, id *ast.Ident) types.Type {
 
 	switch o.Kind {
 	case EnumVariant:
-		return types.Invalid // M5 types the construction
+		// A payload-free variant is a value. One with a payload must be
+		// constructed, and reaches here only when it was named without its
+		// arguments.
+		named, isNamed := o.Type.(*types.Named)
+		if !isNamed {
+			return types.Invalid
+		}
+		if v := named.LookupVariant(id.Name); v != nil && len(v.Payload) > 0 {
+			c.hint(id.Pos(),
+				named.Name+"."+v.Name+" carries "+plural(len(v.Payload), "value")+
+					", so it must be constructed",
+				"write "+v.Name+"(...)")
+			return types.Invalid
+		}
+		return named
 	case TypeName:
 		// A bare type name in value position is only meaningful as a
 		// conversion callee or a generic head, both of which are handled at

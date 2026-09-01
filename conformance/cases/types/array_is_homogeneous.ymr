@@ -1,0 +1,11 @@
+#@ case types/array_is_homogeneous
+#@ spec 04-expressions.md#composite-literals
+#@ compile-error
+#@ | same type
+
+module array_is_homogeneous
+
+func main() {
+    xs := [1, 2.0, 3]
+    print(len(xs))
+}

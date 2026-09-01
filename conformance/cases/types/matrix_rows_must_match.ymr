@@ -1,0 +1,11 @@
+#@ case types/matrix_rows_must_match
+#@ spec 02-types.md#matrixt
+#@ compile-error
+#@ | same length
+
+module matrix_rows_must_match
+
+func main() {
+    var grid: matrix[float] = [[1.0, 2.0], [3.0]]
+    print(1)
+}

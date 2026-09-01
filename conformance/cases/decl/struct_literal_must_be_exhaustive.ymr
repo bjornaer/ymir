@@ -1,0 +1,16 @@
+#@ case decl/struct_literal_must_be_exhaustive
+#@ spec 02-types.md#structs
+#@ compile-error
+#@ | missing
+
+module struct_literal_must_be_exhaustive
+
+struct Point {
+    x: float,
+    y: float,
+}
+
+func main() {
+    p := Point{x: 1.0}
+    print(p.x)
+}

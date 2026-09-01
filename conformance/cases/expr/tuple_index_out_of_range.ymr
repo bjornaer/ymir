@@ -1,0 +1,11 @@
+#@ case expr/tuple_index_out_of_range
+#@ spec 04-expressions.md#indexing-and-selection
+#@ compile-error
+#@ | no element 2
+
+module tuple_index_out_of_range
+
+func main() {
+    t := (1, "one")
+    print(t.2)
+}

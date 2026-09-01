@@ -1,0 +1,22 @@
+#@ case expr/map_two_value_form
+#@ spec 04-expressions.md#indexing-and-selection
+#@ exit 0
+#@ stdout
+#@ | 1
+#@ | missing
+
+module map_two_value_form
+
+func main() {
+    m := {"a": 1, "b": 2}
+    v, ok := m["a"]
+    if ok {
+        print(v)
+    }
+    w, found := m["z"]
+    if found {
+        print(w)
+    } else {
+        print("missing")
+    }
+}

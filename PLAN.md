@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 52 cases.
+conformance/          Executable form of the spec. run.py + 59 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -195,7 +195,7 @@ during this phase.
 - [x] **M4** — literals, operators, local inference, assignability, constant
       folding (2026-09-01)
 - [x] **M5** — calls, method sets, selection, return values (2026-09-01)
-- [ ] **M6** — composite literals and indexing
+- [x] **M6** — composite literals and indexing (2026-09-01)
 - [ ] **M7** — nullables and narrowing (N1–N6)
 - [ ] **M8** — `match` exhaustiveness over enums and unions
 - [ ] **M9** — error sets, `try`, unhandled errors
@@ -626,3 +626,32 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   milestone (M6), since calls alone was already a large change.
 - **Next:** M6, composite literals and indexing. That unblocks the two-value map
   form and lets the M5 tests stop annotating what they should be inferring.
+
+### 2026-09-01 — Phase 2 M6: composite literals and indexing
+
+- Composite literals are the one place Ymir types **bidirectionally**, because
+  chapter 04 says so: "Where the context supplies an expected type, that type
+  wins." `exprWant` threads an expected type from an annotated declaration, an
+  assignment, a call argument, a return, and a struct field. Nothing else
+  consults it — every other expression has a type of its own.
+- `[[1.0, 2.0], [3.0, 4.0]]` is a `matrix[float]` and `[[1, 2]]` is an
+  `array[array[int]]`, per the rectangular-and-float-or-complex rule.
+- Struct literals are exhaustive and by name, and the diagnostic lists the
+  missing fields.
+- Indexing: array by int, map by key (yielding two values in the destructuring
+  form, which is the safe accessor), string by int yielding a byte, `qreg` by
+  int yielding a qubit. Tuples use `t.0`, not brackets.
+- **Refused rather than guessed:** chapter 02 specifies matrix *arithmetic* and
+  never specifies indexing a matrix. `a[0]` on one reports that it is not
+  defined in v1 rather than inventing a shape. Recorded here as a spec gap to
+  close before a stdlib needs it.
+- Assignment to a struct field requires a mutable base, since a struct has value
+  semantics and a non-`mut` parameter is a copy. Indexing an array or map does
+  not, because those are references.
+- Bare payload-free enum variants are now values with the enum's type, which
+  M5 had left as unknown. Found by a map literal keyed on one.
+- **27 conformance cases green**, 6 pending — all six are `match`, `try`, and
+  unhandled errors. 7 new cases, 59 total.
+- **Next:** M7, nullables and narrowing. `types/nullable_needs_narrowing`
+  already reports at the right place; it needs N4's message rather than the
+  generic mismatched-types one.

@@ -1,0 +1,16 @@
+#@ case expr/struct_literal_unknown_field
+#@ spec 02-types.md#structs
+#@ compile-error
+#@ | no field z
+
+module struct_literal_unknown_field
+
+struct Point {
+    x: float,
+    y: float,
+}
+
+func main() {
+    p := Point{x: 1.0, y: 2.0, z: 3.0}
+    print(p.x)
+}

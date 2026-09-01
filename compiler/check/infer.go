@@ -63,7 +63,7 @@ func (c *checker) varType(scope *Scope, x *ast.VarDecl) types.Type {
 		return declared
 	}
 
-	value := c.expr(scope, x.Value)
+	value := c.exprWant(scope, x.Value, declared)
 
 	if declared == nil {
 		return c.inferred(x.Name.Pos(), value, x.Name.Name)
@@ -122,12 +122,11 @@ func (c *checker) constDeclBody(scope *Scope, x *ast.ConstDecl) {
 	if x.Value == nil {
 		return
 	}
-	value := c.expr(scope, x.Value)
-
 	declared := types.Type(types.Invalid)
 	if o != nil {
 		declared = o.Type
 	}
+	value := c.exprWant(scope, x.Value, declared)
 	c.assignableTo(x.Value.Pos(), value, declared, "the declaration of "+x.Name.Name)
 
 	v, ok := c.constOf(x.Value)
@@ -155,7 +154,11 @@ func (c *checker) varDeclBody(scope *Scope, x *ast.VarDecl, o *Object) {
 		}
 		return
 	}
-	value := c.expr(scope, x.Value)
+	var declared types.Type
+	if o != nil && x.Type != nil {
+		declared = o.Type
+	}
+	value := c.exprWant(scope, x.Value, declared)
 	if o == nil {
 		return
 	}
