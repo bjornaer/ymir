@@ -142,6 +142,9 @@ func Walk(v Visitor, n Node) {
 
 	case *GenericType:
 		Walk(v, x.Name)
+		if x.Width != nil { // qreg[N] only
+			Walk(v, x.Width)
+		}
 		for _, a := range x.Args {
 			Walk(v, a)
 		}

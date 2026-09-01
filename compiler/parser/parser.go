@@ -468,6 +468,14 @@ func (p *parser) parseBaseType() ast.Type {
 		if len(name.Parts) == 1 && p.at(token.LBRACK) {
 			p.next()
 			g := &ast.GenericType{Name: name.Parts[0]}
+			// qreg[N] is parameterized by a compile-time integer constant
+			// rather than a type (grammar 09 §Types). It is the only one.
+			if g.Name.Name == "qreg" && p.at(token.INT) {
+				t := p.next()
+				g.Width = ast.NewBasicLit(t.Pos, token.INT, t.Lit, len(t.Lit))
+				g.Rbrack = p.expect(token.RBRACK, "after the register width").Pos
+				return g
+			}
 			for !p.at(token.RBRACK) && !p.at(token.EOF) {
 				g.Args = append(g.Args, p.parseType())
 				if !p.accept(token.COMMA) {

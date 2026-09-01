@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 29 cases.
+conformance/          Executable form of the spec. run.py + 30 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -516,3 +516,18 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   report. Today: 16 pending, 13 checking clean.
 - **Next:** M3, scope resolution. `decl/undefined_variable` and
   `scope/block_scope` are the two cases it turns green.
+
+### 2026-09-01 — Parser fix: `qreg[N]` did not parse
+
+- Found while writing M3's type resolution. Grammar 09 §Types specifies
+  `"qreg" "[" IntLit "]"`, but `parseBaseType` only ever accepted *types* as
+  arguments, so `var r: qreg[4]` produced three cascading syntax errors.
+- Nothing caught it because **no conformance case used `qreg`** — the Phase 1
+  gate only asserts that existing cases parse, and standing rule 2 is exactly
+  about this: a rule with no case is not a rule.
+- `ast.GenericType` gained `Width *BasicLit`, set only for `qreg`. It is not a
+  type argument and does not belong in `Args`. Printer, walker and parser
+  updated together.
+- Added `quantum/qreg_register.ymr`, skipped like the other quantum cases but
+  still subject to the parse gate, which is what would have caught this. 30
+  cases.

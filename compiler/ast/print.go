@@ -358,6 +358,9 @@ func typeStr(t Type) string {
 	case *NamedType:
 		return x.Name.String()
 	case *GenericType:
+		if x.Width != nil {
+			return x.Name.Name + "[" + x.Width.Value + "]"
+		}
 		parts := make([]string, len(x.Args))
 		for i, a := range x.Args {
 			parts[i] = typeStr(a)

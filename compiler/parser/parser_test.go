@@ -396,6 +396,37 @@ func TestDiagnosticsHavePositionAndExcerpt(t *testing.T) {
 
 // `?T` is a general type former, not a rule about position (spec 02 §Nullable
 // types). It may appear on results, parameters, and collection elements alike.
+// qreg[N] is the one parameterized type whose argument is a compile-time integer
+// rather than a type (grammar 09 §Types). It did not parse until Phase 2 M3
+// found it: no conformance case used qreg, so nothing caught the gap.
+func TestQregWidth(t *testing.T) {
+	f := parseOK(t, wrap("    var r: qreg[4]"))
+	v := f.Decls[0].(*ast.FuncDecl).Body.Stmts[0].(*ast.VarDecl)
+	g, ok := v.Type.(*ast.GenericType)
+	if !ok {
+		t.Fatalf("qreg[4] is a %T, want *ast.GenericType", v.Type)
+	}
+	if g.Width == nil {
+		t.Fatal("qreg[4] parsed with no Width; the integer argument was dropped")
+	}
+	if g.Width.Value != "4" {
+		t.Errorf("Width = %q, want %q", g.Width.Value, "4")
+	}
+	if len(g.Args) != 0 {
+		t.Errorf("Args = %d, want 0: a width is not a type argument", len(g.Args))
+	}
+	// The width must survive rendering, or `ymir parse` shows a type that is
+	// not the one in the source.
+	if got := ast.Sprint(v); !strings.Contains(got, "qreg[4]") {
+		t.Errorf("printed as %q, want it to contain %q", got, "qreg[4]")
+	}
+}
+
+// Only qreg takes an integer. Everything else still requires a type.
+func TestIntegerArgumentIsOnlyForQreg(t *testing.T) {
+	parseErr(t, wrap("    var xs: array[4]"), "expected a type")
+}
+
 func TestNullableTypes(t *testing.T) {
 	f := parseOK(t, `module m
 

@@ -271,6 +271,10 @@ type GenericType struct {
 	Name   *Ident
 	Args   []Type
 	Rbrack token.Position
+
+	// Width is set only for qreg[N], whose argument is a compile-time integer
+	// constant rather than a type (grammar 09 §Types). Args is empty then.
+	Width *BasicLit
 }
 
 func (t *GenericType) Pos() token.Position { return t.Name.Pos() }

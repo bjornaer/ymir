@@ -1,0 +1,17 @@
+#@ case quantum/qreg_register
+#@ spec 08-quantum.md#registers
+#@ skip quantum fragment unimplemented (PLAN.md phase 7)
+#@ exit 0
+#@ stdout-contains
+#@ | 3
+
+module qreg_register
+
+func main() {
+    var width: qreg[3] = qreg[3]()
+    h(width[0])
+    cnot(width[0], width[1])
+    cnot(width[1], width[2])
+    results := measure_all(width)
+    print(len(results))
+}
