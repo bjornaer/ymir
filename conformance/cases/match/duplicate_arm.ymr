@@ -1,0 +1,23 @@
+#@ case match/duplicate_arm
+#@ spec 05-statements.md#exhaustiveness
+#@ compile-error
+#@ | duplicate arm
+
+module duplicate_arm
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func area(s: Shape) -> float {
+    match s {
+        Circle(r) => return 3.14159 * r * r,
+        Circle(q) => return q,
+        Point     => return 0.0,
+    }
+}
+
+func main() {
+    print(area(Point))
+}

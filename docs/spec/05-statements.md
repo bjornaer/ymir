@@ -168,6 +168,11 @@ adding a variant to an enum breaks every `match` on it, which is the intent.
 A `_` arm satisfies exhaustiveness but **SHOULD** be avoided on enums you own,
 precisely because it defeats that.
 
+Arms are a *set*, so each of these is a compile error: two arms for the same variant,
+two `_` arms, and two `nil` arms. A `match` has at most one of each. *(Previously
+unstated. Nothing sensible relies on a duplicate arm, and the second one is
+unreachable.)*
+
 Every arm **MUST** produce the same set of live linear bindings (rule L4, chapter 02).
 
 ## `return`

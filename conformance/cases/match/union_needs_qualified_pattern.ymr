@@ -1,0 +1,20 @@
+#@ case match/union_needs_qualified_pattern
+#@ spec 06-errors.md#qualified-patterns
+#@ compile-error
+#@ | must name its enum
+
+module union_needs_qualified_pattern
+
+enum IOError    { NotFound(string), }
+enum ParseError { UnexpectedEOF, }
+
+func report(e: IOError | ParseError) {
+    match e {
+        NotFound(p)   => print(p),
+        UnexpectedEOF => print("eof"),
+    }
+}
+
+func main() {
+    report(IOError.NotFound("x"))
+}

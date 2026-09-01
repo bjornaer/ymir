@@ -1,0 +1,22 @@
+#@ case match/pattern_arity
+#@ spec 05-statements.md#patterns
+#@ compile-error
+#@ | binds 2
+
+module pattern_arity
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func area(s: Shape) -> float {
+    match s {
+        Circle(r, extra) => return r,
+        Point            => return 0.0,
+    }
+}
+
+func main() {
+    print(area(Point))
+}

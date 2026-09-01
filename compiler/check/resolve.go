@@ -706,18 +706,3 @@ func (c *checker) declareLocal(scope *Scope, id *ast.Ident, t types.Type) {
 	c.declare(scope, o)
 	c.info.Defs[id] = o
 }
-
-// matchStmt resolves a match. Exhaustiveness is M7; this binds the patterns.
-func (c *checker) matchStmt(scope *Scope, m *ast.MatchStmt) {
-	c.expr(scope, m.X)
-	for _, arm := range m.Arms {
-		// "Bindings introduced by a pattern are scoped to that arm."
-		inner := NewScope(scope, BlockScope)
-		for _, b := range arm.Pattern.Binds {
-			if b != nil {
-				c.declareLocal(inner, b, types.Invalid)
-			}
-		}
-		c.stmt(inner, arm.Body)
-	}
-}

@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 62 cases.
+conformance/          Executable form of the spec. run.py + 67 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -197,7 +197,7 @@ during this phase.
 - [x] **M5** — calls, method sets, selection, return values (2026-09-01)
 - [x] **M6** — composite literals and indexing (2026-09-01)
 - [x] **M7** — nullables and narrowing (N1–N6) (2026-09-01)
-- [ ] **M8** — `match` exhaustiveness over enums and unions
+- [x] **M8** — `match` exhaustiveness over enums and unions (2026-09-01)
 - [ ] **M9** — error sets, `try`, unhandled errors
 - [ ] **M10** — returns on every path, `main`'s signature
 - [ ] **M11** — linearity L1–L6, CI `ymir check -q` gate, phase close
@@ -679,3 +679,28 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - **30 conformance cases green**, 5 pending. All five are `match`, `try`, and
   unhandled errors. 3 new cases, 62 total.
 - **Next:** M8, `match` exhaustiveness over enums and unions.
+
+### 2026-09-01 — Phase 2 M8: `match` exhaustiveness
+
+- Exhaustiveness over a single enum and over a union, computed as every variant
+  of every member plus the `nil` case when the scrutinee is an un-narrowed `?T`.
+  **The error names the missing variants**, which is normative and is the whole
+  mechanism: adding a variant breaks every `match` on it.
+- Qualification required on a union, optional on a single enum. The qualifier
+  must be a *member of the scrutinee*, not merely an enum in scope.
+- Pattern bindings carry the payload's real type, so `Circle(r) => print(r + 1)`
+  on `Circle(float)` reports a `float`/`int` mismatch rather than staying silent.
+- A `nil` arm is required on an un-narrowed `?E` and forbidden on a narrowed one,
+  which is what makes `if err != nil { match err { ... } }` read naturally.
+- `errors/match_union_exhaustive` trips two rules at once — a missing variant and
+  a missing `nil` arm — and both are reported. A nil-only diagnostic would fail
+  the case, which asserts `UnexpectedEOF`.
+- **Cascade suppressed:** when a pattern fails to resolve, coverage cannot be
+  computed, so the exhaustiveness check is skipped rather than adding a second
+  misleading error on top of the first.
+- **Spec addition:** chapter 05 §Exhaustiveness now says arms are a set — two
+  arms for one variant, two `_` arms, or two `nil` arms are each an error. It was
+  unstated, and the second arm is unreachable.
+- **35 conformance cases green, 2 pending.** 5 new cases, 67 total.
+- **Next:** M9, error sets and `try`. `errors/try_requires_superset` and
+  `errors/unhandled_is_compile_error` are the last two.

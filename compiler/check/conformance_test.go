@@ -91,7 +91,22 @@ var expected = map[string][]want{
 	"expr/tuple_index_out_of_range":          {{10, 13, []string{"no element 2"}}},
 	// M6 — nullables and narrowing.
 	// M7 — match exhaustiveness.
-	// M8 — error sets, try, unhandled errors.
+	// M8 — match exhaustiveness.
+	"match/exhaustiveness":              {{15, 5, []string{"not exhaustive", "Point"}}},
+	"match/duplicate_arm":               {{16, 9, []string{"duplicate arm", "Shape.Circle"}}},
+	"match/pattern_arity":               {{15, 9, []string{"Circle carries 1 value", "binds 2"}}},
+	"match/nil_arm_needs_a_nullable":    {{15, 9, []string{"Shape is never nil"}}},
+	"errors/match_unnarrowed_needs_nil": {{16, 5, []string{"?IOError", "exactly one nil arm"}}},
+	"errors/match_union_exhaustive": {
+		{12, 5, []string{"not exhaustive", "ParseError.UnexpectedEOF"}},
+		{12, 5, []string{"exactly one nil arm"}},
+	},
+	"match/union_needs_qualified_pattern": {
+		{13, 9, []string{"must name its enum", "IOError.NotFound"}},
+		{14, 9, []string{"must name its enum", "ParseError.UnexpectedEOF"}},
+	},
+
+	// M9 — error sets, try, unhandled errors.
 	// M9 — returns on every path.
 }
 

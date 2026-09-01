@@ -1,0 +1,24 @@
+#@ case match/wildcard_satisfies_exhaustiveness
+#@ spec 05-statements.md#exhaustiveness
+#@ exit 0
+#@ stdout
+#@ | other
+
+module wildcard_satisfies_exhaustiveness
+
+enum Shape {
+    Circle(float),
+    Rect(float, float),
+    Point,
+}
+
+func describe(s: Shape) -> string {
+    match s {
+        Circle(r) => return "circle",
+        _         => return "other",
+    }
+}
+
+func main() {
+    print(describe(Point))
+}

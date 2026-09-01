@@ -1,0 +1,23 @@
+#@ case match/nil_arm_needs_a_nullable
+#@ spec 05-statements.md#matching-a-union
+#@ compile-error
+#@ | never nil
+
+module nil_arm_needs_a_nullable
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func area(s: Shape) -> float {
+    match s {
+        nil       => return 0.0,
+        Circle(r) => return r,
+        Point     => return 0.0,
+    }
+}
+
+func main() {
+    print(area(Point))
+}
