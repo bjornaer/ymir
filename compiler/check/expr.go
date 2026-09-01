@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/bjornaer/ymir/compiler/ast"
+	"github.com/bjornaer/ymir/compiler/token"
 	"github.com/bjornaer/ymir/compiler/types"
 )
 
@@ -25,6 +26,29 @@ func (c *checker) expr(scope *Scope, e ast.Expr) types.Type {
 	return t
 }
 
+// multiExpr returns every value an expression produces.
+//
+// Only a call can produce more or fewer than one, and chapter 04 permits a
+// multi-valued one only as the entire right side of a destructuring assignment
+// or a return — which is exactly where this is used.
+//
+// known is false when the count is not yet computable, which today means a call
+// or a try: their result lists arrive with call typing in M5 and with `try` in
+// M8. Callers must not report an arity mismatch while it is false, or every
+// `a, b := f()` in the suite becomes a false positive.
+func (c *checker) multiExpr(scope *Scope, e ast.Expr) (values []types.Type, known bool) {
+	switch e.(type) {
+	case *ast.CallExpr, *ast.TryExpr:
+		return []types.Type{c.expr(scope, e)}, false
+	case *ast.IndexExpr:
+		// `v, ok := m[k]` is the two-value map form (chapter 04 §Indexing).
+		// Whether this index is one of those depends on the base's type, which
+		// arrives with indexing in M5.
+		return []types.Type{c.expr(scope, e)}, false
+	}
+	return []types.Type{c.expr(scope, e)}, true
+}
+
 func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 	switch x := e.(type) {
 	case nil, *ast.BadExpr:
@@ -33,20 +57,25 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 	case *ast.Ident:
 		return c.ident(scope, x)
 
-	case *ast.BasicLit, *ast.BoolLit, *ast.NilLit:
-		return types.Invalid // M5
+	case *ast.BasicLit:
+		return c.basicLit(x)
+
+	case *ast.BoolLit:
+		return types.Bool
+
+	case *ast.NilLit:
+		// nil has its own type, which belongs to every ?T and to nothing else
+		// (rule N3). Assignability, not identity, is what accepts it.
+		return types.Nil
 
 	case *ast.ParenExpr:
 		return c.expr(scope, x.X)
 
 	case *ast.UnaryExpr:
-		c.expr(scope, x.X)
-		return types.Invalid // M5
+		return c.unaryExpr(scope, x)
 
 	case *ast.BinaryExpr:
-		c.expr(scope, x.X)
-		c.expr(scope, x.Y)
-		return types.Invalid // M5
+		return c.binaryExpr(scope, x)
 
 	case *ast.CallExpr:
 		c.callee(scope, x.Fun)
@@ -106,6 +135,25 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 	}
 
 	c.errorf(e.Pos(), "internal: unchecked expression %T", e)
+	return types.Invalid
+}
+
+// basicLit types a literal. The lexer has already decoded string escapes and
+// classified the kind, so this is a mapping and nothing more.
+func (c *checker) basicLit(x *ast.BasicLit) types.Type {
+	switch x.Kind {
+	case token.INT:
+		// Fold it, so a literal too large for int64 is reported here rather
+		// than silently wrapping (R5).
+		c.constOf(x)
+		return types.Int
+	case token.FLOAT:
+		return types.Float
+	case token.IMAG:
+		return types.Complex
+	case token.STRING:
+		return types.String
+	}
 	return types.Invalid
 }
 

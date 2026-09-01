@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 42 cases.
+conformance/          Executable form of the spec. run.py + 47 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -192,8 +192,9 @@ during this phase.
 - [x] **M2** — `ast.Walk`, `compiler/check` skeleton, `ymir check`, and the
       `TestConformanceCasesCheck` gate with its expected-position table (2026-09-01)
 - [x] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing) (2026-09-01)
-- [ ] **M4** — local inference (`:=` and `var x := e`) and assignability at every site
-- [ ] **M5** — expression typing, calls, composite literals, constant folding
+- [x] **M4** — literals, operators, local inference, assignability, constant
+      folding (2026-09-01)
+- [ ] **M5** — calls, composite literals, indexing, selection, methods
 - [ ] **M6** — nullables and narrowing (N1–N6)
 - [ ] **M7** — `match` exhaustiveness over enums and unions
 - [ ] **M8** — error sets, `try`, unhandled errors
@@ -321,6 +322,7 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R3 | Should error-position nullability be written into the type? | — | **resolved: `?T`, general** |
 | R4 | Should error sets be inferred? | — | **resolved: explicit for now** |
 | Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
+| Q13 | How is a `complex` value written? `0.0 + 0.0i` does not typecheck | Phase 3 | open, found in Phase 2 |
 
 R1–R6 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
 reasoning and the rejected alternatives. Do not reopen them without reading that.
@@ -562,3 +564,35 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - 12 new conformance cases, 42 total, up from 30. Roughly half the doubling the
   Phase 2 brief asks for.
 - **Next:** M4, local inference and assignability at every site.
+
+### 2026-09-01 — Phase 2 M4: operators, inference, assignability, constant folding
+
+- Milestones M4 and M5 swapped from the original plan. Inference cannot come
+  before expression typing — `x := 1` needs the type of `1` — so M4 is now
+  literals, operators, inference and assignability, and M5 is calls, composite
+  literals, indexing and selection.
+- The operand table of chapter 04, in full: identical operands with no promotion,
+  `%` on `int` only, `complex` unordered, `==` on any unrestricted type, and
+  linear values not comparable at all.
+- Local inference for `:=` and `var x := e`, the only two things chapter 02
+  infers. `v := nil` is an error, because nil belongs to every `?T` and so
+  determines none of them.
+- Assignability applied at annotated declarations, at `=`, and at `const`.
+- **Constant folding**, memoized per node because it reports: R5's overflow and
+  chapter 04's constant division by zero are compile errors, and running the fold
+  twice reported them twice. `const A: int = 2` then `const B: int = A * 3`
+  folds through the named constant.
+- `if`/`while`/`for` conditions must be `bool` — no truthiness.
+- **16 conformance cases green**, 7 pending. `examples/tour.ymr` is now held to
+  the same bar as a clean case, and caught the one false positive this milestone
+  produced: `v, ok := m["a"]` is the two-value map form, not an arity mismatch.
+- **New open question Q13.** Chapter 02 gives `complex` the zero value
+  `0.0 + 0.0i` and chapter 04 requires both operands of `+` to have identical
+  types, so that expression is `float + complex` and does not typecheck. Complex
+  values are currently unwritable except as a bare imaginary literal, and
+  `complex` has no writable zero value at all. Filed rather than resolved: the
+  fix is a language decision (a two-argument `complex(re, im)`, a single lexical
+  form for `1.0+2.0i`, or the language's first implicit conversion).
+- 5 new cases, 47 total, up from 42.
+- **Next:** M5, calls and composite literals. That is what unblocks the two-value
+  map form, multi-valued call arity, and most of what remains.

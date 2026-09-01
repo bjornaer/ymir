@@ -1,0 +1,14 @@
+#@ case types/complex_not_ordered
+#@ spec 04-expressions.md#operand-typing
+#@ compile-error
+#@ | not ordered
+
+module complex_not_ordered
+
+func main() {
+    a := 1.0i
+    b := 2.0i
+    if a < b {
+        print("smaller")
+    }
+}

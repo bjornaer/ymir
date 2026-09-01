@@ -291,6 +291,20 @@ making those types non-sendable so sharing is impossible. **Blocks Phase 5.**
 `main` returning does not wait for spawned tasks. Go's choice here is widely regarded as
 its worst concurrency decision.
 
+### Q13 — How is a `complex` value written?
+
+`2.0i` lexes as a single imaginary literal of type `complex`, but this chapter and
+chapter 02 both write a complex value as `0.0 + 0.0i` — which is `float + complex`, and
+chapter 04's rule that both operands of a binary operator have identical types makes
+that a type error. As written, the only expressible complex values are bare imaginary
+literals, and `complex` has no writable zero value at all.
+
+Options: a two-argument `complex(re, im)` constructor alongside the existing one-argument
+conversion; a single lexical form for `1.0+2.0i`; or admitting `float` on one side of a
+`complex` operator, which would be the language's first implicit conversion and is the
+reason to prefer either of the others. Found while implementing the operand table in
+Phase 2. **Blocks nothing before Phase 3**, since nothing evaluates a complex value yet.
+
 ### Q12 — Are `as` and `default` reserved words or contextual identifiers?
 
 `as` (import alias) and `default` (a `select` case) are parsed as contextual identifiers,

@@ -146,6 +146,16 @@ type checker struct {
 	sigs  map[*ast.FuncDecl]*types.Func
 	recvs map[*ast.FuncDecl]types.Type
 
+	// constVals holds the folded value of every `const` whose initializer is a
+	// constant expression, so a later constant expression naming it can fold
+	// too (chapter 04 §Constant expressions).
+	constVals map[*Object]constVal
+
+	// folds memoizes constant folding per expression node. Folding reports
+	// overflow and division by zero, so running it twice on the same node
+	// would report them twice.
+	folds map[ast.Expr]foldResult
+
 	// variants indexes this module's enum variants by their bare name, so
 	// `Circle(1.0)` resolves without writing `Shape.Circle(1.0)`. A name
 	// carried by two enums is ambiguous and must be qualified.
@@ -163,11 +173,13 @@ type checker struct {
 // parser first and stop if it reported anything.
 func Check(file *ast.File, name, src string) (*Info, *diag.List) {
 	c := &checker{
-		info:     newInfo(),
-		errs:     diag.NewList(name, src),
-		sigs:     map[*ast.FuncDecl]*types.Func{},
-		recvs:    map[*ast.FuncDecl]types.Type{},
-		variants: map[string][]*Object{},
+		info:      newInfo(),
+		errs:      diag.NewList(name, src),
+		sigs:      map[*ast.FuncDecl]*types.Func{},
+		recvs:     map[*ast.FuncDecl]types.Type{},
+		variants:  map[string][]*Object{},
+		constVals: map[*Object]constVal{},
+		folds:     map[ast.Expr]foldResult{},
 	}
 	c.checkFile(file)
 	c.errs.Sort()

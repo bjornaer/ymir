@@ -1,0 +1,12 @@
+#@ case types/modulo_only_on_int
+#@ spec 04-expressions.md#operand-typing
+#@ compile-error
+#@ | only on int
+
+module modulo_only_on_int
+
+func main() {
+    x := 7.0
+    y := 2.0
+    print(x % y)
+}

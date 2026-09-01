@@ -58,8 +58,19 @@ var expected = map[string][]want{
 	"types/matrix_element_must_be_float": {{9, 22, []string{"float or complex", "int"}}},
 	"types/undefined_type":               {{13, 19, []string{"undefined type", "Poitn"}}},
 
-	// M4 — inference and assignability.
-	// M5 — expression typing.
+	// M4 — literals, operators, inference, assignability, constant folding.
+	"types/no_implicit_conversion":  {{11, 13, []string{"mismatched types", "int", "float"}}},
+	"types/nil_not_on_plain_type":   {{10, 10, []string{"int is never nil"}}},
+	"types/const_overflow_is_error": {{8, 38, []string{"overflows int"}}},
+	"decl/no_zero_value_needs_init": {{14, 9, []string{"Shape has no zero value"}}},
+	"types/chan_has_no_zero_value":  {{9, 9, []string{"chan[int] has no zero value"}}},
+	"types/const_division_by_zero":  {{8, 23, []string{"division by zero"}}},
+	"types/no_truthiness":           {{10, 8, []string{"if condition is int", "want bool"}}},
+	"types/complex_not_ordered":     {{11, 10, []string{"complex is not ordered"}}},
+	"types/modulo_only_on_int":      {{11, 13, []string{"only on int", "float"}}},
+	"decl/cannot_infer_from_nil":    {{9, 5, []string{"cannot infer a type", "nil"}}},
+
+	// M5 — calls, composite literals, indexing, selection.
 	// M6 — nullables and narrowing.
 	// M7 — match exhaustiveness.
 	// M8 — error sets, try, unhandled errors.
@@ -163,6 +174,24 @@ func TestConformanceCasesCheck(t *testing.T) {
 	if len(pending) > 0 {
 		t.Logf("%d compile-error cases not yet implemented: %s",
 			len(pending), strings.Join(pending, ", "))
+	}
+}
+
+// TestTourChecks holds examples/tour.ymr to the same bar as a clean conformance
+// case. It exercises the whole grammar in one file, so it is the broadest single
+// check that a new rule has not become a false positive.
+func TestTourChecks(t *testing.T) {
+	path := filepath.Join("..", "..", "examples", "tour.ymr")
+	src, err := os.ReadFile(path)
+	if err != nil {
+		t.Skipf("tour not present: %v", err)
+	}
+	file, errs := parser.ParseFile("examples/tour.ymr", string(src))
+	if !errs.Empty() {
+		t.Fatalf("tour does not parse:\n%s", errs.Render())
+	}
+	if _, errs = check.Check(file, "examples/tour.ymr", string(src)); !errs.Empty() {
+		t.Fatalf("tour must check clean, but the checker reported:\n%s", errs.Render())
 	}
 }
 

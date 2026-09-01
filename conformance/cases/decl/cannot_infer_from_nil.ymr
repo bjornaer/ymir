@@ -1,0 +1,11 @@
+#@ case decl/cannot_infer_from_nil
+#@ spec 02-types.md#type-inference
+#@ compile-error
+#@ | infer
+
+module cannot_infer_from_nil
+
+func main() {
+    v := nil
+    print(1)
+}

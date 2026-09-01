@@ -1,0 +1,12 @@
+#@ case types/const_division_by_zero
+#@ spec 04-expressions.md#constant-expressions
+#@ compile-error
+#@ | division by zero
+
+module const_division_by_zero
+
+const RATIO: int = 10 / 0
+
+func main() {
+    print(RATIO)
+}

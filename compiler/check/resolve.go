@@ -277,28 +277,29 @@ func (c *checker) namedFor(id *ast.Ident) *types.Named {
 // Bodies
 
 func (c *checker) checkBodies(fileScope *Scope, file *ast.File) {
+	// Module-level initializers first. A `const` or a `var` with no annotation
+	// only learns its type here, and a function body checked before that would
+	// see it as unknown.
 	for _, d := range file.Decls {
 		switch x := d.(type) {
-		case *ast.FuncDecl:
-			sig := c.sigs[x]
-			var params []types.Type
-			if sig != nil {
-				params = sig.Params
-			}
-			c.funcBody(fileScope, x.Recv, c.recvs[x], x.Params, params, x.Body)
-
 		case *ast.ConstDecl:
-			if x.Value != nil {
-				c.expr(fileScope, x.Value)
-			}
-
+			c.constDeclBody(fileScope, x)
 		case *ast.VarDecl:
-			// A module-level var's initializer is checked in module scope, so
-			// it can reference other module declarations.
-			if x.Value != nil {
-				c.expr(fileScope, x.Value)
-			}
+			c.varDeclBody(fileScope, x, c.info.Defs[x.Name])
 		}
+	}
+
+	for _, d := range file.Decls {
+		x, isFunc := d.(*ast.FuncDecl)
+		if !isFunc {
+			continue
+		}
+		sig := c.sigs[x]
+		var params []types.Type
+		if sig != nil {
+			params = sig.Params
+		}
+		c.funcBody(fileScope, x.Recv, c.recvs[x], x.Params, params, x.Body)
 	}
 }
 
@@ -358,15 +359,9 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 		c.expr(scope, x.X)
 
 	case *ast.VarDecl:
-		// The initializer is checked before the name is bound, so
-		// `x := x` refers to an outer x rather than to itself.
-		if x.Value != nil {
-			c.expr(scope, x.Value)
-		}
-		var t types.Type = types.Invalid
-		if x.Type != nil {
-			t = c.resolveType(scope, x.Type)
-		}
+		// The initializer is checked before the name is bound, so `var x := x`
+		// refers to an outer x rather than to itself.
+		t := c.varType(scope, x)
 		c.declareLocal(scope, x.Name, t)
 
 	case *ast.AssignStmt:
@@ -376,14 +371,14 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 		c.expr(scope, x.X)
 
 	case *ast.IfStmt:
-		c.expr(scope, x.Cond)
+		c.condition(scope, x.Cond, "if")
 		c.block(scope, x.Then)
 		if x.Else != nil {
 			c.stmt(scope, x.Else)
 		}
 
 	case *ast.WhileStmt:
-		c.expr(scope, x.Cond)
+		c.condition(scope, x.Cond, "while")
 		c.loopBody(scope, x.Body)
 
 	case *ast.RangeStmt:
@@ -402,7 +397,7 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 			c.stmt(inner, x.Init)
 		}
 		if x.Cond != nil {
-			c.expr(inner, x.Cond)
+			c.condition(inner, x.Cond, "for")
 		}
 		if x.Post != nil {
 			c.stmt(inner, x.Post)
@@ -449,6 +444,20 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 	}
 }
 
+// condition checks a control-flow condition.
+//
+// "The condition MUST be bool. There is no truthiness: `if x` where `x: int` is
+// a type error." (chapter 05 §if)
+func (c *checker) condition(scope *Scope, e ast.Expr, keyword string) {
+	t := c.expr(scope, e)
+	if types.IsInvalid(t) || types.Identical(t, types.Bool) {
+		return
+	}
+	c.hint(e.Pos(),
+		"the "+keyword+" condition is "+t.String()+", want bool",
+		"there is no truthiness; compare explicitly, as in x != 0")
+}
+
 func (c *checker) loopBody(scope *Scope, b *ast.BlockStmt) {
 	c.loopDepth++
 	c.block(scope, b)
@@ -457,18 +466,16 @@ func (c *checker) loopBody(scope *Scope, b *ast.BlockStmt) {
 
 // assign handles `=`, the compound forms, and `:=`.
 func (c *checker) assign(scope *Scope, s *ast.AssignStmt) {
-	for _, r := range s.Rhs {
-		c.expr(scope, r)
-	}
+	values := c.rhsValues(scope, s)
 
 	if s.Tok != token.DEFINE {
 		// `=` and `op=` assign to something that already exists.
-		for _, l := range s.Lhs {
+		for i, l := range s.Lhs {
 			if id, ok := l.(*ast.Ident); ok && id.Name == "_" {
 				// `_ = f()` is the deliberate discard of chapter 06.
 				continue
 			}
-			c.assignTarget(scope, l)
+			c.assignTarget(scope, l, values[i], s)
 		}
 		return
 	}
@@ -476,7 +483,7 @@ func (c *checker) assign(scope *Scope, s *ast.AssignStmt) {
 	// `:=` declares. Every target must be a plain name, and redeclaring one
 	// already bound in this scope is an error — Ymir is stricter than Go here,
 	// which permits `x, y := ...` when only y is new (chapter 03 §Variables).
-	for _, l := range s.Lhs {
+	for i, l := range s.Lhs {
 		id, ok := l.(*ast.Ident)
 		if !ok {
 			c.hint(l.Pos(),
@@ -484,14 +491,48 @@ func (c *checker) assign(scope *Scope, s *ast.AssignStmt) {
 				"use = to assign to an existing location")
 			continue
 		}
-		c.declareLocal(scope, id, types.Invalid)
+		c.define(scope, id, values[i])
 	}
 }
 
+// rhsValues evaluates the right side of an assignment and pads or trims the
+// result to one value per target, so callers may index it by position.
+//
+// A single multi-valued call on the right is the destructuring form:
+// `q, r := divmod(17, 5)`.
+func (c *checker) rhsValues(scope *Scope, s *ast.AssignStmt) []types.Type {
+	var values []types.Type
+
+	if len(s.Rhs) == 1 && len(s.Lhs) > 1 {
+		var known bool
+		values, known = c.multiExpr(scope, s.Rhs[0])
+		if known && len(values) != len(s.Lhs) {
+			c.errorf(s.TokPos, "assignment mismatch: %s on the left, %s on the right",
+				plural(len(s.Lhs), "name"), plural(len(values), "value"))
+		}
+	} else {
+		for _, r := range s.Rhs {
+			values = append(values, c.expr(scope, r))
+		}
+		if len(s.Rhs) != len(s.Lhs) {
+			c.errorf(s.TokPos, "assignment mismatch: %s on the left, %s on the right",
+				plural(len(s.Lhs), "name"), plural(len(s.Rhs), "value"))
+		}
+	}
+
+	for len(values) < len(s.Lhs) {
+		values = append(values, types.Invalid)
+	}
+	return values
+}
+
 // assignTarget checks the left side of an `=`, which must be assignable to.
-func (c *checker) assignTarget(scope *Scope, l ast.Expr) {
-	t := c.expr(scope, l)
-	_ = t
+func (c *checker) assignTarget(scope *Scope, l ast.Expr, value types.Type, s *ast.AssignStmt) {
+	target := c.expr(scope, l)
+
+	if s.Tok == token.ASSIGN {
+		c.assignableTo(l.Pos(), value, target, "an assignment")
+	}
 
 	if id, ok := l.(*ast.Ident); ok {
 		if o := c.info.Uses[id]; o != nil {

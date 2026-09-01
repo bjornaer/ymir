@@ -1,0 +1,13 @@
+#@ case types/no_truthiness
+#@ spec 05-statements.md#if
+#@ compile-error
+#@ | want bool
+
+module no_truthiness
+
+func main() {
+    x := 1
+    if x {
+        print("nonzero")
+    }
+}
