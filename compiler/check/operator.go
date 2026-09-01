@@ -64,6 +64,16 @@ func (c *checker) binaryExpr(scope *Scope, x *ast.BinaryExpr) types.Type {
 	}
 
 	if !types.Identical(lhs, rhs) {
+		// Rule N4 is the common case worth naming: a ?T must be narrowed before
+		// it is used as a T, and `x + 1` where x is ?int is exactly that.
+		if n, ok := lhs.(*types.Nullable); ok && types.Identical(n.Elem, rhs) {
+			c.narrowFirst(x.OpPos, lhs, n.Elem)
+			return c.resultOfInvalid(x)
+		}
+		if n, ok := rhs.(*types.Nullable); ok && types.Identical(n.Elem, lhs) {
+			c.narrowFirst(x.OpPos, rhs, n.Elem)
+			return c.resultOfInvalid(x)
+		}
 		c.hint(x.OpPos,
 			"invalid operation: mismatched types "+lhs.String()+" and "+rhs.String(),
 			"there is no implicit conversion; write "+conversionHint(lhs, rhs))
@@ -136,6 +146,14 @@ func (c *checker) binaryExpr(scope *Scope, x *ast.BinaryExpr) types.Type {
 
 	c.errorf(x.OpPos, "invalid operation: %s is not defined on %s", x.Op, t)
 	return types.Invalid
+}
+
+// narrowFirst is rule N4's diagnostic: a nullable used where its element type
+// is wanted.
+func (c *checker) narrowFirst(pos token.Position, nullable, elem types.Type) {
+	c.hint(pos,
+		nullable.String()+" must be narrowed before it is used as "+elem.String(),
+		"guard it: `if x != nil { ... }` narrows x to "+elem.String()+" in that branch")
 }
 
 // nilComparison handles `x == nil` and `x != nil`, the only place nil may

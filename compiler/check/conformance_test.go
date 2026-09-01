@@ -77,6 +77,11 @@ var expected = map[string][]want{
 	"expr/enum_has_no_fields":       {{15, 13, []string{"inspected only by match", "Shape"}}},
 	"errors/error_set_not_superset": {{17, 15, []string{"?(IOError | ParseError)", "?IOError"}}},
 
+	// M7 — nullables and narrowing (N1-N6).
+	"types/nullable_needs_narrowing":       {{14, 13, []string{"?int must be narrowed", "int"}}},
+	"types/narrowing_ends_at_reassignment": {{16, 17, []string{"?int must be narrowed"}}},
+	"types/narrowing_is_not_flow_typing":   {{17, 13, []string{"?int must be narrowed"}}},
+
 	// M6 — composite literals and indexing.
 	"types/array_is_homogeneous":             {{9, 15, []string{"same type", "float", "int"}}},
 	"types/empty_literal_needs_annotation":   {{9, 11, []string{"cannot infer the element type"}}},

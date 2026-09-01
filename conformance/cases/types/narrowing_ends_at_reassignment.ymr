@@ -1,0 +1,18 @@
+#@ case types/narrowing_ends_at_reassignment
+#@ spec 02-types.md#rules
+#@ compile-error
+#@ | narrowed
+
+module narrowing_ends_at_reassignment
+
+func find() -> ?int {
+    return 7
+}
+
+func main() {
+    v := find()
+    if v != nil {
+        v = nil
+        print(v + 1)
+    }
+}

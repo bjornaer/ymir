@@ -160,6 +160,11 @@ type checker struct {
 	// would report them twice.
 	folds map[ast.Expr]foldResult
 
+	// narrowedFrom maps a shadow binding introduced by narrowing (rule N6) back
+	// to the real one, so an assignment can end the narrowing and be checked
+	// against the declared ?T.
+	narrowedFrom map[*Object]*Object
+
 	// methods holds each named type's method set. Methods are not virtual, so
 	// a flat table per type is the whole mechanism (chapter 02 §Structs).
 	methods map[*types.Named]map[string]*method
@@ -181,14 +186,15 @@ type checker struct {
 // parser first and stop if it reported anything.
 func Check(file *ast.File, name, src string) (*Info, *diag.List) {
 	c := &checker{
-		info:      newInfo(),
-		errs:      diag.NewList(name, src),
-		sigs:      map[*ast.FuncDecl]*types.Func{},
-		recvs:     map[*ast.FuncDecl]types.Type{},
-		variants:  map[string][]*Object{},
-		methods:   map[*types.Named]map[string]*method{},
-		constVals: map[*Object]constVal{},
-		folds:     map[ast.Expr]foldResult{},
+		info:         newInfo(),
+		errs:         diag.NewList(name, src),
+		sigs:         map[*ast.FuncDecl]*types.Func{},
+		recvs:        map[*ast.FuncDecl]types.Type{},
+		variants:     map[string][]*Object{},
+		methods:      map[*types.Named]map[string]*method{},
+		narrowedFrom: map[*Object]*Object{},
+		constVals:    map[*Object]constVal{},
+		folds:        map[ast.Expr]foldResult{},
 	}
 	c.checkFile(file)
 	c.errs.Sort()

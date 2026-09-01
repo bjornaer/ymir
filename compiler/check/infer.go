@@ -34,7 +34,8 @@ func (c *checker) assignableTo(pos token.Position, src, dst types.Type, what str
 		c.hint(pos, msg, "a "+dst.String()+" may be absent; "+src.String()+" is not the same type")
 	case types.Identical(dst, types.Underlying(src)):
 		c.hint(pos, msg,
-			"narrow it first: inside `if x != nil` the checker knows it is "+dst.String())
+			"a "+src.String()+" must be narrowed before it is used as "+dst.String()+
+				"; guard it with `if x != nil`")
 	default:
 		c.errorf(pos, "%s", msg)
 	}

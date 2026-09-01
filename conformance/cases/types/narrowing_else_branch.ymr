@@ -1,0 +1,20 @@
+#@ case types/narrowing_else_branch
+#@ spec 02-types.md#rules
+#@ exit 0
+#@ stdout
+#@ | 8
+
+module narrowing_else_branch
+
+func find() -> ?int {
+    return 7
+}
+
+func main() {
+    v := find()
+    if v == nil {
+        print("absent")
+    } else {
+        print(v + 1)
+    }
+}

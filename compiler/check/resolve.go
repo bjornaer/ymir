@@ -379,9 +379,12 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 
 	case *ast.IfStmt:
 		c.condition(scope, x.Cond, "if")
-		c.block(scope, x.Then)
+		// Rule N6: `if x != nil` narrows x to T in the then branch, and
+		// `if x == nil` narrows it in the else branch.
+		thenScope, elseScope := c.narrowScopes(scope, x.Cond)
+		c.block(thenScope, x.Then)
 		if x.Else != nil {
-			c.stmt(scope, x.Else)
+			c.stmt(elseScope, x.Else)
 		}
 
 	case *ast.WhileStmt:
@@ -650,6 +653,16 @@ func (c *checker) targetType(scope *Scope, l ast.Expr) types.Type {
 // assignTarget checks the left side of an `=`, which must be assignable to.
 func (c *checker) assignTarget(scope *Scope, l ast.Expr, value types.Type, s *ast.AssignStmt) {
 	target := c.expr(scope, l)
+
+	if id, ok := l.(*ast.Ident); ok {
+		// Assigning to a narrowed binding ends the narrowing (rule N6), and the
+		// value is then checked against the declared ?T rather than against the
+		// narrowed T.
+		if orig := c.dropNarrowing(scope, id.Name); orig != nil {
+			target = orig.Type
+			c.info.Uses[id] = orig
+		}
+	}
 
 	if s.Tok == token.ASSIGN {
 		c.assignableTo(l.Pos(), value, target, "an assignment")

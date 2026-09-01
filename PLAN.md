@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 59 cases.
+conformance/          Executable form of the spec. run.py + 62 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -196,7 +196,7 @@ during this phase.
       folding (2026-09-01)
 - [x] **M5** — calls, method sets, selection, return values (2026-09-01)
 - [x] **M6** — composite literals and indexing (2026-09-01)
-- [ ] **M7** — nullables and narrowing (N1–N6)
+- [x] **M7** — nullables and narrowing (N1–N6) (2026-09-01)
 - [ ] **M8** — `match` exhaustiveness over enums and unions
 - [ ] **M9** — error sets, `try`, unhandled errors
 - [ ] **M10** — returns on every path, `main`'s signature
@@ -655,3 +655,27 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - **Next:** M7, nullables and narrowing. `types/nullable_needs_narrowing`
   already reports at the right place; it needs N4's message rather than the
   generic mismatched-types one.
+
+### 2026-09-01 — Phase 2 M7: nullables and narrowing
+
+- **Narrowing is a scope, not a side table.** The narrowed branch is checked in a
+  scope holding a shadow binding of type `T`. Lexical scoping then gives N6's
+  "that branch only" for free, and removing the shadow is what gives "does not
+  survive reassignment of x".
+- Both branches narrow, per the table M0 added to chapter 02: `if x != nil`
+  narrows the `then`, `if x == nil` narrows the `else`. Neither narrows the
+  other side.
+- Deliberately syntactic and exact: `x != nil && true` does not narrow, and
+  neither does `b.v != nil` on a field. Resisting the pull toward general flow
+  typing is the point — the spec does not specify it, and it is a much larger
+  commitment.
+- Reassigning a narrowed binding restores the declared `?T`, so `v = nil` inside
+  `if v != nil { ... }` is legal and the *next* use needs narrowing again. That
+  came out of a hand-run rather than a test, and it caught a duplicated
+  assignability check that was reporting the assignment against the narrowed
+  type.
+- N4 now has its own message — "?int must be narrowed before it is used as int"
+  — instead of falling through to the generic mismatched-types one.
+- **30 conformance cases green**, 5 pending. All five are `match`, `try`, and
+  unhandled errors. 3 new cases, 62 total.
+- **Next:** M8, `match` exhaustiveness over enums and unions.
