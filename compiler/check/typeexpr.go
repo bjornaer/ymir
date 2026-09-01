@@ -120,6 +120,12 @@ func (c *checker) resolveGeneric(scope *Scope, x *ast.GenericType) types.Type {
 		return types.Invalid
 	}
 
+	if name == "qreg" {
+		// The odd one out: its argument is a compile-time integer constant
+		// rather than a type, so the parser puts it in Width and leaves Args
+		// empty. The arity check below does not apply.
+		return c.resolveQReg(x)
+	}
 	if arity >= 0 && len(x.Args) != arity {
 		c.errorf(x.Name.NamePos, "%s takes %s, got %d",
 			name, plural(arity, "type argument"), len(x.Args))
@@ -163,25 +169,25 @@ func (c *checker) resolveGeneric(scope *Scope, x *ast.GenericType) types.Type {
 
 	case "chan":
 		return &types.Chan{Elem: c.resolveType(scope, x.Args[0])}
-
-	case "qreg":
-		// qreg[N] is parameterized by a compile-time integer constant, not a
-		// type. The parser has no way to know that, so the argument arrives as
-		// a type node holding a literal.
-		n, ok := constIntArg(x.Args[0])
-		if !ok {
-			c.errorf(x.Args[0].Pos(), "qreg takes a constant integer width")
-			return types.Invalid
-		}
-		if n <= 0 {
-			c.errorf(x.Args[0].Pos(), "qreg width must be positive, got %d", n)
-			return types.Invalid
-		}
-		return &types.QReg{N: n}
 	}
 
 	c.errorf(x.Name.NamePos, "undefined type: %s", name)
 	return types.Invalid
+}
+
+func (c *checker) resolveQReg(x *ast.GenericType) types.Type {
+	if x.Width == nil {
+		c.hint(x.Name.NamePos,
+			"qreg takes a constant integer width",
+			"write qreg[4]")
+		return types.Invalid
+	}
+	n, err := strconv.Atoi(x.Width.Value)
+	if err != nil || n <= 0 {
+		c.errorf(x.Width.Pos(), "qreg width must be a positive integer, got %s", x.Width.Value)
+		return types.Invalid
+	}
+	return &types.QReg{N: n}
 }
 
 // resolveUnion builds a union, enforcing that every member is an enum
@@ -208,19 +214,6 @@ func (c *checker) resolveUnion(scope *Scope, x *ast.UnionType) types.Type {
 		return types.Invalid
 	}
 	return types.NewUnion(members...)
-}
-
-// constIntArg reads a qreg width written as a type node.
-func constIntArg(t ast.Type) (int, bool) {
-	id, ok := t.(*ast.NamedType)
-	if !ok || len(id.Name.Parts) != 1 {
-		return 0, false
-	}
-	n, err := strconv.Atoi(id.Name.Parts[0].Name)
-	if err != nil {
-		return 0, false
-	}
-	return n, true
 }
 
 func plural(n int, noun string) string {

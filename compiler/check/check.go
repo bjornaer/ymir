@@ -38,6 +38,9 @@ const (
 	Module
 	// Builtin is a predeclared function.
 	Builtin
+	// EnumVariant is an enum variant named without its enum. Chapter 02
+	// §Enums allows that where it is unambiguous.
+	EnumVariant
 )
 
 func (k ObjKind) String() string {
@@ -54,6 +57,8 @@ func (k ObjKind) String() string {
 		return "module"
 	case Builtin:
 		return "builtin"
+	case EnumVariant:
+		return "enum variant"
 	}
 	return "object"
 }
@@ -124,6 +129,27 @@ func (i *Info) ObjectOf(id *ast.Ident) *Object {
 type checker struct {
 	info *Info
 	errs *diag.List
+
+	// module is the declaring module's name, stamped onto every types.Named so
+	// two enums sharing a short name still sort and print distinguishably.
+	module string
+
+	// loopDepth is how many loop bodies enclose the statement being checked.
+	// `break` and `continue` are legal only inside one, and there are no
+	// labels in v1 (chapter 05 §break and continue).
+	loopDepth int
+
+	// sigs and recvs hold each function's resolved signature and receiver
+	// type, computed once in the declaration pass. The body pass reads them
+	// rather than resolving the annotations again, which would report every
+	// bad one twice.
+	sigs  map[*ast.FuncDecl]*types.Func
+	recvs map[*ast.FuncDecl]types.Type
+
+	// variants indexes this module's enum variants by their bare name, so
+	// `Circle(1.0)` resolves without writing `Shape.Circle(1.0)`. A name
+	// carried by two enums is ambiguous and must be qualified.
+	variants map[string][]*Object
 }
 
 // Check type-checks a parsed file.
@@ -137,20 +163,15 @@ type checker struct {
 // parser first and stop if it reported anything.
 func Check(file *ast.File, name, src string) (*Info, *diag.List) {
 	c := &checker{
-		info: newInfo(),
-		errs: diag.NewList(name, src),
+		info:     newInfo(),
+		errs:     diag.NewList(name, src),
+		sigs:     map[*ast.FuncDecl]*types.Func{},
+		recvs:    map[*ast.FuncDecl]types.Type{},
+		variants: map[string][]*Object{},
 	}
 	c.checkFile(file)
 	c.errs.Sort()
 	return c.info, c.errs
-}
-
-func (c *checker) checkFile(file *ast.File) {
-	if file == nil {
-		return
-	}
-	// Milestones M3 onward hang off here: the module-scope pre-pass, then a
-	// pass over each declaration's body.
 }
 
 // errorf reports a diagnostic at pos.

@@ -1,0 +1,15 @@
+#@ case scope/forward_reference
+#@ spec 03-declarations.md#scope
+#@ exit 0
+#@ stdout
+#@ | 7
+
+module forward_reference
+
+func main() {
+    print(add(3, 4))
+}
+
+func add(a: int, b: int) -> int {
+    return a + b
+}

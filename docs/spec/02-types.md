@@ -218,6 +218,12 @@ var s: Shape = Circle(2.0)
 var t := Shape.Rect(3.0, 4.0)
 ```
 
+**Ambiguous** means the bare name belongs to more than one enum declared in the
+module. Writing it unqualified is then a compile error naming the candidates; it is
+not resolved by the expected type. Resolution order is: an ordinary binding in scope
+wins over a variant, so a local named `Circle` shadows `Shape.Circle` rather than
+colliding with it. *(Previously "where ambiguous" was left undefined.)*
+
 Enum values are inspected **only** by `match` (chapter 05). There is no field access,
 no cast, and no "is this variant" predicate. `match` **MUST** be exhaustive, which is
 the mechanism that makes a forgotten measurement outcome or error case a compile error.

@@ -1,0 +1,12 @@
+#@ case decl/redeclared_in_same_scope
+#@ spec 03-declarations.md#variables
+#@ compile-error
+#@ | redeclared
+
+module redeclared_in_same_scope
+
+func main() {
+    count := 1
+    count := 2
+    print(count)
+}

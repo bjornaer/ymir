@@ -1,0 +1,18 @@
+#@ case types/union_member_must_be_enum
+#@ spec 02-types.md#union-types
+#@ compile-error
+#@ | enums
+
+module union_member_must_be_enum
+
+enum IOError {
+    NotFound(string),
+}
+
+func report(e: ?(IOError | int)) {
+    print("unreachable")
+}
+
+func main() {
+    report(nil)
+}

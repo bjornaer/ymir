@@ -40,6 +40,24 @@ type want struct {
 // visible.
 var expected = map[string][]want{
 	// M3 — scope resolution.
+	"decl/undefined_variable": {{10, 11, []string{"undefined", "cuont"}}},
+	// The error belongs on the *second* print(inner), at line 13. The use on
+	// line 11 is inside the if-block where inner is still live.
+	"scope/block_scope": {{13, 11, []string{"undefined", "inner"}}},
+
+	"decl/redeclared_in_same_scope": {{10, 5, []string{"count", "redeclared"}}},
+	"decl/blank_cannot_be_read":     {{10, 11, []string{"blank identifier"}}},
+	"decl/assign_to_const":          {{11, 5, []string{"cannot assign to constant", "LIMIT"}}},
+	"control/break_outside_loop":    {{10, 9, []string{"break outside a loop"}}},
+	"decl/ambiguous_variant":        {{17, 10, []string{"ambiguous variant", "Point"}}},
+
+	// Type formation, also M3: a written type is rejected where it is written.
+	"types/union_member_must_be_enum":    {{12, 28, []string{"union members must be enums", "int"}}},
+	"types/nullable_rejects_linear":      {{8, 14, []string{"unrestricted", "qubit", "linear"}}},
+	"types/map_key_must_be_hashable":     {{14, 21, []string{"map key", "Color", "not hashable"}}},
+	"types/matrix_element_must_be_float": {{9, 22, []string{"float or complex", "int"}}},
+	"types/undefined_type":               {{13, 19, []string{"undefined type", "Poitn"}}},
+
 	// M4 — inference and assignability.
 	// M5 — expression typing.
 	// M6 — nullables and narrowing.
@@ -88,6 +106,10 @@ func TestConformanceCasesCheck(t *testing.T) {
 			}
 
 			name := filepath.ToSlash(rel)
+			// The expectation table is keyed by case id, which is the path
+			// without the extension — the same key run.py uses.
+			caseID := strings.TrimSuffix(name, ".ymr")
+
 			file, errs := parser.ParseFile(name, string(src))
 			if !errs.Empty() {
 				t.Fatalf("case does not parse, which the Phase 1 gate should have caught:\n%s", errs.Render())
@@ -106,9 +128,9 @@ func TestConformanceCasesCheck(t *testing.T) {
 				return
 			}
 
-			wants, known := expected[name]
+			wants, known := expected[caseID]
 			if !known {
-				pending = append(pending, name)
+				pending = append(pending, caseID)
 				t.Skipf("not yet implemented; expects a compile error mentioning %q", hdr.compileError)
 			}
 

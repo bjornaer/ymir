@@ -1,0 +1,16 @@
+#@ case types/map_key_must_be_hashable
+#@ spec 02-types.md#mapk-v
+#@ compile-error
+#@ | hashable
+
+module map_key_must_be_hashable
+
+enum Color {
+    Red,
+    Green,
+}
+
+func main() {
+    var counts: map[Color, int]
+    print(len(counts))
+}

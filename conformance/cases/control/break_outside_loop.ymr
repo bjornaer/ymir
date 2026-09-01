@@ -1,0 +1,12 @@
+#@ case control/break_outside_loop
+#@ spec 05-statements.md#break-and-continue
+#@ compile-error
+#@ | break
+
+module break_outside_loop
+
+func main() {
+    if true {
+        break
+    }
+}

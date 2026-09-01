@@ -1,0 +1,19 @@
+#@ case decl/ambiguous_variant
+#@ spec 02-types.md#enums
+#@ compile-error
+#@ | ambiguous
+
+module ambiguous_variant
+
+enum Shape {
+    Point,
+}
+
+enum Marker {
+    Point,
+}
+
+func main() {
+    s := Point
+    print(1)
+}

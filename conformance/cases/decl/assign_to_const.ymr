@@ -1,0 +1,13 @@
+#@ case decl/assign_to_const
+#@ spec 03-declarations.md#constants
+#@ compile-error
+#@ | constant
+
+module assign_to_const
+
+const LIMIT: int = 10
+
+func main() {
+    LIMIT = 20
+    print(LIMIT)
+}

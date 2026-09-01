@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 30 cases.
+conformance/          Executable form of the spec. run.py + 42 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -66,7 +66,7 @@ compiler/diag/        EXISTS. Errors with position, source excerpt, caret.
 cmd/ymir/             EXISTS. CLI; `parse` and `check`.
 
 compiler/types/       EXISTS. Semantic types, identity, assignability, universe.
-compiler/check/       EXISTS. Skeleton + the conformance gate. Rules land M3-M10.
+compiler/check/       EXISTS. Scopes, name and type resolution. Rules M4-M10 pending.
 compiler/bytecode/    PHASE 3.
 vm/                   PHASE 3.
 
@@ -191,7 +191,7 @@ during this phase.
       assignability, linearity predicate, universe scope (2026-09-01)
 - [x] **M2** — `ast.Walk`, `compiler/check` skeleton, `ymir check`, and the
       `TestConformanceCasesCheck` gate with its expected-position table (2026-09-01)
-- [ ] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing)
+- [x] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing) (2026-09-01)
 - [ ] **M4** — local inference (`:=` and `var x := e`) and assignability at every site
 - [ ] **M5** — expression typing, calls, composite literals, constant folding
 - [ ] **M6** — nullables and narrowing (N1–N6)
@@ -531,3 +531,34 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - Added `quantum/qreg_register.ymr`, skipped like the other quantum cases but
   still subject to the parse gate, which is what would have caught this. 30
   cases.
+
+### 2026-09-01 — Phase 2 M3: scope resolution and type resolution
+
+- The five scope levels of chapter 03, as a real chain: block → parameters →
+  file (imports only) → module → universe. File scope sits *inside* module
+  scope, because that is the order resolution runs in.
+- Module-scope symbols are collected in four passes before any body is checked:
+  imports, then type *names*, then type *bodies*, then values. That is what makes
+  declarations order-independent (the statement M0 added to chapter 03) and what
+  lets two structs name each other.
+- `ast.Type` → `types.Type` resolution, with the chapter 02 formation rules:
+  map keys must be hashable, matrix elements float or complex, union members
+  enums, and `?` rejects a linear type (N5). Every failure yields `Invalid`, so
+  one bad annotation does not cascade.
+- Resolution is a hand-written traversal, not `ast.Walk`. An `*ast.Ident` means
+  five different things depending on where it sits — a reference, a declaration,
+  a field name, a variant, a selector — and a uniform walk cannot tell them
+  apart.
+- **11 conformance cases green**, 12 pending. `decl/undefined_variable` at
+  10:11 and `scope/block_scope` at 13:11 are the two PLAN.md named for this
+  milestone; the other nine are new.
+- **Spec addition:** chapter 02 §Enums said "where ambiguous, qualify it" without
+  defining ambiguous. It now does — the bare name belongs to two enums in the
+  module, it is not resolved by expected type, and an ordinary binding shadows a
+  variant. Found by implementing it. Case `decl/ambiguous_variant`.
+- Two bugs caught by writing the tests rather than the code: `:=` was applying
+  Go's "at least one name is new" rule where chapter 03 is stricter, and
+  parameter annotations were resolved twice, so every bad one was reported twice.
+- 12 new conformance cases, 42 total, up from 30. Roughly half the doubling the
+  Phase 2 brief asks for.
+- **Next:** M4, local inference and assignability at every site.

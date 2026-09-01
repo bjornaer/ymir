@@ -1,0 +1,17 @@
+#@ case scope/shadowing
+#@ spec 03-declarations.md#variables
+#@ exit 0
+#@ stdout
+#@ | 2
+#@ | 1
+
+module shadowing
+
+func main() {
+    x := 1
+    if true {
+        x := 2
+        print(x)
+    }
+    print(x)
+}

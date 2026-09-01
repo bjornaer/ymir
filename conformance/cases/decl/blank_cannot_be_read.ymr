@@ -1,0 +1,11 @@
+#@ case decl/blank_cannot_be_read
+#@ spec 01-lexical.md#identifiers
+#@ compile-error
+#@ | blank identifier
+
+module blank_cannot_be_read
+
+func main() {
+    _ = 1
+    print(_)
+}

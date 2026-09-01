@@ -1,0 +1,11 @@
+#@ case types/matrix_element_must_be_float
+#@ spec 02-types.md#matrixt
+#@ compile-error
+#@ | float or complex
+
+module matrix_element_must_be_float
+
+func main() {
+    var grid: matrix[int]
+    print(len(grid))
+}

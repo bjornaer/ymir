@@ -1,0 +1,19 @@
+#@ case types/undefined_type
+#@ spec 03-declarations.md#functions
+#@ compile-error
+#@ | undefined type
+
+module undefined_type
+
+struct Point {
+    x: float,
+    y: float,
+}
+
+func magnitude(p: Poitn) -> float {
+    return 0.0
+}
+
+func main() {
+    print("start")
+}

@@ -1,0 +1,14 @@
+#@ case types/nullable_rejects_linear
+#@ spec 02-types.md#rules
+#@ compile-error
+#@ | linear
+
+module nullable_rejects_linear
+
+func hold(q: ?qubit) {
+    print("unreachable")
+}
+
+func main() {
+    print("start")
+}
