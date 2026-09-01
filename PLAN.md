@@ -65,7 +65,7 @@ compiler/parser/      EXISTS. Recursive descent over chapter 09. Has tests.
 compiler/diag/        EXISTS. Errors with position, source excerpt, caret.
 cmd/ymir/             EXISTS. CLI; `parse` is the only subcommand so far.
 
-compiler/types/       PHASE 2. Semantic types, distinct from ast.Type.
+compiler/types/       EXISTS. Semantic types, identity, assignability, universe.
 compiler/check/       PHASE 2. Scope resolution, inference, assignability.
 compiler/bytecode/    PHASE 3.
 vm/                   PHASE 3.
@@ -187,8 +187,8 @@ during this phase.
 `gofmt` and `go vet` clean, and this file updated in the same commit.
 
 - [x] **M0** — spec corrections + the illegal conformance case (2026-09-01)
-- [ ] **M1** — `compiler/types`: type representation, union normalization, identity,
-      assignability, linearity predicate, universe scope
+- [x] **M1** — `compiler/types`: type representation, union normalization, identity,
+      assignability, linearity predicate, universe scope (2026-09-01)
 - [ ] **M2** — `ast.Walk`, `compiler/check` skeleton, `ymir check`, and the
       `TestConformanceCasesCheck` gate with its expected-position table
 - [ ] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing)
@@ -464,3 +464,27 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   `types/chan_has_no_zero_value`, `decl/no_zero_value_needs_init` — the three new rules
   above that no existing case covered.
 - **Next:** M1, `compiler/types`. Nothing blocks it.
+
+### 2026-09-01 — Phase 2 M1: `compiler/types`
+
+- `compiler/types` exists: `Basic`, `Named` (struct and enum, nominal identity by
+  pointer), `Array`, `Map`, `Tuple`, `Matrix`, `Chan`, `Func`, `Union`, `Nullable`,
+  `Qubit`, `QReg`, plus `Invalid` for recovery and `Nil` for the literal. No dependency
+  on `ast`, `token` or `diag` — it answers questions and never reports.
+- `NewUnion` normalizes on construction, so `A | B` and `B | A` are the same value and
+  a one-member union *is* the bare enum. `Identical` can then compare members
+  element-wise.
+- `Assignable` implements the four composed rules M0 wrote into chapter 02. The cases
+  that matter are covered by tests: `IOError` → `?(IOError | ParseError)` (rules 2 and 4
+  together) and `?IOError` → `?(IOError | ParseError)`, which is what makes
+  `errors/error_set_subset` typecheck.
+- `Invalid` is assignable in both directions, so one bad expression will not produce a
+  cascade of follow-on diagnostics.
+- **Deliberate conservative reading, flagged for chapter 02.** The spec says linear
+  means `qubit`, `qreg`, a struct transitively containing one, and an enum with a linear
+  payload. It says nothing about `array[qubit]`. `IsLinear` treats a container of a
+  linear type as linear, because the alternative lets a program duplicate a qubit by
+  copying an array reference. The spec should say so before Phase 7.
+- `HasZeroValue` encodes the M0 change: `chan` and `func` have none.
+- 44 assertions across 10 table-driven tests. **Next:** M2, the walker, the `check`
+  skeleton, `ymir check`, and the conformance gate.
