@@ -284,6 +284,32 @@ func main() {
 `, "has no variant Nope")
 }
 
+func TestContainerOfLinearIsIllFormed(t *testing.T) {
+	// R8. qreg[N] is the collection-of-qubits type; an array's length is a
+	// runtime value, so L1 cannot be proved for one.
+	for _, container := range []string{
+		"array[qubit]",
+		"map[string, qubit]",
+		"chan[qubit]",
+		"tuple[qubit, int]",
+	} {
+		mustReport(t, "module t\n\nfunc f(x: "+container+") {\n    print(1)\n}\n\nfunc main() {\n    print(1)\n}\n",
+			"which is linear")
+	}
+
+	// A struct may hold a linear field: its shape is static.
+	mustCheckClean(t, `module t
+
+struct Holder {
+    q: qubit,
+}
+
+func main() {
+    print(1)
+}
+`)
+}
+
 func TestUnqualifiedVariantConstruction(t *testing.T) {
 	// "Construction names the variant; where ambiguous, qualify it."
 	mustCheckClean(t, `module t

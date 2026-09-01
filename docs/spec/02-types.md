@@ -11,7 +11,14 @@ be used:
 | Multiplicity | Rule | Types |
 |---|---|---|
 | **Unrestricted** | May be copied and discarded freely | all classical types |
-| **Linear** | **MUST** be consumed exactly once | `qubit`, `qreg[N]`, and any struct transitively containing one |
+| **Linear** | **MUST** be consumed exactly once | `qubit`, `qreg[N]`, any struct transitively containing one, and any enum with a linear payload |
+
+A **container** of a linear type is ill-formed: `array[qubit]`, `map[K, qubit]`,
+`chan[qubit]`, `tuple[qubit, int]` and `matrix` of a linear type are all rejected where
+the type is written. Rule L1 requires proving that each linear value is consumed exactly
+once, and a container's length is a runtime value, so no such proof exists. `qreg[N]` is
+the collection-of-qubits type, with `N` a compile-time constant. A struct **MAY** hold a
+linear field, because its shape is static. *(Resolved question R8.)*
 
 Linearity is defined here rather than in chapter 08 because it is a property of the
 type system, not of the quantum fragment. Chapter 08 supplies the only linear types in
@@ -50,6 +57,22 @@ const BIG: int = 9223372036854775807 + 1   # ERROR: constant expression overflow
 ```
 
 *(Resolved question R5. The cost is a branch per arithmetic opcode in the VM.)*
+
+### Complex literals
+
+A **complex literal** is a numeric literal, then `+` or `-`, then an imaginary literal:
+
+```ymr
+0.0 + 0.0i     # the zero value of complex
+1.0 + 2.0i
+1 - 3i
+2.0i           # a bare imaginary literal is also a complex
+```
+
+Both parts **MUST** be literals. `x + 2.0i` where `x` is a `float` binding is a type
+error, since §Operand typing requires identical operands and there is no implicit
+conversion. *(Resolved question R7. This is folded by the parser rather than lexed as one
+token, so it does not depend on whitespace.)*
 
 ### Numeric conversion
 

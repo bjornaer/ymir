@@ -57,6 +57,7 @@ var expected = map[string][]want{
 	"types/map_key_must_be_hashable":     {{14, 21, []string{"map key", "Color", "not hashable"}}},
 	"types/matrix_element_must_be_float": {{9, 22, []string{"float or complex", "int"}}},
 	"types/undefined_type":               {{13, 19, []string{"undefined type", "Poitn"}}},
+	"types/container_of_linear_rejected": {{8, 21, []string{"array cannot hold qubit", "linear"}}},
 
 	// M4 — literals, operators, inference, assignability, constant folding.
 	"types/no_implicit_conversion":  {{11, 13, []string{"mismatched types", "int", "float"}}},

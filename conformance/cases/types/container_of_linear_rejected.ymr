@@ -1,0 +1,14 @@
+#@ case types/container_of_linear_rejected
+#@ spec 02-types.md#type-classification
+#@ compile-error
+#@ | linear
+
+module container_of_linear_rejected
+
+func hold(qs: array[qubit]) {
+    print("unreachable")
+}
+
+func main() {
+    print("start")
+}

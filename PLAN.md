@@ -6,7 +6,7 @@ sections whenever you do meaningful work.
 
 - **Last updated:** 2026-09-01
 - **Current phase:** Phase 2 — type checker. In progress on `phase-2-typechecker`.
-- **Blocking:** nothing. R1–R6 are resolved; Q6 blocks Phase 5, Q4 blocks Phase 3.
+- **Blocking:** nothing. R1–R8 are resolved; Q6 blocks Phase 5, Q4 blocks Phase 3.
 
 ---
 
@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 67 cases.
+conformance/          Executable form of the spec. run.py + 68 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -323,9 +323,10 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R3 | Should error-position nullability be written into the type? | — | **resolved: `?T`, general** |
 | R4 | Should error sets be inferred? | — | **resolved: explicit for now** |
 | Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
-| Q13 | How is a `complex` value written? `0.0 + 0.0i` does not typecheck | Phase 3 | open, found in Phase 2 |
+| R7 | How is a `complex` value written? | — | **resolved: the parser folds `a ± bi`** |
+| R8 | Is a container of a linear type linear, or ill-formed? | — | **resolved: ill-formed** |
 
-R1–R6 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
+R1–R8 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
 reasoning and the rejected alternatives. Do not reopen them without reading that.
 
 ## 7. Standing rules
@@ -704,3 +705,29 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - **35 conformance cases green, 2 pending.** 5 new cases, 67 total.
 - **Next:** M9, error sets and `try`. `errors/try_requires_superset` and
   `errors/unhandled_is_compile_error` are the last two.
+
+### 2026-09-01 — R7 and R8, recorded before the standby
+
+- **R7 — a complex literal is `a ± bi`, folded by the parser.** `0.0 + 0.0i` was
+  `float + complex` and did not typecheck, so `complex` had no writable zero value
+  and the only expressible complex was a bare imaginary literal. Folding happens in
+  the parser rather than the lexer deliberately: lexing `1.0+2.0i` as one token
+  needs whitespace to decide where the literal ends, which is the maximal-munch
+  ambiguity that made legacy lex `x==-3` as `x` `==-` `3`. Same surface language,
+  no trap, no lexer change. **Not yet implemented** — chapters 02 and 04 are
+  updated; the parser fold and its cases are still to do.
+- **R8 — a container of a linear type is ill-formed.** `array[qubit]`,
+  `map[K, qubit]`, `chan[qubit]` and `tuple[qubit, …]` are rejected where the type
+  is written. Rule L1 needs each linear value proved consumed exactly once and a
+  container's length is a runtime value, so treating the container as linear would
+  promise a guarantee the checker cannot verify per element. `qreg[N]` is the
+  collection-of-qubits type and its width is a compile-time constant. A struct may
+  still hold a linear field, because its shape is static. Implemented, with case
+  `types/container_of_linear_rejected`. This shapes the M11 lattice.
+- `types.IsLinear` still answers honestly for containers, as a backstop rather
+  than an assumption that the formation check is exhaustive.
+- Session paused here at 22:40 CEST against a credit limit, with a wake-up armed
+  for 01:55. 36 cases green, 2 pending, 68 total.
+- **Also noted, additive, not now:** matrix indexing stays undefined (M6), but a
+  slicing or index notation will be wanted before anyone writes real matrix code.
+  Deliberately deferred rather than guessed.

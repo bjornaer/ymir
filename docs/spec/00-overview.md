@@ -256,6 +256,46 @@ type checker exists. Same reasoning as R4 — take the reversible option first.
 because `const`, non-`mut` parameters, and non-`mut` receivers are already immutable.
 The flag exists; in v1 plain locals simply always set it to mutable.
 
+### R7 — Writing a `complex` value → **the parser folds `a ± bi`** (2026-09-01)
+
+`2.0i` lexes as an imaginary literal of type `complex`, so `0.0 + 0.0i` — this spec's own
+rendering of `complex`'s zero value, and the form used in chapter 02's `matrix[complex]`
+example — was `float + complex`, which §Operand typing makes a type error. As written,
+the only expressible complex value was a bare imaginary literal, and `complex` had no
+writable zero value at all.
+
+**Resolution:** a **complex literal** is a numeric literal followed by `+` or `-` and an
+imaginary literal. `1.0 + 2.0i`, `1 - 3i`, `0.0 + 0.0i` are each a single constant of type
+`complex`. Both parts **MUST** be literals; `x + 2.0i` where `x` is a `float` binding stays
+a type error, because no implicit conversion exists.
+
+*Why the parser and not the lexer:* lexing `1.0+2.0i` as one token requires the lexer to
+decide where the literal ends, and the only available signal is whitespace — `1.0+2.0i`
+one token, `1.0 + 2.0i` two. That is the maximal-munch ambiguity that made legacy lex
+`x==-3` as `x` `==-` `3`, in a worse form, and it would make a language's meaning depend
+on spacing. Folding in the parser gives the identical surface language with no lexer
+change and no whitespace sensitivity.
+
+*Rejected:* admitting `float` on one side of a `complex` operator. It works, and it would
+be the language's first implicit conversion — chapter 02 says flatly that there is none,
+and that rule is worth more than the convenience.
+
+### R8 — A container of a linear type is **ill-formed** (2026-09-01)
+
+`array[qubit]`, `map[K, qubit]`, `chan[qubit]`, `tuple[qubit, int]` and `matrix` of a
+linear type are rejected at the point the type is written. Chapter 02 previously defined
+linearity for `qubit`, `qreg[N]`, structs and enums, and said nothing about containers.
+
+*Why reject rather than make the container linear:* rule L1 requires proving that every
+linear value is consumed exactly once. An array's length is a runtime value, so the
+checker cannot prove it for any array — treating `array[qubit]` as linear would promise a
+guarantee it cannot verify per element. Rejecting it is the only reading the checker can
+actually stand behind.
+
+*Why this costs nothing:* `qreg[N]` is already the collection-of-qubits type, with `N` a
+compile-time constant, which is exactly the case a checker can verify. A struct is still
+free to contain a linear field, because a struct's shape is static.
+
 ## Open questions
 
 Unresolved. Do not treat any of these as decided.
@@ -290,20 +330,6 @@ making those types non-sendable so sharing is impossible. **Blocks Phase 5.**
 
 `main` returning does not wait for spawned tasks. Go's choice here is widely regarded as
 its worst concurrency decision.
-
-### Q13 — How is a `complex` value written?
-
-`2.0i` lexes as a single imaginary literal of type `complex`, but this chapter and
-chapter 02 both write a complex value as `0.0 + 0.0i` — which is `float + complex`, and
-chapter 04's rule that both operands of a binary operator have identical types makes
-that a type error. As written, the only expressible complex values are bare imaginary
-literals, and `complex` has no writable zero value at all.
-
-Options: a two-argument `complex(re, im)` constructor alongside the existing one-argument
-conversion; a single lexical form for `1.0+2.0i`; or admitting `float` on one side of a
-`complex` operator, which would be the language's first implicit conversion and is the
-reason to prefer either of the others. Found while implementing the operand table in
-Phase 2. **Blocks nothing before Phase 3**, since nothing evaluates a complex value yet.
 
 ### Q12 — Are `as` and `default` reserved words or contextual identifiers?
 

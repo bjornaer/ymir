@@ -184,12 +184,15 @@ func Subset(src, dst Type) bool {
 // IsLinear reports whether values of t must be consumed exactly once
 // (chapter 02 §Type classification).
 //
-// Normatively that is qubit, qreg[N], a struct transitively containing one, and
-// an enum with a linear payload. This implementation also treats a container of
-// a linear type — array[qubit], map[K, qubit], chan[qubit], tuple[qubit] — as
-// linear. The spec does not say so; it is the sound direction, since otherwise
-// an array would let a program duplicate a qubit by copying the reference.
-// Recorded as a gap to close in chapter 02 before Phase 7.
+// That is qubit, qreg[N], a struct transitively containing one, and an enum with
+// a linear payload.
+//
+// Containers are answered honestly here — an array of qubits would be linear —
+// but compiler/check rejects such a type where it is written (R8), so no value
+// ever has one. Rule L1 needs each linear value proved consumed exactly once, and
+// a container's length is a runtime value, so the proof does not exist. This
+// stays as a backstop rather than an assumption that the formation check is
+// exhaustive.
 func IsLinear(t Type) bool { return isLinear(t, nil) }
 
 func isLinear(t Type, seen map[*Named]bool) bool {

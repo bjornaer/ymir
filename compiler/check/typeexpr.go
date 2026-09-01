@@ -134,7 +134,11 @@ func (c *checker) resolveGeneric(scope *Scope, x *ast.GenericType) types.Type {
 
 	switch name {
 	case "array":
-		return &types.Array{Elem: c.resolveType(scope, x.Args[0])}
+		elem := c.resolveType(scope, x.Args[0])
+		if !c.requireUnrestricted(x.Args[0].Pos(), elem, "array") {
+			return types.Invalid
+		}
+		return &types.Array{Elem: elem}
 
 	case "map":
 		key := c.resolveType(scope, x.Args[0])
@@ -143,6 +147,9 @@ func (c *checker) resolveGeneric(scope *Scope, x *ast.GenericType) types.Type {
 			c.hint(x.Args[0].Pos(),
 				"map key type "+key.String()+" is not hashable",
 				"a key must be a primitive type or a struct whose fields are all primitive")
+			return types.Invalid
+		}
+		if !c.requireUnrestricted(x.Args[1].Pos(), val, "map") {
 			return types.Invalid
 		}
 		return &types.Map{Key: key, Value: val}
@@ -154,7 +161,11 @@ func (c *checker) resolveGeneric(scope *Scope, x *ast.GenericType) types.Type {
 		}
 		tup := &types.Tuple{}
 		for _, a := range x.Args {
-			tup.Elems = append(tup.Elems, c.resolveType(scope, a))
+			el := c.resolveType(scope, a)
+			if !c.requireUnrestricted(a.Pos(), el, "tuple") {
+				return types.Invalid
+			}
+			tup.Elems = append(tup.Elems, el)
 		}
 		return tup
 
@@ -168,7 +179,11 @@ func (c *checker) resolveGeneric(scope *Scope, x *ast.GenericType) types.Type {
 		return &types.Matrix{Elem: elem}
 
 	case "chan":
-		return &types.Chan{Elem: c.resolveType(scope, x.Args[0])}
+		elem := c.resolveType(scope, x.Args[0])
+		if !c.requireUnrestricted(x.Args[0].Pos(), elem, "chan") {
+			return types.Invalid
+		}
+		return &types.Chan{Elem: elem}
 	}
 
 	c.errorf(x.Name.NamePos, "undefined type: %s", name)
@@ -188,6 +203,23 @@ func (c *checker) resolveQReg(x *ast.GenericType) types.Type {
 		return types.Invalid
 	}
 	return &types.QReg{N: n}
+}
+
+// requireUnrestricted enforces R8: a container of a linear type is ill-formed.
+//
+// Rule L1 requires proving that every linear value is consumed exactly once, and a
+// container's length is a runtime value, so no such proof exists for one. `qreg[N]`
+// is the collection-of-qubits type, with N a compile-time constant.
+func (c *checker) requireUnrestricted(pos token.Position, elem types.Type, container string) bool {
+	if types.IsInvalid(elem) || !types.IsLinear(elem) {
+		return true
+	}
+	hint := "a linear value must be consumed exactly once, which cannot be proved for a container of runtime length"
+	if _, isQubit := elem.(*types.Qubit); isQubit {
+		hint = "use qreg[N], the collection-of-qubits type, whose width is a compile-time constant"
+	}
+	c.hint(pos, container+" cannot hold "+elem.String()+", which is linear", hint)
+	return false
 }
 
 // resolveUnion builds a union, enforcing that every member is an enum

@@ -137,6 +137,10 @@ p.x = 3.0
 
 ## Constant expressions
 
+A complex literal — a numeric literal, then `+` or `-`, then an imaginary literal — is a
+single constant, not a binary operation (chapter 02 §Complex literals). `1.0 + 2.0i` is
+one value; `x + 2.0i` where `x` is a binding is a type error.
+
 An expression is constant if it is a literal, a `const`, or an operator applied to
 constant operands. Constant expressions are evaluated at compile time. Division by
 zero in a constant expression is a **compile error**, not a runtime panic.
