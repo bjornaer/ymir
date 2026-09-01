@@ -1,0 +1,19 @@
+#@ case decl/no_zero_value_needs_init
+#@ spec 02-types.md#zero-values-and-definite-assignment
+#@ compile-error
+#@ | Shape
+
+module no_zero_value_needs_init
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func main() {
+    var s: Shape
+    match s {
+        Circle(r) => print(r),
+        Point     => print(0.0),
+    }
+}

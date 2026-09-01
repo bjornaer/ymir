@@ -26,10 +26,30 @@ v1; the rules below are what the checker is built around from day one (decision 
 | `complex` | pair of binary64, real and imaginary | `0.0 + 0.0i` |
 | `bool` | `true` or `false` | `false` |
 | `string` | immutable UTF-8 byte sequence | `""` |
-| `error` | see chapter 06 | `nil` |
+
+`error` is **not** a primitive. It is a predeclared *enum*, `enum error { Msg(string) }`,
+defined in [chapter 06](06-errors.md#the-predeclared-error). Like every enum it has no
+zero value and no `nil`; the nullable form is `?error`. *(An earlier draft listed it here
+as a primitive with zero value `nil`, which contradicted both §Enums below and chapter
+06.)*
 
 There is no `any` type. *(Legacy had one; it defeated the checker wherever it appeared
 and every use of it in the legacy stdlib was masking a missing feature.)*
+
+### Integer overflow
+
+Arithmetic on `int` that overflows the signed 64-bit range **MUST** panic. It **MUST
+NOT** wrap and **MUST NOT** saturate — both produce a silently wrong answer, which Goal 1
+of [chapter 00](00-overview.md) exists to exclude.
+
+Overflow while evaluating a **constant expression** is a compile error, not a panic, on
+the same grounds as constant division by zero ([chapter 04](04-expressions.md#constant-expressions)).
+
+```ymr
+const BIG: int = 9223372036854775807 + 1   # ERROR: constant expression overflows int
+```
+
+*(Resolved question R5. The cost is a branch per arithmetic opcode in the VM.)*
 
 ### Numeric conversion
 
@@ -293,10 +313,21 @@ if v != nil {
 ```
 
 Narrowing applies when an `if` condition is exactly `x != nil` or `x == nil` for a
-binding `x` of nullable type, and only within the matching branch. It is deliberately
-minimal: not general flow typing, and it does not survive reassignment of `x`.
-`match` on a narrowed `?Enum` needs no `nil` arm; on an un-narrowed one it requires
-exactly one.
+binding `x` of nullable type. Both branches are narrowed, each to what the condition
+proves about it:
+
+| Condition | `then` branch | `else` branch |
+|---|---|---|
+| `x != nil` | `x: T` | `x: ?T`, known `nil` |
+| `x == nil` | `x: ?T`, known `nil` | `x: T` |
+
+`x` is **not** narrowed after the `if`, in either direction.
+
+It is deliberately minimal. The condition **MUST** be exactly that comparison on a
+*binding* — not a field, not an index, not an element of a `&&` or `||` chain, and not
+the result of a call. It is not general flow typing, and it does not survive
+reassignment of `x` inside the branch. `match` on a narrowed `?Enum` needs no `nil` arm;
+on an un-narrowed one it requires exactly one.
 
 Nullable types make absence a property the checker tracks rather than a runtime
 surprise, which is the same argument as linear types for qubits and exhaustive `match`
@@ -376,21 +407,37 @@ identity is structural for `array`, `map`, `tuple`, `chan`, `func`, and `matrix`
 nominal for `struct` and `enum` — two structs with identical fields but different names
 are different types.
 
+**The two exceptions compose.** Assignability is the smallest relation satisfying all
+four of these:
+
+1. `S` is assignable to `T` when they are identical.
+2. `S` is assignable to `?T` when `S` is assignable to `T`.
+3. `nil` is assignable to any `?T`.
+4. A union `S` is assignable to a union `T` when `S ⊆ T`. A bare enum is the one-member
+   union of itself, so this covers `IOError` → `IOError | ParseError`.
+
+Rules 2 and 4 together are what make `var e: ?(IOError | ParseError) = someIOError`
+legal, and what lets `return 0, err` typecheck where `err: ?IOError` and the declared
+error position is `?(IOError | ParseError)`. *(Stated because it was previously only
+implied by the examples.)*
+
 ## Zero values and definite assignment
 
 `var x: T` without an initializer binds the zero value of `T` where one exists (table
-above, plus: `array` and `map` are empty, `struct` is field-wise zero, `chan` and
-`func` are `nil`).
+above, plus: `array` and `map` are empty, and `struct` is field-wise zero).
 
-Types with **no** zero value: `enum` and bare unions (no privileged variant), and every
-linear type. A `var` of such a type **MUST** have an initializer. The zero value of any
-`?T` is `nil`.
+Types with **no** zero value: `enum` and bare unions (no privileged variant), `chan` and
+`func`, and every linear type. A `var` of such a type **MUST** have an initializer. The
+zero value of any `?T` is `nil`.
+
+`chan` and `func` are on that list because of N3: `nil` belongs only to nullable types,
+so a bare `chan[int]` cannot hold it. Write `?chan[int]` or `?func(int) -> int` for a
+channel or function value that may be absent. *(An earlier draft gave both a zero value
+of `nil`, which N3 forbids.)*
 
 ## Open questions affecting this chapter
 
 - **Q3 (generics).** `array[T]` and `map[K, V]` are built-in generics. Whether users
   can declare generic functions or types is undecided.
-- **Q5 (integer overflow).** Wrap, trap, or saturate is undecided. This chapter's
-  `int` description is incomplete until it is answered.
 - Whether `matrix[T]` stays built-in or becomes a stdlib type over `array` once
   generics exist.

@@ -218,6 +218,44 @@ declaration-by-declaration; it becomes a fixed-point computation over the call g
 with an iterate-to-convergence pass for recursion. Staying explicit keeps Phase 2's
 checker a single pass.
 
+### R5 — Integer overflow → **traps** (2026-09-01)
+
+Overflow of a signed 64-bit `int` is a **runtime panic**. Overflow while evaluating a
+constant expression is a **compile error**, matching the existing rule that constant
+division by zero is a compile error rather than a runtime panic.
+
+*Why over wrapping (Go's and C's answer for signed types respectively):* wrapping is a
+silent wrong answer, which is the exact defect class this rewrite exists to remove. Goal
+1 is that no safe program has undefined or silently incorrect behavior, and an
+`int` that quietly becomes negative past 2^63 violates the spirit of that even though it
+is technically defined.
+
+*Why over saturating:* clamping to `int64` bounds costs the same branch as trapping and
+additionally destroys associativity, so `(a + b) - b` stops being `a`. It also produces
+a wrong answer silently, with the same objection as wrapping.
+
+*Cost, stated plainly:* a branch per arithmetic opcode in the VM. That is the price of
+the guarantee, and a bytecode interpreter's dispatch overhead already dwarfs it. If
+profiling later shows it matters, the reversible move is an explicit wrapping-arithmetic
+builtin, not a change to `+`.
+
+*Phase 2 consequence:* only constant folding is affected. The runtime trap is Phase 3.
+
+### R6 — `let` / `mut` on locals → **not in v1** (2026-09-01)
+
+Bindings stay mutable by default. `const` remains the immutable form for compile-time
+values, and `mut` remains a marker on parameters and method receivers only.
+
+Immutability-by-default is the better default, and this is not a claim otherwise. It is
+deferred because it is **additive**: adding `let` later leaves every existing program
+meaning what it meant, whereas making bindings immutable now rewrites every example in
+this spec, `examples/tour.ymr`, and all conformance cases before a single line of the
+type checker exists. Same reasoning as R4 — take the reversible option first.
+
+*Implementation consequence:* the checker still carries a per-binding mutability flag,
+because `const`, non-`mut` parameters, and non-`mut` receivers are already immutable.
+The flag exists; in v1 plain locals simply always set it to mutable.
+
 ## Open questions
 
 Unresolved. Do not treat any of these as decided.
@@ -242,12 +280,6 @@ Currently `func main()`, exit code 0 on normal return, non-zero on panic. Should
 more attractive than it was. The legacy CLI's habit of always exiting 0 is the bug this
 needs to foreclose.
 
-### Q5 — Integer semantics
-
-`int` is 64-bit signed. Overflow behavior is **not decided**: wrap, trap, or saturate.
-Trapping is safest and matches "no undefined behavior"; it costs a branch per
-arithmetic op in the VM. Must be decided before the VM's arithmetic opcodes.
-
 ### Q6 — Data races on shared `array` / `map` between tasks
 
 Currently *unspecified* — the one hole in "no undefined behavior in safe code". Options:
@@ -259,10 +291,11 @@ making those types non-sendable so sharing is impossible. **Blocks Phase 5.**
 `main` returning does not wait for spawned tasks. Go's choice here is widely regarded as
 its worst concurrency decision.
 
-### Q8 — Immutability by default for locals?
+### Q12 — Are `as` and `default` reserved words or contextual identifiers?
 
-Bindings are currently mutable by default with no `let`/`mut` distinction.
-Immutability-by-default is the better default but changes every example in this spec.
+`as` (import alias) and `default` (a `select` case) are parsed as contextual identifiers,
+which chapter 01's keyword list does not mention. Either reserve them or document them as
+contextual. Found while implementing Phase 1. **Blocks nothing before Phase 6.**
 
 ## Relationship to the legacy implementation
 

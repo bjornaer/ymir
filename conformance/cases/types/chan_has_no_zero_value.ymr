@@ -1,0 +1,11 @@
+#@ case types/chan_has_no_zero_value
+#@ spec 02-types.md#zero-values-and-definite-assignment
+#@ compile-error
+#@ | chan
+
+module chan_has_no_zero_value
+
+func main() {
+    var c: chan[int]
+    close(c)
+}

@@ -198,6 +198,23 @@ func loadConfig(path: string) -> (Config, ?(IOError | ParseError)) {
 
 which is exactly equivalent to the explicit form written above.
 
+The **type of `try e`** is the callee's result type with the error position removed. Where
+one non-error result remains, `try e` is an ordinary single-valued expression and composes
+anywhere: `cfg := try parse(try readFile(path))`. Where several remain, `try e` is
+multi-valued and inherits the restriction on multi-valued calls from
+[chapter 04](04-expressions.md#calls) — it may appear only as the entire right-hand side
+of a destructuring assignment or a `return`:
+
+```ymr
+func split(s: string) -> (string, string, ?ParseError)
+
+head, tail := try split(line)     # legal
+print(try split(line))            # ERROR: multi-valued `try` nested in an expression
+```
+
+Where no non-error result remains — the callee returns only `?E` — `try e` produces no
+value and may stand alone as a statement.
+
 ### Rules
 
 - The enclosing function **MUST** have an error position, and the callee's error set

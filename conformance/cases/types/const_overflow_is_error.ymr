@@ -1,0 +1,12 @@
+#@ case types/const_overflow_is_error
+#@ spec 02-types.md#integer-overflow
+#@ compile-error
+#@ | overflow
+
+module const_overflow_is_error
+
+const BIG: int = 9223372036854775807 + 1
+
+func main() {
+    print(BIG)
+}

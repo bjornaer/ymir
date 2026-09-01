@@ -4,9 +4,9 @@
 where the project stands and what happens next. Update the *Status* and *Session log*
 sections whenever you do meaningful work.
 
-- **Last updated:** 2026-08-20
-- **Current phase:** Phase 1 — complete and merged (PR #1). Phase 2 not started.
-- **Blocking:** nothing. Q10 and Q11 are resolved (R3, R4); Q6 blocks Phase 5.
+- **Last updated:** 2026-09-01
+- **Current phase:** Phase 2 — type checker. In progress on `phase-2-typechecker`.
+- **Blocking:** nothing. R1–R6 are resolved; Q6 blocks Phase 5, Q4 blocks Phase 3.
 
 ---
 
@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 26 cases.
+conformance/          Executable form of the spec. run.py + 29 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -116,7 +116,7 @@ phase before its predecessor's criteria are met.
 - [x] Go tests for both packages, plus `TestConformanceCasesParse` as the exit gate
 - [x] CI: gofmt, vet, test, and a parse pass over every conformance case
 
-### Phase 2 — Type checker  ← START HERE
+### Phase 2 — Type checker  🚧 IN PROGRESS
 
 **What Phase 1 left you.** A parsed `*ast.File` with positions on every node, and
 `compiler/diag` for reporting. `ast.Type` is *syntax only* — what was written, not what
@@ -182,6 +182,28 @@ errors/unhandled_is_compile_error
 
 Add cases as you go — the suite is thin on the type system and should roughly double
 during this phase.
+
+**Milestones.** One self-contained commit each: builds, `go test ./... -count=1` green,
+`gofmt` and `go vet` clean, and this file updated in the same commit.
+
+- [x] **M0** — spec corrections + the illegal conformance case (2026-09-01)
+- [ ] **M1** — `compiler/types`: type representation, union normalization, identity,
+      assignability, linearity predicate, universe scope
+- [ ] **M2** — `ast.Walk`, `compiler/check` skeleton, `ymir check`, and the
+      `TestConformanceCasesCheck` gate with its expected-position table
+- [ ] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing)
+- [ ] **M4** — local inference (`:=` and `var x := e`) and assignability at every site
+- [ ] **M5** — expression typing, calls, composite literals, constant folding
+- [ ] **M6** — nullables and narrowing (N1–N6)
+- [ ] **M7** — `match` exhaustiveness over enums and unions
+- [ ] **M8** — error sets, `try`, unhandled errors
+- [ ] **M9** — returns on every path, `main`'s signature
+- [ ] **M10** — linearity L1–L6, CI `ymir check -q` gate, phase close
+
+**Position accuracy is enforced Go-side, not by `run.py`.** The runner checks only that
+each `compile-error` substring appears somewhere in stdout or stderr, and never checks
+line or column — a runtime failure printing the right word would pass it. The
+`compiler/check` conformance test carries the expected `line:column` per case.
 
 ### Phase 3 — Bytecode and VM, minimal slice
 
@@ -292,15 +314,15 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | Q2 | Is `Result[T,E]` in the stdlib alongside `(T, error)`? | Phase 6 | open, largely mooted by R1 |
 | Q3 | User-facing generics in v1? | Phase 2 | open |
 | Q4 | Does `main` return `int` or `error`? | Phase 3 | open |
-| Q5 | Integer overflow: wrap, trap, or saturate? | Phase 3 | open |
+| R5 | Integer overflow: wrap, trap, or saturate? | — | **resolved: traps** |
 | Q6 | Data races on shared `array`/`map` between tasks | **Phase 5** | open |
 | Q7 | Structured concurrency instead of Go's detached `spawn`? | Phase 5 | open |
-| Q8 | Immutability by default for locals (`let`/`mut`)? | Phase 2 | open |
+| R6 | Immutability by default for locals (`let`/`mut`)? | — | **resolved: not in v1** |
 | R3 | Should error-position nullability be written into the type? | — | **resolved: `?T`, general** |
 | R4 | Should error sets be inferred? | — | **resolved: explicit for now** |
 | Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
 
-R1–R4 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
+R1–R6 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
 reasoning and the rejected alternatives. Do not reopen them without reading that.
 
 ## 7. Standing rules
@@ -410,3 +432,35 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   narrowing), what is explicitly out of scope, and the 11 conformance cases that define
   done.
 - **Next session: read `PLAN.md`, then start Phase 2.** Nothing blocks it.
+
+### 2026-09-01 — Phase 2 M0: spec corrections before any checker code
+
+- Planned Phase 2 as eleven atomic milestones (M0–M10), listed above.
+- **R5 — integer overflow traps.** Overflow on `int` is a runtime panic; overflow in a
+  constant expression is a compile error, matching the existing const-division-by-zero
+  rule. Rejected wrapping and saturating: both are silently wrong answers, the defect
+  class the rewrite exists to remove. Costs a branch per arithmetic opcode in Phase 3.
+- **R6 — no `let`/`mut` on locals in v1.** Immutability-by-default is the better default
+  but adding `let` later is additive, whereas doing it now rewrites every example in the
+  spec before a line of the checker exists. Same reversibility argument as R4.
+- Six spec defects found while planning and fixed here, each one otherwise a place the
+  checker would have invented semantics:
+  - `errors/error_set_subset` matched an un-narrowed `?E` with no `nil` arm, which 05
+    and 06 both make a compile error. **The case was wrong, not the rule** — a `nil` arm
+    was added; `report` is never called with `nil`, so the asserted stdout is unchanged.
+  - `error` was listed as a primitive with zero value `nil`, contradicting 06 (it is a
+    predeclared enum) and 02 §Enums (enums have no `nil`). Row removed.
+  - `any` was still in 01's predeclared identifiers though 02 says there is no `any`.
+  - Assignability's two exceptions were never stated to **compose**, though the spec's
+    own examples require it. Now written as four rules.
+  - `chan` and `func` had zero value `nil`, which N3 forbids. They now have **no** zero
+    value; `?chan[T]` is the form that may be absent.
+  - "Returns on every path" had no definition. 05 now enumerates the terminating
+    statements; an `if` with no `else` never terminates.
+  - N6 did not say whether the `else` branch narrows. It does, and 02 has the table.
+  - The type of a multi-valued `try` was unstated. 06 now says it inherits ch04's
+    restriction on multi-valued calls.
+- Conformance: 29 cases, up from 26. Added `types/const_overflow_is_error`,
+  `types/chan_has_no_zero_value`, `decl/no_zero_value_needs_init` — the three new rules
+  above that no existing case covered.
+- **Next:** M1, `compiler/types`. Nothing blocks it.

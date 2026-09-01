@@ -85,9 +85,10 @@ program does not build. Case `decl/undefined_variable` asserts this.
 ### Mutability
 
 Bindings are mutable by default. `const` is the immutable form for compile-time
-values. There is no `let`/`mut` distinction on locals in v1. *(Open: whether to add
-one. Immutability-by-default is the better default but changes every example in this
-spec.)*
+values. There is no `let`/`mut` distinction on locals in v1; `mut` marks a parameter or
+a method receiver and nothing else. *(Resolved question R6. Immutability-by-default is
+the better default, but adding `let` later is additive and doing it now would rewrite
+every example in this spec.)*
 
 ## Scope
 
@@ -98,6 +99,14 @@ Ymir is **lexically scoped**, with these levels, innermost first:
 3. File scope — imports.
 4. Module scope — that module's `func`, `struct`, `enum`, `const`, `var`.
 5. Universe scope — predeclared type names and builtins.
+
+**Module-scope declarations are visible regardless of textual order.** A `func` may call
+one declared below it, and a `struct` field may name a type declared later in the file.
+File scope holds only imports, so resolution inside a function body proceeds block chain
+→ parameters → this file's imports → the whole module → universe. *(This is why a
+checker collects module-scope names in a pre-pass before checking any body. Local
+bindings are the opposite: they are visible only after their declaration, see §Variables
+below.)*
 
 A module-level `var` is visible and assignable inside every function in that module.
 

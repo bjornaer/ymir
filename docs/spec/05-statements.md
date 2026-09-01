@@ -182,6 +182,42 @@ return 0, Error("bad") # the fallible idiom
 A function with a declared return type **MUST** return on every path. Falling off the
 end is a compile error.
 
+### Returning on every path
+
+A function body satisfies that rule when its block **terminates**. A statement
+terminates if it is one of:
+
+- a `return`;
+- a call to `panic(...)`;
+- a block whose last statement terminates;
+- an `if` that has an `else`, where both the `then` block and the `else` branch
+  terminate — an `if` with no `else` never terminates, however its branch ends;
+- a `match` in which every arm's body terminates. Exhaustiveness (below) already
+  guarantees the arms cover the scrutinee, so no fall-through case remains;
+- a `while true { ... }` whose body contains no `break` that leaves it.
+
+Nothing else terminates. In particular a `for`, a `while` with any other condition, and
+a loop that can `break` do not, because the checker does not prove they run at all.
+
+```ymr
+func classify(n: int) -> string {
+    if n > 0 {
+        return "positive"
+    } else {
+        return "non-positive"
+    }
+}                                  # terminates: if/else, both branches return
+
+func broken(n: int) -> string {
+    if n > 0 {
+        return "positive"
+    }
+}                                  # ERROR: missing return at end of function
+```
+
+*(Legacy returned "the last evaluated value" from a function that fell off the end,
+which made a function's result depend on the shape of its final statement.)*
+
 ## Statement-level expressions
 
 Only calls and channel operations may stand alone as statements. `x + 1` as a

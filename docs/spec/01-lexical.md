@@ -77,7 +77,7 @@ discard   gate      measure   qubit     reset
 ```
 
 **Type names are not keywords.** `int`, `float`, `bool`, `string`, `complex`, `error`,
-`array`, `map`, `tuple`, `chan`, `any` are predeclared identifiers in the universe
+`array`, `map`, `tuple`, `matrix`, `chan` are predeclared identifiers in the universe
 scope. They can be shadowed by a local binding, which is legal but a lint warning.
 *(The legacy lexer made these keywords, which made `func str(...)` unparseable.)*
 
