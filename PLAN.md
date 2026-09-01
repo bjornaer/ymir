@@ -60,13 +60,13 @@ ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Ph
 
 compiler/token/       EXISTS. Token kinds, closed operator set, positions.
 compiler/lexer/       EXISTS. Maximal munch, escape decoding. Has tests.
-compiler/ast/         EXISTS. Syntax tree + a tree printer.
+compiler/ast/         EXISTS. Syntax tree, tree printer, Walk/Inspect.
 compiler/parser/      EXISTS. Recursive descent over chapter 09. Has tests.
 compiler/diag/        EXISTS. Errors with position, source excerpt, caret.
-cmd/ymir/             EXISTS. CLI; `parse` is the only subcommand so far.
+cmd/ymir/             EXISTS. CLI; `parse` and `check`.
 
 compiler/types/       EXISTS. Semantic types, identity, assignability, universe.
-compiler/check/       PHASE 2. Scope resolution, inference, assignability.
+compiler/check/       EXISTS. Skeleton + the conformance gate. Rules land M3-M10.
 compiler/bytecode/    PHASE 3.
 vm/                   PHASE 3.
 
@@ -189,8 +189,8 @@ during this phase.
 - [x] **M0** — spec corrections + the illegal conformance case (2026-09-01)
 - [x] **M1** — `compiler/types`: type representation, union normalization, identity,
       assignability, linearity predicate, universe scope (2026-09-01)
-- [ ] **M2** — `ast.Walk`, `compiler/check` skeleton, `ymir check`, and the
-      `TestConformanceCasesCheck` gate with its expected-position table
+- [x] **M2** — `ast.Walk`, `compiler/check` skeleton, `ymir check`, and the
+      `TestConformanceCasesCheck` gate with its expected-position table (2026-09-01)
 - [ ] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing)
 - [ ] **M4** — local inference (`:=` and `var x := e`) and assignability at every site
 - [ ] **M5** — expression typing, calls, composite literals, constant folding
@@ -488,3 +488,31 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - `HasZeroValue` encodes the M0 change: `chan` and `func` have none.
 - 44 assertions across 10 table-driven tests. **Next:** M2, the walker, the `check`
   skeleton, `ymir check`, and the conformance gate.
+
+### 2026-09-01 — Phase 2 M2: walker, checker skeleton, and the gate
+
+- `ast.Walk` / `ast.Inspect`. There was no traversal in the repository; the
+  printer's type switch was the only thing that knew which node has which
+  children, and a second drifting copy inside `check` is how a checker starts
+  silently skipping a construct. `TestWalkHandlesEveryNodeKind` greps `ast.go`
+  for `^type X struct` and fails if any of the 55 node types is missing from the
+  table, so adding a node without wiring the walk is a test failure rather than
+  a rule that quietly stops being enforced.
+- `compiler/check` skeleton: `Info` (the side table — `Types` keyed by
+  `ast.Expr`, `Defs` and `Uses` keyed by `*ast.Ident`), `Object`, `ObjKind`, and
+  `Check(file, name, src) (*Info, *diag.List)`. It checks nothing yet; M3
+  onward hang off `checkFile`.
+- `ymir check [-q] <file>`, sharing `finish` and a new `readSource` with
+  `parse`. It refuses to check a tree the parser recovered in, because the
+  synthetic `_`-named nodes would produce confident nonsense.
+- **`TestConformanceCasesCheck` is the real Phase 2 gate.** `run.py` checks only
+  that a `compile-error` substring appears somewhere in the output — no line, no
+  column, and no way to tell a compile error from a runtime failure that printed
+  the right word. This test carries the expected `line:column` per case, and
+  asserts the other half too: every case *without* a `compile-error` header must
+  check clean, so a false positive fails as loudly as a missed error.
+- A compile-error case absent from the expectation table reports as *pending*
+  rather than failing, so `go test ./compiler/check -v` is the Phase 2 progress
+  report. Today: 16 pending, 13 checking clean.
+- **Next:** M3, scope resolution. `decl/undefined_variable` and
+  `scope/block_scope` are the two cases it turns green.
