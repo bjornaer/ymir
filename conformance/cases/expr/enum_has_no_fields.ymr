@@ -1,0 +1,16 @@
+#@ case expr/enum_has_no_fields
+#@ spec 02-types.md#enums
+#@ compile-error
+#@ | inspected only by match
+
+module enum_has_no_fields
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func main() {
+    var s: Shape = Point
+    print(s.Circle)
+}

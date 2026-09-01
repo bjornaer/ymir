@@ -1,0 +1,21 @@
+#@ case expr/method_call
+#@ spec 02-types.md#structs
+#@ exit 0
+#@ stdout
+#@ | 5
+
+module method_call
+
+struct Point {
+    x: int,
+    y: int,
+}
+
+func (p: Point) sum() -> int {
+    return p.x + p.y
+}
+
+func main() {
+    p := Point{x: 2, y: 3}
+    print(p.sum())
+}

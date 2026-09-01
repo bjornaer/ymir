@@ -70,7 +70,14 @@ var expected = map[string][]want{
 	"types/modulo_only_on_int":      {{11, 13, []string{"only on int", "float"}}},
 	"decl/cannot_infer_from_nil":    {{9, 5, []string{"cannot infer a type", "nil"}}},
 
-	// M5 — calls, composite literals, indexing, selection.
+	// M5 — calls, method sets, selection, return values.
+	"expr/call_arity_mismatch":      {{13, 16, []string{"add takes 2 arguments", "got 1"}}},
+	"expr/call_argument_type":       {{13, 18, []string{"cannot use float as int"}}},
+	"expr/multi_valued_call_nested": {{13, 11, []string{"multi-valued call", "divmod"}}},
+	"expr/enum_has_no_fields":       {{15, 13, []string{"inspected only by match", "Shape"}}},
+	"errors/error_set_not_superset": {{17, 15, []string{"?(IOError | ParseError)", "?IOError"}}},
+
+	// M6 — composite literals and indexing.
 	// M6 — nullables and narrowing.
 	// M7 — match exhaustiveness.
 	// M8 — error sets, try, unhandled errors.

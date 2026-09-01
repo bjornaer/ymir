@@ -27,9 +27,9 @@ func (c *checker) assignableTo(pos token.Position, src, dst types.Type, what str
 	case isNilType(src):
 		c.hint(pos, msg,
 			"nil belongs only to a nullable type; write ?"+dst.String())
-	case types.IsErrorSet(src) && types.IsErrorSet(types.Underlying(dst)):
+	case types.IsErrorSet(types.Underlying(src)) && types.IsErrorSet(types.Underlying(dst)):
 		c.hint(pos, msg,
-			"an error set is assignable only to a superset of itself")
+			"an error set is assignable only to a superset of itself; widen the declared set")
 	case types.Identical(types.Underlying(dst), src):
 		c.hint(pos, msg, "a "+dst.String()+" may be absent; "+src.String()+" is not the same type")
 	case types.Identical(dst, types.Underlying(src)):

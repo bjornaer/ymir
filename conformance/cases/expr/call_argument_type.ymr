@@ -1,0 +1,14 @@
+#@ case expr/call_argument_type
+#@ spec 04-expressions.md#calls
+#@ compile-error
+#@ | cannot use float as int
+
+module call_argument_type
+
+func double(n: int) -> int {
+    return n * 2
+}
+
+func main() {
+    print(double(1.5))
+}

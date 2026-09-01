@@ -37,13 +37,17 @@ func (c *checker) expr(scope *Scope, e ast.Expr) types.Type {
 // M8. Callers must not report an arity mismatch while it is false, or every
 // `a, b := f()` in the suite becomes a false positive.
 func (c *checker) multiExpr(scope *Scope, e ast.Expr) (values []types.Type, known bool) {
-	switch e.(type) {
-	case *ast.CallExpr, *ast.TryExpr:
-		return []types.Type{c.expr(scope, e)}, false
+	switch x := e.(type) {
+	case *ast.CallExpr:
+		rs := c.call(scope, x)
+		c.info.Types[e] = firstOrInvalid(rs)
+		return rs, true
+	case *ast.TryExpr:
+		return c.tryResults(scope, x), true
 	case *ast.IndexExpr:
 		// `v, ok := m[k]` is the two-value map form (chapter 04 §Indexing).
 		// Whether this index is one of those depends on the base's type, which
-		// arrives with indexing in M5.
+		// arrives with indexing in M6.
 		return []types.Type{c.expr(scope, e)}, false
 	}
 	return []types.Type{c.expr(scope, e)}, true
@@ -78,15 +82,28 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 		return c.binaryExpr(scope, x)
 
 	case *ast.CallExpr:
-		c.callee(scope, x.Fun)
-		for _, a := range x.Args {
-			c.expr(scope, a)
+		rs := c.call(scope, x)
+		switch len(rs) {
+		case 1:
+			return rs[0]
+		case 0:
+			c.hint(e.Pos(),
+				calleeName(x.Fun)+" returns no values, so it cannot be used as one",
+				"call it as a statement on its own line")
+			return types.Invalid
+		default:
+			// "A multi-valued call may appear only as the entire right-hand
+			// side of a destructuring assignment or a return." (chapter 04)
+			c.hint(e.Pos(),
+				"multi-valued call in expression position: "+calleeName(x.Fun)+
+					" returns "+plural(len(rs), "value"),
+				"destructure it first: a, b := "+calleeName(x.Fun)+"(...)")
+			return types.Invalid
 		}
-		return types.Invalid // M5
 
 	case *ast.TryExpr:
-		c.expr(scope, x.Call)
-		return types.Invalid // M8
+		rs := c.tryResults(scope, x)
+		return firstOrInvalid(rs)
 
 	case *ast.IndexExpr:
 		c.expr(scope, x.X)
@@ -130,11 +147,39 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr) types.Type {
 
 	case *ast.FuncLit:
 		sig := c.litSignature(scope, x)
-		c.funcBody(scope, nil, nil, x.Params, sig.Params, x.Body)
+		c.funcBody(scope, nil, nil, x.Params, sig.Params, sig.Results, x.Body)
 		return sig
 	}
 
 	c.errorf(e.Pos(), "internal: unchecked expression %T", e)
+	return types.Invalid
+}
+
+// tryResults types `try e` as the callee's results with the error position
+// removed (chapter 06 §Propagation).
+//
+// The rules around it — that the enclosing function must have an error position,
+// that the callee's set must be a subset of it, and that every other result must
+// have a zero value — are M8. This computes only the shape, which the clean
+// cases need in order to stay clean.
+func (c *checker) tryResults(scope *Scope, x *ast.TryExpr) []types.Type {
+	call, ok := x.Call.(*ast.CallExpr)
+	if !ok {
+		// The parser already requires a call, so this is defensive.
+		c.expr(scope, x.Call)
+		return []types.Type{types.Invalid}
+	}
+	rs := c.call(scope, call)
+	if len(rs) == 0 {
+		return nil
+	}
+	return rs[:len(rs)-1]
+}
+
+func firstOrInvalid(ts []types.Type) types.Type {
+	if len(ts) == 1 {
+		return ts[0]
+	}
 	return types.Invalid
 }
 
@@ -221,27 +266,8 @@ func (c *checker) variant(id *ast.Ident) *Object {
 	return cands[0]
 }
 
-// callee resolves the function part of a call.
-//
-// A callee is an arbitrary expression — `fs[0](1)`, `get()()`, `obj.method()`,
-// `IOError.NotFound(p)` — so it goes through the ordinary expression path,
-// except that a bare type name here is a conversion or a constructor rather
-// than a misuse.
-func (c *checker) callee(scope *Scope, fun ast.Expr) {
-	if id, ok := fun.(*ast.Ident); ok {
-		if o, _ := scope.LookupParent(id.Name); o != nil && o.Kind == TypeName {
-			// `float(x)`, `int(x)`, `qubit()`. The conversion's arity and
-			// argument type are M5.
-			c.info.Uses[id] = o
-			c.info.Types[id] = types.Invalid
-			return
-		}
-	}
-	c.expr(scope, fun)
-}
-
-// selector resolves `x.y`, which is three different things depending on x:
-// a module member, an enum variant, or a field or method.
+// selector resolves `x.y`, which is four different things depending on x:
+// a module member, a qualified enum variant, a struct field, or a method value.
 func (c *checker) selector(scope *Scope, s *ast.SelectorExpr) types.Type {
 	if id, ok := s.X.(*ast.Ident); ok {
 		if o, _ := scope.LookupParent(id.Name); o != nil {
@@ -255,20 +281,68 @@ func (c *checker) selector(scope *Scope, s *ast.SelectorExpr) types.Type {
 				return types.Invalid
 
 			case TypeName:
-				// `IOError.NotFound` — a qualified enum variant. The variant
-				// name is not a scope lookup.
+				// `IOError.NotFound` — a qualified enum variant, used as a
+				// value rather than constructed. Only a payload-free variant
+				// can be one.
 				c.info.Uses[id] = o
-				if named, isNamed := o.Type.(*types.Named); isNamed && named.Kind == types.Enum {
-					if named.LookupVariant(s.Sel.Name) == nil {
-						c.errorf(s.Sel.Pos(), "enum %s has no variant %s", named.Name, s.Sel.Name)
-					}
+				named, isNamed := o.Type.(*types.Named)
+				if !isNamed || named.Kind != types.Enum {
+					c.errorf(s.Sel.Pos(), "%s is a type; it has no member %s", id.Name, s.Sel.Name)
+					return types.Invalid
 				}
-				return types.Invalid // M5 gives it the enum's type
+				v := named.LookupVariant(s.Sel.Name)
+				if v == nil {
+					c.errorf(s.Sel.Pos(), "enum %s has no variant %s", named.Name, s.Sel.Name)
+					return types.Invalid
+				}
+				if len(v.Payload) > 0 {
+					c.hint(s.Sel.Pos(),
+						named.Name+"."+v.Name+" carries "+plural(len(v.Payload), "value")+
+							", so it must be constructed",
+						"write "+named.Name+"."+v.Name+"(...)")
+					return types.Invalid
+				}
+				return named
 			}
 		}
 	}
 
-	// A field or a method. Both need the receiver's type, so M5.
-	c.expr(scope, s.X)
+	recv := c.expr(scope, s.X)
+	if types.IsInvalid(recv) {
+		return types.Invalid
+	}
+
+	// A ?T must be narrowed before its fields or methods are reachable (N4).
+	if n, isNullable := recv.(*types.Nullable); isNullable {
+		c.hint(s.Sel.Pos(),
+			"cannot select "+s.Sel.Name+" on "+recv.String()+", which may be nil",
+			"narrow it first: inside `if x != nil` the checker knows it is "+n.Elem.String())
+		return types.Invalid
+	}
+
+	named, isNamed := recv.(*types.Named)
+	if !isNamed {
+		c.errorf(s.Sel.Pos(), "%s has no field or method %s", recv, s.Sel.Name)
+		return types.Invalid
+	}
+
+	if named.Kind == types.Enum {
+		// "Enum values are inspected only by match. There is no field access,
+		// no cast, and no 'is this variant' predicate." (chapter 02 §Enums)
+		c.hint(s.Sel.Pos(),
+			"an enum value has no fields; "+named.Name+" is inspected only by match",
+			"write `match x { "+s.Sel.Name+" => ... }`")
+		return types.Invalid
+	}
+
+	if f := named.LookupField(s.Sel.Name); f != nil {
+		return f.Type
+	}
+	if m := c.lookupMethod(named, s.Sel.Name); m != nil {
+		// A method value. Chapter 03 makes functions first class, so this is a
+		// func with the receiver already bound.
+		return m.sig
+	}
+	c.errorf(s.Sel.Pos(), "%s has no field or method %s", named.Name, s.Sel.Name)
 	return types.Invalid
 }

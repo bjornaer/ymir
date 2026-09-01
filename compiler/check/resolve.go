@@ -41,6 +41,7 @@ func (c *checker) checkFile(file *ast.File) {
 	c.resolveTypeBodies(fileScope, file)
 	c.indexVariants(file)
 	c.collectValues(fileScope, module, file)
+	c.collectMethods(file)
 	c.checkBodies(fileScope, file)
 }
 
@@ -295,11 +296,11 @@ func (c *checker) checkBodies(fileScope *Scope, file *ast.File) {
 			continue
 		}
 		sig := c.sigs[x]
-		var params []types.Type
+		var params, results []types.Type
 		if sig != nil {
-			params = sig.Params
+			params, results = sig.Params, sig.Results
 		}
-		c.funcBody(fileScope, x.Recv, c.recvs[x], x.Params, params, x.Body)
+		c.funcBody(fileScope, x.Recv, c.recvs[x], x.Params, params, results, x.Body)
 	}
 }
 
@@ -308,7 +309,13 @@ func (c *checker) checkBodies(fileScope *Scope, file *ast.File) {
 // paramTypes are the types already resolved from the signature. Resolving them
 // a second time here would report every bad annotation twice, once from the
 // signature pass and once from the body pass.
-func (c *checker) funcBody(outer *Scope, recv *ast.Param, recvType types.Type, params []*ast.Param, paramTypes []types.Type, body *ast.BlockStmt) {
+func (c *checker) funcBody(outer *Scope, recv *ast.Param, recvType types.Type, params []*ast.Param, paramTypes []types.Type, results []types.Type, body *ast.BlockStmt) {
+	// A function literal nests inside its enclosing function, so the result
+	// list is saved and restored rather than assigned.
+	savedResults, savedLoop := c.curResults, c.loopDepth
+	c.curResults, c.loopDepth = results, 0
+	defer func() { c.curResults, c.loopDepth = savedResults, savedLoop }()
+
 	scope := NewScope(outer, FuncScope)
 	if recv != nil {
 		c.declareParam(scope, recv, recvType)
@@ -356,7 +363,7 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 		c.block(scope, x)
 
 	case *ast.ExprStmt:
-		c.expr(scope, x.X)
+		c.exprStatement(scope, x.X)
 
 	case *ast.VarDecl:
 		// The initializer is checked before the name is bound, so `var x := x`
@@ -408,9 +415,7 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 		c.matchStmt(scope, x)
 
 	case *ast.ReturnStmt:
-		for _, r := range x.Results {
-			c.expr(scope, r)
-		}
+		c.returnStmt(scope, x)
 
 	case *ast.BranchStmt:
 		// "Legal only inside a loop body, applying to the innermost enclosing
@@ -420,7 +425,7 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 		}
 
 	case *ast.SpawnStmt:
-		c.expr(scope, x.Call)
+		c.exprStatement(scope, x.Call)
 
 	case *ast.SendStmt:
 		c.expr(scope, x.Chan)
@@ -442,6 +447,87 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 	default:
 		c.errorf(s.Pos(), "internal: unchecked statement %T", s)
 	}
+}
+
+// returnStmt checks a return against the enclosing function's declared results.
+//
+// Whether every path returns is a separate question, answered in M9. This is
+// only about the values a return that does happen produces.
+func (c *checker) returnStmt(scope *Scope, x *ast.ReturnStmt) {
+	want := c.curResults
+
+	if len(x.Results) == 0 {
+		if len(want) > 0 {
+			c.hint(x.Keyword,
+				"bare return in a function declared to return "+plural(len(want), "value"),
+				"return "+describeResults(want))
+		}
+		return
+	}
+
+	if len(want) == 0 {
+		for _, r := range x.Results {
+			c.expr(scope, r)
+		}
+		c.errorf(x.Results[0].Pos(), "this function declares no results, so return takes none")
+		return
+	}
+
+	var got []types.Type
+	if len(x.Results) == 1 && len(want) > 1 {
+		// `return divmod(a, b)` — a multi-valued call is legal as the whole
+		// return (chapter 04 §Calls).
+		values, known := c.multiExpr(scope, x.Results[0])
+		got = values
+		if !known {
+			return
+		}
+	} else {
+		for _, r := range x.Results {
+			got = append(got, c.expr(scope, r))
+		}
+	}
+
+	if len(got) != len(want) {
+		c.errorf(x.Keyword, "return has %s, want %s",
+			plural(len(got), "value"), plural(len(want), "value"))
+		return
+	}
+	for i, g := range got {
+		pos := x.Keyword
+		if i < len(x.Results) {
+			pos = x.Results[i].Pos()
+		}
+		c.assignableTo(pos, g, want[i], "the return")
+	}
+}
+
+// describeResults renders a result list for a hint.
+func describeResults(ts []types.Type) string {
+	out := ""
+	for i, t := range ts {
+		if i > 0 {
+			out += ", "
+		}
+		out += "a " + t.String()
+	}
+	return out
+}
+
+// exprStatement checks an expression standing alone as a statement, where any
+// number of results is fine — including none, which is how a void-in-effect
+// function is called.
+//
+// The parser already rejects everything but a call here (chapter 05
+// §Statement-level expressions). Whether an unused *error* result is legal is
+// chapter 06's rule and lands in M8.
+func (c *checker) exprStatement(scope *Scope, e ast.Expr) {
+	if call, ok := e.(*ast.CallExpr); ok {
+		rs := c.call(scope, call)
+		c.info.Types[e] = firstOrInvalid(rs)
+		return
+	}
+	c.expr(scope, e)
 }
 
 // condition checks a control-flow condition.

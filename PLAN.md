@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 47 cases.
+conformance/          Executable form of the spec. run.py + 52 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -194,12 +194,13 @@ during this phase.
 - [x] **M3** — scope resolution (five levels, module pre-pass, imports, shadowing) (2026-09-01)
 - [x] **M4** — literals, operators, local inference, assignability, constant
       folding (2026-09-01)
-- [ ] **M5** — calls, composite literals, indexing, selection, methods
-- [ ] **M6** — nullables and narrowing (N1–N6)
-- [ ] **M7** — `match` exhaustiveness over enums and unions
-- [ ] **M8** — error sets, `try`, unhandled errors
-- [ ] **M9** — returns on every path, `main`'s signature
-- [ ] **M10** — linearity L1–L6, CI `ymir check -q` gate, phase close
+- [x] **M5** — calls, method sets, selection, return values (2026-09-01)
+- [ ] **M6** — composite literals and indexing
+- [ ] **M7** — nullables and narrowing (N1–N6)
+- [ ] **M8** — `match` exhaustiveness over enums and unions
+- [ ] **M9** — error sets, `try`, unhandled errors
+- [ ] **M10** — returns on every path, `main`'s signature
+- [ ] **M11** — linearity L1–L6, CI `ymir check -q` gate, phase close
 
 **Position accuracy is enforced Go-side, not by `run.py`.** The runner checks only that
 each `compile-error` substring appears somewhere in stdout or stderr, and never checks
@@ -596,3 +597,32 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - 5 new cases, 47 total, up from 42.
 - **Next:** M5, calls and composite literals. That is what unblocks the two-value
   map form, multi-valued call arity, and most of what remains.
+
+### 2026-09-01 — Phase 2 M5: calls, method sets, selection, returns
+
+- `c.call` sorts out what a callee actually is — a builtin, a numeric
+  conversion, an enum variant (bare or qualified), a module member, a method, or
+  an ordinary function value — then checks exact arity and assignability.
+  Chapter 04 allows no default parameters, no variadic user functions and no
+  keyword arguments, so this is deliberately rigid.
+- Method sets: one flat table per named type. Methods are not virtual, so that
+  is the entire mechanism. A `mut` receiver requires a mutable base.
+- Selection now distinguishes a struct field, a method value, a qualified
+  variant, and a module member. An enum has no field access at all — it "is
+  inspected only by match" — and the diagnostic says so.
+- Return values are checked against the declared results, including the
+  multi-valued-call-as-whole-return form. That is what turns
+  `errors/error_set_not_superset` green, and it exercises the rule the whole
+  error design rests on: a narrower set flows out through a wider declared one
+  and not the reverse.
+- `try` gets its *shape* here — the callee's results minus the error position —
+  because without it every `data := try readFile(path)` in the suite reads as a
+  multi-valued call in expression position. Its rules stay in M9.
+- Quantum builtins report "not implemented yet" rather than typing. Allowing
+  `qubit()` would let a program construct a linear value the linearity checker
+  cannot yet track, which is worse than refusing.
+- **21 conformance cases green**, 6 pending. 5 new cases, 52 total.
+- Milestone list re-numbered: composite literals and indexing became their own
+  milestone (M6), since calls alone was already a large change.
+- **Next:** M6, composite literals and indexing. That unblocks the two-value map
+  form and lets the M5 tests stop annotating what they should be inferring.

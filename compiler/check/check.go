@@ -139,6 +139,10 @@ type checker struct {
 	// labels in v1 (chapter 05 §break and continue).
 	loopDepth int
 
+	// curResults is the declared result list of the function whose body is
+	// being checked, saved and restored around a function literal.
+	curResults []types.Type
+
 	// sigs and recvs hold each function's resolved signature and receiver
 	// type, computed once in the declaration pass. The body pass reads them
 	// rather than resolving the annotations again, which would report every
@@ -155,6 +159,10 @@ type checker struct {
 	// overflow and division by zero, so running it twice on the same node
 	// would report them twice.
 	folds map[ast.Expr]foldResult
+
+	// methods holds each named type's method set. Methods are not virtual, so
+	// a flat table per type is the whole mechanism (chapter 02 §Structs).
+	methods map[*types.Named]map[string]*method
 
 	// variants indexes this module's enum variants by their bare name, so
 	// `Circle(1.0)` resolves without writing `Shape.Circle(1.0)`. A name
@@ -178,6 +186,7 @@ func Check(file *ast.File, name, src string) (*Info, *diag.List) {
 		sigs:      map[*ast.FuncDecl]*types.Func{},
 		recvs:     map[*ast.FuncDecl]types.Type{},
 		variants:  map[string][]*Object{},
+		methods:   map[*types.Named]map[string]*method{},
 		constVals: map[*Object]constVal{},
 		folds:     map[ast.Expr]foldResult{},
 	}
