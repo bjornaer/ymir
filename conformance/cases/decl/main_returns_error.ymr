@@ -1,0 +1,24 @@
+#@ case decl/main_returns_error
+#@ spec 03-declarations.md#main
+#@ exit 1
+#@ stdout
+#@ | starting
+
+module main_returns_error
+
+enum IOError {
+    NotFound(string),
+}
+
+func readFile(path: string) -> (string, ?IOError) {
+    return "", IOError.NotFound(path)
+}
+
+func main() -> ?error {
+    print("starting")
+    _, err := readFile("/nope")
+    if err != nil {
+        return Error("could not start")
+    }
+    return nil
+}

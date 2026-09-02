@@ -222,5 +222,24 @@ where `func main()` ran under one engine and was a silent no-op under the other
 because the two disagreed about whether top-level statements or `main` was the entry
 point. Case `decl/main_entry_point` asserts `main` runs.
 
-Process exit code is 0 on normal return from `main`, and non-zero on panic. *(Open
-question Q4: whether `main` should return `int` or `error`.)*
+`main` has one of exactly two forms (resolved question R9):
+
+```ymr
+func main() { ... }
+func main() -> ?error { ... }
+```
+
+Any other result list is a compile error. The second form exists so `try` is usable in the
+entry point, which is the one function that calls everything else.
+
+Process exit code:
+
+| Outcome | Exit code |
+|---|---|
+| `func main()` returns | 0 |
+| `func main() -> ?error` returns `nil` | 0 |
+| `func main() -> ?error` returns an error | **1**, with `str(err)` written to stderr |
+| either form panics | non-zero, with the message and a stack trace on stderr |
+
+*(Legacy's CLI exited 0 unconditionally, which made its CI structurally incapable of
+failing. Every path out of `main` that is not a success **MUST** exit non-zero.)*

@@ -142,7 +142,16 @@ func TestMainSignature(t *testing.T) {
 	mustCheckClean(t, "module t\n\nfunc main() {\n    print(1)\n}\n")
 
 	mustReport(t, "module t\n\nfunc main(n: int) {\n    print(n)\n}\n", "main takes no parameters")
-	mustReport(t, "module t\n\nfunc main() -> int {\n    return 0\n}\n", "main declares no results")
+
+	// R9: exactly two forms, and nothing else.
+	mustCheckClean(t, "module t\n\nfunc main() -> ?error {\n    return nil\n}\n")
+	mustCheckClean(t, "module t\n\nenum IOError { NotFound(string), }\n\nfunc main() -> ?IOError {\n    return nil\n}\n")
+	mustReport(t, "module t\n\nfunc main() -> int {\n    return 0\n}\n",
+		"main returns either nothing or an error set")
+	mustReport(t, "module t\n\nfunc main() -> ?int {\n    return nil\n}\n",
+		"main returns either nothing or an error set")
+	mustReport(t, "module t\n\nfunc main() -> (int, ?error) {\n    return 0, nil\n}\n",
+		"not 2 values")
 
 	// "main is invoked automatically; it MUST NOT be called explicitly."
 	mustReport(t, "module t\n\nfunc again() {\n    main()\n}\n\nfunc main() {\n    print(1)\n}\n",

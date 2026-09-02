@@ -5,9 +5,9 @@ where the project stands and what happens next. Update the *Status* and *Session
 sections whenever you do meaningful work.
 
 - **Last updated:** 2026-09-02
-- **Current phase:** Phase 2 — **complete**. Phase 3 (bytecode and VM) not started.
-- **Blocking:** nothing. R1–R8 are resolved. Q4 and Q5 are settled; Q6 blocks Phase 5,
-  Q14 blocks the `quantum/` cases and Phase 7.
+- **Current phase:** Phase 3 — bytecode and VM. In progress on `phase-3-bytecode-vm`.
+- **Blocking:** nothing. R1–R10 are resolved. Q6 blocks Phase 5; Q14 blocks the
+  `quantum/` cases and Phase 7.
 
 ---
 
@@ -55,7 +55,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 85 cases.
+conformance/          Executable form of the spec. run.py + 87 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -228,16 +228,50 @@ re-deriving them. `ymir check <file>` exits 0 or reports with position and excer
 tagged representation or boxing — flagged since R3 and still undecided. It is a VM
 representation choice, not a semantic one; chapter 02 is normative on meaning only.
 
-- Deliverables: `compiler/bytecode`, `vm/`. Enough for: `main`, `print`, `int` and
-  `float` arithmetic, `if`/`while`, function calls, module-level `var`.
+- Deliverables: `compiler/bytecode`, `vm/`, and `ymir run`. Enough for: `main`,
+  `print`, `int` and `float` arithmetic, `if`/`while`, function calls, strings,
+  `panic`, and module-level `var`.
 - One engine. No fallback path, ever. If the VM cannot do something, that is a
-  compile error, not a silent second implementation.
-- **Done when:** `decl/`, `scope/`, `lexical/`, `types/`, `expr/`, `control/` pass.
+  compile error, not a silent second implementation. `ymir run` type-checks before
+  it executes, so nothing the checker rejects can ever run.
+
+**The exit criterion was corrected on 2026-09-02.** It used to read "`decl/`,
+`scope/`, `lexical/`, `types/`, `expr/`, `control/` pass", which was written against
+a 26-case suite. The suite is now 85, and those six categories contain 15 run-cases
+needing structs, methods, enums, `match`, arrays, maps, string concatenation, `str()`,
+complex arithmetic, numeric conversions and runtime nullables — which is **Phase 4's
+feature list**. The phase boundary moved, not the cases: nothing was weakened, no
+assertion relaxed, and the eight run-cases that moved are covered by Phase 4's
+criterion, which already requires every non-`concurrency`, non-`quantum` case to pass.
+
+- **Done when**, under `python3 conformance/run.py --ymir "./bin/ymir run"`:
+  - every `compile-error` case in the suite exits non-zero with its asserted message,
+    which follows from `ymir run` type-checking first; and
+  - these seven run-cases produce their asserted stdout at exit 0:
+    `decl/main_entry_point`, `decl/main_returns_error`, `scope/forward_reference`,
+    `scope/module_var_mutation`, `scope/shadowing`, `lexical/operator_munch`,
+    `lexical/string_escapes`, `types/float_literal_arithmetic`.
+
+**Milestones.** One self-contained commit each.
+
+- [x] **M1** — record R9 and R10, correct the phase boundary, accept `main() -> ?error` (2026-09-02)
+- [ ] **M2** — `compiler/bytecode`: ops, chunk, line table, disassembler
+- [ ] **M3** — compiler and VM spine: `main` printing a literal, end to end
+- [ ] **M4** — arithmetic and comparison, with R5's overflow trap
+- [ ] **M5** — control flow: `if`/`else`, `while`, block-scoped locals
+- [ ] **M6** — functions, frames, calls, module-level `var` as globals
+- [ ] **M7** — strings, `panic` with a stack trace, exit codes, `main`'s error form
+- [ ] **M8** — CI runs the suite; phase close and the Phase 4 brief
 
 ### Phase 4 — Full classical language
 
-Structs, enums, `match`, arrays, maps, strings, tuples, closures, methods, errors,
-`panic` with a stack trace and a non-zero exit code.
+Structs, enums, `match`, arrays, maps, tuples, closures, methods, errors, complex
+arithmetic and the numeric conversions.
+
+Inherits the eight run-cases Phase 3's corrected criterion left behind:
+`types/complex_literal`, `types/nullable_narrowing`, `types/narrowing_else_branch`,
+`expr/method_call`, `expr/map_two_value_form`, `expr/array_bounds_panic`,
+`control/for_in_runtime_array`, `control/terminating_statements`.
 
 - **Done when:** every non-`concurrency`, non-`quantum` case passes, and the suite has
   been grown to at least ~150 cases covering every normative **MUST** in chapters 01–06.
@@ -334,7 +368,8 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R2 | Error propagation operator | — | **resolved: `try`** |
 | Q2 | Is `Result[T,E]` in the stdlib alongside `(T, error)`? | Phase 6 | open, largely mooted by R1 |
 | Q3 | User-facing generics in v1? | Phase 2 | open |
-| Q4 | Does `main` return `int` or `error`? | **Phase 3** | open, decide first |
+| R9 | Does `main` return `int` or `error`? | — | **resolved: `main()` or `main() -> ?error`** |
+| R10 | How does the VM represent a value? `?int` is not a bare int64 | — | **resolved: one uniform tagged `Value`** |
 | R5 | Integer overflow: wrap, trap, or saturate? | — | **resolved: traps** |
 | Q6 | Data races on shared `array`/`map` between tasks | **Phase 5** | open |
 | Q7 | Structured concurrency instead of Go's detached `spawn`? | Phase 5 | open |
@@ -346,7 +381,7 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R7 | How is a `complex` value written? | — | **resolved: the parser folds `a ± bi`** |
 | R8 | Is a container of a linear type linear, or ill-formed? | — | **resolved: ill-formed** |
 
-R1–R8 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
+R1–R10 are recorded in `docs/spec/00-overview.md` under *Resolved questions*, with the
 reasoning and the rejected alternatives. Do not reopen them without reading that.
 
 ## 7. Standing rules
@@ -890,3 +925,28 @@ is ill-formed).
   reimplementation of `run.py`'s, and running both is how a divergence between them
   gets noticed. Its `run-suite` job stays `if: false` until Phase 3.
 - CI on `main` is now `Go` and `Conformance`, both green.
+
+### 2026-09-02 — Phase 3 M1: R9, R10, and a corrected phase boundary
+
+- **R9 — `main` is `func main()` or `func main() -> ?error`, and nothing else.** The
+  error form exists so `try` works in the entry point, which is the one function
+  that calls everything else; without it, `main` is the single place R2's operator
+  cannot be used. A non-nil result writes `str(err)` to stderr and exits 1.
+  Rejected `-> int`: it competes with panic for the exit code's meaning and does
+  nothing for `try`.
+- **R10 — the VM uses one uniform tagged `Value`.** This dissolves the `?int`
+  representation question R3 flagged rather than answering it: if no `int` is a bare
+  machine word, `?int` needs no special case anywhere. Rejected boxing only
+  nullables — one source type with two runtime representations that must be kept in
+  agreement is the shape of legacy's dual-backend bug.
+- **Corrected Phase 3's exit criterion**, which contradicted its own scope. It said
+  six whole categories must pass; those categories now hold 15 run-cases needing
+  structs, methods, enums, `match`, arrays, maps, `str()` and complex arithmetic —
+  Phase 4's feature list, not Phase 3's. The criterion was written against a 26-case
+  suite and the suite tripled underneath it.
+- **The boundary moved, not the cases.** No case was weakened, no assertion relaxed,
+  and the eight run-cases that moved are already covered by Phase 4's criterion.
+  Every compile-error case in all six categories must still exit non-zero under
+  `ymir run`.
+- 2 new cases, 87 total.
+- **Next:** M2, the instruction set and disassembler.

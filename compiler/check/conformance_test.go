@@ -130,6 +130,7 @@ var expected = map[string][]want{
 	// M10 — returns on every path, main's signature.
 	"decl/missing_return":             {{12, 1, []string{"missing return", "classify"}}},
 	"decl/main_takes_no_parameters":   {{8, 11, []string{"main takes no parameters"}}},
+	"decl/main_bad_result":            {{8, 16, []string{"nothing or an error set"}}},
 	"decl/main_not_called_explicitly": {{9, 5, []string{"must not be called explicitly"}}},
 
 	// M9 — error sets, try, unhandled errors.

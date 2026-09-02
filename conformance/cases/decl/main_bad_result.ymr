@@ -1,0 +1,10 @@
+#@ case decl/main_bad_result
+#@ spec 03-declarations.md#main
+#@ compile-error
+#@ | main returns either nothing or an error set
+
+module main_bad_result
+
+func main() -> int {
+    return 0
+}

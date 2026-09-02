@@ -296,6 +296,48 @@ actually stand behind.
 compile-time constant, which is exactly the case a checker can verify. A struct is still
 free to contain a linear field, because a struct's shape is static.
 
+### R9 — Does `main` return anything? → **`main()` or `main() -> ?error`** (2026-09-02)
+
+Both forms are legal and nothing else is. `func main()` exits 0 on normal return.
+`func main() -> ?error` exits 0 when it returns `nil`, and otherwise writes `str(err)` to
+stderr and exits **1**. Either form panics to a non-zero exit.
+
+*Why the error form exists:* R2 adopted `try` because Go's verbosity reputation is about
+lacking that operator, and `main` is where the verbosity bites hardest — it is the one
+function that calls everything else. Without an error position in `main`, every fallible
+call there needs the explicit `if err != nil` form, which is exactly what `try` was
+adopted to remove.
+
+*Why not `-> int`:* it competes with panic for the meaning of the exit code, invites
+arbitrary status numbers that nothing in the language can check, and does nothing for
+`try`. An explicit exit is better served by a future `exit(code)` builtin, which is
+additive.
+
+*Why not `main()` alone:* it is the smaller language, but it makes the entry point the
+one place `try` cannot be used, and the legacy CLI's habit of always exiting 0 is the
+defect this needs to foreclose — the error form makes a failing `main` exit non-zero
+without anyone remembering to write it.
+
+### R10 — How the VM represents a value → **one uniform tagged `Value`** (2026-09-02)
+
+Every runtime value is a single tagged struct carrying a kind and the payload for that
+kind. `int` is not an unboxed machine word.
+
+This **dissolves** the representation question R3 flagged rather than answering it: `?int`
+cannot be a bare 64-bit integer, but if no `int` is a bare 64-bit integer either, then
+`?int` needs no special case — absent is the nil kind, present is the int kind, and every
+opcode that touches one already handles both.
+
+*Cost, stated plainly:* memory and speed against unboxed primitives. Non-goal 1 already
+accepts that a bytecode VM is 10–50× slower than optimized native code, and this is part
+of the same bill.
+
+*Why not box only nullables:* it is faster, and it gives one source-level type two runtime
+representations that every opcode must distinguish. A split where two representations of
+the same thing must be kept in agreement is precisely the shape of legacy's dual-backend
+bug. Unboxing is available later as an optimization behind frozen semantics, which is the
+same argument D4 makes for deferring a native backend.
+
 ## Open questions
 
 Unresolved. Do not treat any of these as decided.
@@ -312,13 +354,6 @@ generics (Q3).
 `func map(xs, f)` generically is unanswered. Monomorphizing in a bytecode compiler is
 straightforward; the type checker cost is real, and R1 already added to it. Deferring
 means the stdlib is written against concrete types and later needs revision.
-
-### Q4 — Does `main` return anything?
-
-Currently `func main()`, exit code 0 on normal return, non-zero on panic. Should it be
-`func main() -> int`, or `-> (error)` so `try` works in it? R1 makes the last option
-more attractive than it was. The legacy CLI's habit of always exiting 0 is the bug this
-needs to foreclose.
 
 ### Q6 — Data races on shared `array` / `map` between tasks
 

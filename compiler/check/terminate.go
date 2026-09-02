@@ -145,6 +145,11 @@ func (c *checker) checkReturns(name *ast.Ident, results []ast.Type, body *ast.Bl
 // module in a program declares it. main is invoked automatically; it MUST NOT
 // be called explicitly."
 //
+// Resolved question R9 gives it exactly two forms — `func main()` and
+// `func main() -> ?error` — and nothing else. The error form exists so `try` is
+// usable in the entry point, which is the one function that calls everything
+// else; a non-nil result writes str(err) to stderr and exits 1.
+//
 // The "exactly one module" half needs a whole-program view and arrives with the
 // module loader in Phase 6.
 func (c *checker) checkMain(d *ast.FuncDecl) {
@@ -156,12 +161,23 @@ func (c *checker) checkMain(d *ast.FuncDecl) {
 			"main takes no parameters",
 			"it is invoked by the runtime, which has nothing to pass")
 	}
-	if len(d.Results) > 0 {
-		c.hint(d.Results[0].Pos(),
-			"main declares no results",
-			"the exit code is 0 on normal return and non-zero on panic; see open question Q4")
-	}
 	if d.Export {
 		c.errorf(d.Name.Pos(), "main cannot be exported")
+	}
+
+	switch len(d.Results) {
+	case 0:
+		return
+	case 1:
+		if sig := c.sigs[d]; sig != nil && errorSetOf(sig.Results) != nil {
+			return
+		}
+		c.hint(d.Results[0].Pos(),
+			"main returns either nothing or an error set",
+			"write `func main()` or `func main() -> ?error`")
+	default:
+		c.hint(d.Results[0].Pos(),
+			"main returns either nothing or an error set, not "+plural(len(d.Results), "value"),
+			"write `func main()` or `func main() -> ?error`")
 	}
 }
