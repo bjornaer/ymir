@@ -1,0 +1,41 @@
+#@ case control/terminating_statements
+#@ spec 05-statements.md#returning-on-every-path
+#@ exit 0
+#@ stdout
+#@ | positive
+#@ | loop
+#@ | circle
+
+module terminating_statements
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func classify(n: int) -> string {
+    if n > 0 {
+        return "positive"
+    } else {
+        return "non-positive"
+    }
+}
+
+func spin() -> string {
+    while true {
+        return "loop"
+    }
+}
+
+func describe(s: Shape) -> string {
+    match s {
+        Circle(r) => return "circle",
+        Point     => return "point",
+    }
+}
+
+func main() {
+    print(classify(1))
+    print(spin())
+    print(describe(Circle(1.0)))
+}

@@ -108,6 +108,11 @@ var expected = map[string][]want{
 		{14, 9, []string{"must name its enum", "ParseError.UnexpectedEOF"}},
 	},
 
+	// M10 — returns on every path, main's signature.
+	"decl/missing_return":             {{12, 1, []string{"missing return", "classify"}}},
+	"decl/main_takes_no_parameters":   {{8, 11, []string{"main takes no parameters"}}},
+	"decl/main_not_called_explicitly": {{9, 5, []string{"must not be called explicitly"}}},
+
 	// M9 — error sets, try, unhandled errors.
 	"errors/try_requires_superset":       {{16, 10, []string{"try propagates ParseError", "not a subset", "IOError"}}},
 	"errors/unhandled_is_compile_error":  {{14, 5, []string{"unhandled error result", "divide"}}},

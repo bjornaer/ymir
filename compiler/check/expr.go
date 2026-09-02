@@ -143,6 +143,11 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr, want types.Type) types.
 	case *ast.FuncLit:
 		sig := c.litSignature(scope, x)
 		c.funcBody(scope, nil, nil, x.Params, sig.Params, sig.Results, x.Body)
+		if len(x.Results) > 0 && !blockTerminates(x.Body) {
+			c.hint(x.Body.Rbrace,
+				"missing return at the end of this function literal",
+				"every path must return; an `if` with no `else` does not count as returning")
+		}
 		return sig
 	}
 

@@ -1,0 +1,10 @@
+#@ case decl/main_takes_no_parameters
+#@ spec 03-declarations.md#main
+#@ compile-error
+#@ | main takes no parameters
+
+module main_takes_no_parameters
+
+func main(n: int) {
+    print(n)
+}

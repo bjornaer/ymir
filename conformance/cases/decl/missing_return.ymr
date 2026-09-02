@@ -1,0 +1,16 @@
+#@ case decl/missing_return
+#@ spec 05-statements.md#returning-on-every-path
+#@ compile-error
+#@ | missing return
+
+module missing_return
+
+func classify(n: int) -> string {
+    if n > 0 {
+        return "positive"
+    }
+}
+
+func main() {
+    print(classify(1))
+}

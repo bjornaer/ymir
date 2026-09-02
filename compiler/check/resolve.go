@@ -300,7 +300,9 @@ func (c *checker) checkBodies(fileScope *Scope, file *ast.File) {
 		if sig != nil {
 			params, results = sig.Params, sig.Results
 		}
+		c.checkMain(x)
 		c.funcBody(fileScope, x.Recv, c.recvs[x], x.Params, params, results, x.Body)
+		c.checkReturns(x.Name, x.Results, x.Body)
 	}
 }
 

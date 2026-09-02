@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 75 cases.
+conformance/          Executable form of the spec. run.py + 79 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -199,7 +199,7 @@ during this phase.
 - [x] **M7** — nullables and narrowing (N1–N6) (2026-09-01)
 - [x] **M8** — `match` exhaustiveness over enums and unions (2026-09-01)
 - [x] **M9** — error sets, `try`, unhandled errors (2026-09-02)
-- [ ] **M10** — returns on every path, `main`'s signature
+- [x] **M10** — returns on every path, `main`'s signature (2026-09-02)
 - [ ] **M11** — linearity L1–L6, CI `ymir check -q` gate, phase close
 
 **Position accuracy is enforced Go-side, not by `run.py`.** The runner checks only that
@@ -772,3 +772,22 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   folds. Addition, subtraction and multiplication of complex constants work;
   division does not, and nothing needs it before Phase 3.
 - 2 new cases, 75 total.
+
+### 2026-09-02 — Phase 2 M10: returns on every path, and `main`
+
+- The terminating-statement rules M0 wrote into chapter 05, implemented: `return`,
+  `panic(...)`, a block whose last statement terminates, an `if` **with an else**
+  where both branches do, a `match` where every arm does, and `while true` with no
+  escaping `break`. Nothing else.
+- The analysis is syntactic on purpose. It proves control always transfers; it
+  never proves a condition is true. `for` and `while cond` do not terminate,
+  because the checker does not prove they run at all.
+- A `break` inside a *nested* loop belongs to that loop, so it does not make the
+  outer `while true` exitable.
+- Function literals are held to the same rule.
+- `main` takes no parameters, declares no results, cannot be exported, and must
+  not be called explicitly. A *method* named `main` is unaffected.
+- "Exactly one module declares `main`" needs a whole-program view and waits for
+  the module loader in Phase 6.
+- 4 new cases, 79 total.
+- **Next:** M11, linearity L1–L6, the CI gate, and the phase close.

@@ -21,6 +21,15 @@ func (c *checker) call(scope *Scope, x *ast.CallExpr) []types.Type {
 	// is typed, or resolving them as values would report a spurious error.
 	switch fun := x.Fun.(type) {
 	case *ast.Ident:
+		if fun.Name == "main" {
+			// "main is invoked automatically; it MUST NOT be called
+			// explicitly." (chapter 03 §main)
+			if o, _ := scope.LookupParent("main"); o != nil && o.Kind == Func {
+				c.hint(fun.Pos(),
+					"main is invoked by the runtime and must not be called explicitly",
+					"move the work into a function both main and this caller can call")
+			}
+		}
 		if o, _ := scope.LookupParent(fun.Name); o != nil {
 			switch o.Kind {
 			case Builtin:

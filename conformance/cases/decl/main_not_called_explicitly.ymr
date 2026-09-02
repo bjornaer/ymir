@@ -1,0 +1,14 @@
+#@ case decl/main_not_called_explicitly
+#@ spec 03-declarations.md#main
+#@ compile-error
+#@ | must not be called explicitly
+
+module main_not_called_explicitly
+
+func again() {
+    main()
+}
+
+func main() {
+    print("once")
+}
