@@ -532,6 +532,7 @@ func (c *checker) exprStatement(scope *Scope, e ast.Expr) {
 	if call, ok := e.(*ast.CallExpr); ok {
 		rs := c.call(scope, call)
 		c.info.Types[e] = firstOrInvalid(rs)
+		c.checkUnhandled(call, rs)
 		return
 	}
 	c.expr(scope, e)
@@ -652,7 +653,22 @@ func (c *checker) targetType(scope *Scope, l ast.Expr) types.Type {
 
 // assignTarget checks the left side of an `=`, which must be assignable to.
 func (c *checker) assignTarget(scope *Scope, l ast.Expr, value types.Type, s *ast.AssignStmt) {
+	// Writing to a binding is not reading it. The right-hand side was already
+	// evaluated, so a read there has been recorded and must survive.
+	var wasRead bool
+	var bound *Object
+	if id, ok := l.(*ast.Ident); ok {
+		if o, _ := scope.LookupParent(id.Name); o != nil {
+			bound, wasRead = o, c.read[o]
+		}
+	}
 	target := c.expr(scope, l)
+	if bound != nil && !wasRead {
+		if orig := c.narrowedFrom[bound]; orig != nil {
+			delete(c.read, orig)
+		}
+		delete(c.read, bound)
+	}
 
 	if id, ok := l.(*ast.Ident); ok {
 		// Assigning to a narrowed binding ends the narrowing (rule N6), and the
@@ -705,4 +721,5 @@ func (c *checker) declareLocal(scope *Scope, id *ast.Ident, t types.Type) {
 	}
 	c.declare(scope, o)
 	c.info.Defs[id] = o
+	c.trackErrorBinding(o)
 }

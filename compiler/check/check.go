@@ -160,6 +160,12 @@ type checker struct {
 	// would report them twice.
 	folds map[ast.Expr]foldResult
 
+	// read records which bindings had their value read, and errBindings the
+	// ones holding an error position. Together they implement chapter 06's
+	// rule that binding an error and never reading it is a compile error.
+	read        map[*Object]bool
+	errBindings []*Object
+
 	// narrowedFrom maps a shadow binding introduced by narrowing (rule N6) back
 	// to the real one, so an assignment can end the narrowing and be checked
 	// against the declared ?T.
@@ -193,10 +199,12 @@ func Check(file *ast.File, name, src string) (*Info, *diag.List) {
 		variants:     map[string][]*Object{},
 		methods:      map[*types.Named]map[string]*method{},
 		narrowedFrom: map[*Object]*Object{},
+		read:         map[*Object]bool{},
 		constVals:    map[*Object]constVal{},
 		folds:        map[ast.Expr]foldResult{},
 	}
 	c.checkFile(file)
+	c.reportUnreadErrors()
 	c.errs.Sort()
 	return c.info, c.errs
 }

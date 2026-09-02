@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 68 cases.
+conformance/          Executable form of the spec. run.py + 73 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -198,7 +198,7 @@ during this phase.
 - [x] **M6** — composite literals and indexing (2026-09-01)
 - [x] **M7** — nullables and narrowing (N1–N6) (2026-09-01)
 - [x] **M8** — `match` exhaustiveness over enums and unions (2026-09-01)
-- [ ] **M9** — error sets, `try`, unhandled errors
+- [x] **M9** — error sets, `try`, unhandled errors (2026-09-02)
 - [ ] **M10** — returns on every path, `main`'s signature
 - [ ] **M11** — linearity L1–L6, CI `ymir check -q` gate, phase close
 
@@ -731,3 +731,28 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - **Also noted, additive, not now:** matrix indexing stays undefined (M6), but a
   slicing or index notation will be wanted before anyone writes real matrix code.
   Deliberately deferred rather than guessed.
+
+### 2026-09-02 — Phase 2 M9: error sets, `try`, unhandled errors
+
+- **All 11 conformance cases the Phase 2 brief named are green**, and so is every
+  compile-error case added since. 70 of 73 cases pass the checker gate; the three
+  that do not are the `quantum/` skips.
+- An error position is the last result being `?E` for an error set `E` — so
+  `-> ?IOError` has one and `-> ?int` does not. `ast.FuncDecl.HasErrorPosition`
+  was only ever a `len(Results) > 1` heuristic; this is the real predicate.
+- `try` now enforces all four static rules: the callee must be fallible, the
+  enclosing function must have an error position, the callee's set must be a
+  subset of the enclosing one, and every other result of the enclosing function
+  must have a zero value. The subset hint names the widened set, which is the fix.
+- Unhandled errors: a fallible call standing alone as a statement is an error
+  naming the callee. `_, _ = f()`, binding and checking, and `try` are the three
+  legal forms.
+- **Binding an error and never reading it** is an error. Implemented with a read
+  set, where an assignment target is explicitly *not* a read — `err = nil` does
+  not count as handling it.
+- Scoped deliberately to error bindings. Chapter 06 words the rule as though a
+  general unused-binding rule existed, but no chapter states one, and inventing it
+  would reject programs the spec permits. Recorded rather than guessed.
+- 5 new cases, 73 total.
+- **Next:** the R7 parser fold for complex literals, then M10 (returns on every
+  path, `main`) and M11 (linearity, CI gate, phase close).

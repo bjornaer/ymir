@@ -150,27 +150,6 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr, want types.Type) types.
 	return types.Invalid
 }
 
-// tryResults types `try e` as the callee's results with the error position
-// removed (chapter 06 §Propagation).
-//
-// The rules around it — that the enclosing function must have an error position,
-// that the callee's set must be a subset of it, and that every other result must
-// have a zero value — are M8. This computes only the shape, which the clean
-// cases need in order to stay clean.
-func (c *checker) tryResults(scope *Scope, x *ast.TryExpr) []types.Type {
-	call, ok := x.Call.(*ast.CallExpr)
-	if !ok {
-		// The parser already requires a call, so this is defensive.
-		c.expr(scope, x.Call)
-		return []types.Type{types.Invalid}
-	}
-	rs := c.call(scope, call)
-	if len(rs) == 0 {
-		return nil
-	}
-	return rs[:len(rs)-1]
-}
-
 func firstOrInvalid(ts []types.Type) types.Type {
 	if len(ts) == 1 {
 		return ts[0]
@@ -220,6 +199,7 @@ func (c *checker) ident(scope *Scope, id *ast.Ident) types.Type {
 		}
 	}
 	c.info.Uses[id] = o
+	c.markRead(o)
 
 	switch o.Kind {
 	case EnumVariant:

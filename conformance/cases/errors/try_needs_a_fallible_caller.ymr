@@ -1,0 +1,21 @@
+#@ case errors/try_needs_a_fallible_caller
+#@ spec 06-errors.md#rules
+#@ compile-error
+#@ | no error position
+
+module try_needs_a_fallible_caller
+
+enum IOError { NotFound(string), }
+
+func readFile(path: string) -> (string, ?IOError) {
+    return "", nil
+}
+
+func load(path: string) -> string {
+    data := try readFile(path)
+    return data
+}
+
+func main() {
+    print(load("/x"))
+}

@@ -1,0 +1,17 @@
+#@ case errors/unread_error_binding
+#@ spec 06-errors.md#unhandled-errors-are-a-compile-error
+#@ compile-error
+#@ | never read
+
+module unread_error_binding
+
+enum IOError { NotFound(string), }
+
+func readFile(path: string) -> (string, ?IOError) {
+    return "", nil
+}
+
+func main() {
+    data, err := readFile("/x")
+    print(data)
+}

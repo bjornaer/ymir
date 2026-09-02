@@ -1,0 +1,18 @@
+#@ case errors/discard_with_blank_is_legal
+#@ spec 06-errors.md#unhandled-errors-are-a-compile-error
+#@ exit 0
+#@ stdout
+#@ | done
+
+module discard_with_blank_is_legal
+
+enum IOError { NotFound(string), }
+
+func writeFile(path: string, data: string) -> ?IOError {
+    return nil
+}
+
+func main() {
+    _ = writeFile("/x", "y")
+    print("done")
+}

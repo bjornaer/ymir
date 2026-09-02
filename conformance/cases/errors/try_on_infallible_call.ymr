@@ -1,0 +1,21 @@
+#@ case errors/try_on_infallible_call
+#@ spec 06-errors.md#rules
+#@ compile-error
+#@ | no error position
+
+module try_on_infallible_call
+
+enum IOError { NotFound(string), }
+
+func double(n: int) -> int {
+    return n * 2
+}
+
+func f() -> (int, ?IOError) {
+    n := try double(2)
+    return n, nil
+}
+
+func main() {
+    _, _ = f()
+}

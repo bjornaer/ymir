@@ -1,0 +1,26 @@
+#@ case errors/try_needs_zero_values
+#@ spec 06-errors.md#rules
+#@ compile-error
+#@ | has none
+
+module try_needs_zero_values
+
+enum IOError { NotFound(string), }
+
+enum Shape {
+    Circle(float),
+    Point,
+}
+
+func readFile(path: string) -> (string, ?IOError) {
+    return "", nil
+}
+
+func load(path: string) -> (Shape, ?IOError) {
+    data := try readFile(path)
+    return Point, nil
+}
+
+func main() {
+    _, _ = load("/x")
+}

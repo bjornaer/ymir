@@ -108,6 +108,12 @@ var expected = map[string][]want{
 	},
 
 	// M9 — error sets, try, unhandled errors.
+	"errors/try_requires_superset":       {{16, 10, []string{"try propagates ParseError", "not a subset", "IOError"}}},
+	"errors/unhandled_is_compile_error":  {{14, 5, []string{"unhandled error result", "divide"}}},
+	"errors/try_needs_a_fallible_caller": {{15, 13, []string{"no error position"}}},
+	"errors/try_on_infallible_call":      {{15, 10, []string{"try needs a call that can fail", "double"}}},
+	"errors/try_needs_zero_values":       {{20, 13, []string{"zero value of every other result", "Shape has none"}}},
+	"errors/unread_error_binding":        {{15, 11, []string{"err holds an error that is never read"}}},
 	// M9 — returns on every path.
 }
 
