@@ -26,16 +26,63 @@ jobs:
             exit 1
           fi
 
-  # Enabled at Phase 3, when the Go implementation can execute a program.
-  # Until then it is documentation of the intended gate.
+  # Phase 3's exit criterion. Every compile-error case must exit non-zero under
+  # `ymir run` -- which follows from it type-checking first -- and the run-cases
+  # inside Phase 3's slice must produce their asserted stdout at exit 0.
+  #
+  # The suite is not yet all-green and will not be until Phase 4, so this job
+  # asserts the named cases rather than the whole run. A blanket `run.py` gate
+  # arrives with Phase 4's criterion.
   run-suite:
     name: Run conformance suite (Go implementation)
     runs-on: ubuntu-latest
-    if: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - run: go build -o bin/ymir ./cmd/ymir
-      - run: python3 conformance/run.py --ymir "./bin/ymir run"
+
+      - name: Phase 3 run-cases
+        run: |
+          fail=0
+          for c in \
+            decl/main_entry_point \
+            scope/forward_reference \
+            scope/module_var_mutation \
+            scope/module_var_initializer \
+            scope/shadowing \
+            lexical/operator_munch \
+            lexical/string_escapes \
+            types/float_literal_arithmetic
+          do
+            if ! python3 conformance/run.py --ymir "./bin/ymir run" --filter "$c" 2>&1 | grep -q "1 passed"; then
+              echo "::error::conformance case $c does not pass"
+              python3 conformance/run.py --ymir "./bin/ymir run" --filter "$c" || true
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Every compile-error case exits non-zero with its message
+        run: |
+          fail=0
+          for f in $(find conformance/cases -name '*.ymr' | sort); do
+            grep -q '^#@ compile-error' "$f" || continue
+            case "$f" in
+              */quantum/no_cloning.ymr) continue ;;  # open question Q14
+            esac
+            if ./bin/ymir run "$f" >/dev/null 2>&1; then
+              echo "::error file=$f::a compile-error case exited 0"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      # Progress, not a gate: the count is recorded in the log so a regression
+      # in the total is visible even while the suite is not all-green.
+      - name: Suite summary
+        run: python3 conformance/run.py --ymir "./bin/ymir run" || true

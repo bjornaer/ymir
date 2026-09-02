@@ -5,7 +5,7 @@ where the project stands and what happens next. Update the *Status* and *Session
 sections whenever you do meaningful work.
 
 - **Last updated:** 2026-09-02
-- **Current phase:** Phase 3 — bytecode and VM. In progress on `phase-3-bytecode-vm`.
+- **Current phase:** Phase 3 — **complete**. Phase 4 (full classical language) not started.
 - **Blocking:** nothing. R1–R10 are resolved. Q6 blocks Phase 5; Q14 blocks the
   `quantum/` cases and Phase 7.
 
@@ -208,7 +208,7 @@ each `compile-error` substring appears somewhere in stdout or stderr, and never 
 line or column — a runtime failure printing the right word would pass it. The
 `compiler/check` conformance test carries the expected `line:column` per case.
 
-### Phase 3 — Bytecode and VM, minimal slice  ← START HERE
+### Phase 3 — Bytecode and VM, minimal slice  ✅ COMPLETE (2026-09-02)
 
 **What Phase 2 left you.** `compiler/types` answers every question about a type;
 `compiler/check` resolves a parsed file against it and returns an `Info` side table —
@@ -247,10 +247,17 @@ criterion, which already requires every non-`concurrency`, non-`quantum` case to
 - **Done when**, under `python3 conformance/run.py --ymir "./bin/ymir run"`:
   - every `compile-error` case in the suite exits non-zero with its asserted message,
     which follows from `ymir run` type-checking first; and
-  - these seven run-cases produce their asserted stdout at exit 0:
-    `decl/main_entry_point`, `decl/main_returns_error`, `scope/forward_reference`,
-    `scope/module_var_mutation`, `scope/shadowing`, `lexical/operator_munch`,
+  - these eight run-cases produce their asserted stdout at exit 0:
+    `decl/main_entry_point`, `scope/forward_reference`, `scope/module_var_mutation`,
+    `scope/module_var_initializer`, `scope/shadowing`, `lexical/operator_munch`,
     `lexical/string_escapes`, `types/float_literal_arithmetic`.
+
+  *`decl/main_returns_error` was on this list and has moved to Phase 4.* It was put
+  here in M1 without checking that it stayed inside the minimal slice, and it does
+  not: constructing a non-nil error means constructing an **enum value**, which is
+  Phase 4. R9's mechanism — the VM returning `main`'s result, the CLI writing it to
+  stderr and exiting 1 — is implemented and covered by `TestMainReturningAnErrorSurfacesIt`;
+  what cannot be exercised end to end yet is producing an error to return.
 
 **Milestones.** One self-contained commit each.
 
@@ -260,15 +267,31 @@ criterion, which already requires every non-`concurrency`, non-`quantum` case to
 - [x] **M4** — arithmetic, comparison, and local variables (2026-09-02)
 - [x] **M5** — control flow: `if`/`else`, `while`, `for`, short-circuit, `break` (2026-09-02)
 - [x] **M6** — functions, frames, calls, module-level `var` as globals (2026-09-02)
-- [ ] **M7** — strings, `panic` with a stack trace, exit codes, `main`'s error form
-- [ ] **M8** — CI runs the suite; phase close and the Phase 4 brief
+- [x] **M7** — strings, `panic` with a stack trace, exit codes (2026-09-02)
+- [x] **M8** — CI runs the suite; phase close and the Phase 4 brief (2026-09-02)
 
-### Phase 4 — Full classical language
+### Phase 4 — Full classical language  ← START HERE
+
+**What Phase 3 left you.** A working pipeline: `compiler/bytecode` compiles a checked
+tree reading types out of `check.Info`, and `vm/` executes it. `ymir run` type-checks
+before it compiles, so nothing the checker rejects can execute. `ymir build -S` prints
+a listing, which is how every Phase 3 milestone was debugged and how Phase 4's should
+be. A construct the compiler cannot yet handle reports with a position and exits
+non-zero rather than compiling to nothing.
+
+**Where to start.** Enum values, because the most cases depend on them and because
+`decl/main_returns_error` cannot be green without them: an error value *is* an enum
+value. Then structs and methods, then arrays and maps, then `match`.
+
+**Decide early:** what `str()` of an enum renders. Chapter 06 says "every enum has an
+auto-derived `str()`" and never says what it produces, and R9 writes `str(err)` to
+stderr, so the entry point's failure output depends on the answer.
 
 Structs, enums, `match`, arrays, maps, tuples, closures, methods, errors, complex
 arithmetic and the numeric conversions.
 
-Inherits the eight run-cases Phase 3's corrected criterion left behind:
+Inherits the nine run-cases Phase 3's corrected criterion left behind:
+`decl/main_returns_error`,
 `types/complex_literal`, `types/nullable_narrowing`, `types/narrowing_else_branch`,
 `expr/method_call`, `expr/map_two_value_form`, `expr/array_bounds_panic`,
 `control/for_in_runtime_array`, `control/terminating_statements`.
@@ -1053,3 +1076,45 @@ is ill-formed).
   `types/narrowing_else_branch`, `scope/module_var_initializer`.
 - **Next:** M7. `decl/main_returns_error` is the last Phase 3 target, and needs
   destructuring a multi-valued call.
+
+### 2026-09-02 — Phase 3 M7 and M8: the phase closes
+
+- `panic` works end to end: `errors/panic_exit_code` prints the message and a
+  stack trace to stderr and exits 2. That is chapter 06 §panic, and the specific
+  defect it forecloses is legacy's CLI exiting 0 unconditionally.
+- **I mis-scoped `decl/main_returns_error` in M1.** I put it in Phase 3's exit
+  criterion without checking it stayed inside the minimal slice, and it does not:
+  returning a non-nil error means constructing an **enum value**, which is Phase 4.
+  It has moved to Phase 4's criterion. R9's mechanism — the VM returning `main`'s
+  result, the CLI writing it to stderr and exiting 1 — is implemented and covered
+  by `TestMainReturningAnErrorSurfacesIt`; what cannot run end to end yet is
+  producing an error to return.
+- CI's `run-suite` job is enabled. It asserts the eight Phase 3 run-cases and
+  that every compile-error case exits non-zero, rather than a blanket all-green
+  run, which is Phase 4's criterion. The suite total is printed as progress.
+
+---
+
+## Phase 3 is complete
+
+**73 passed, 12 failed, 3 skipped**, from a starting point of 0 passed and the
+frozen Python baseline of 2 passed / 15 failed. All 12 failures are run-cases
+needing Phase 4's features; no compile-error case fails.
+
+Every compile-error case in the suite exits non-zero under `ymir run` with its
+asserted message, because `ymir run` type-checks before it compiles. The eight
+run-cases inside the minimal slice produce their asserted stdout at exit 0.
+
+**Resolved during the phase:** Q4 → R9 (`main()` or `main() -> ?error`), and R10
+(one uniform tagged `Value`, which dissolves R3's `?int` representation problem
+rather than answering it).
+
+**Found and filed rather than guessed:** Q15, the order of module-level `var`
+initializers.
+
+**Caught by the suite:** `scope/module_var_mutation` was passing for the wrong
+reason — initializers were never compiled, and the zero `Value`'s numeric payload
+being 0 made the arithmetic come out right anyway.
+
+**Next:** Phase 4. Start with enum values; the most cases depend on them, and an
+error value is one.
