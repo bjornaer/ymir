@@ -64,12 +64,12 @@ compiler/lexer/       EXISTS. Maximal munch, escape decoding. Has tests.
 compiler/ast/         EXISTS. Syntax tree, tree printer, Walk/Inspect.
 compiler/parser/      EXISTS. Recursive descent over chapter 09. Has tests.
 compiler/diag/        EXISTS. Errors with position, source excerpt, caret.
-cmd/ymir/             EXISTS. CLI; `parse` and `check`.
+cmd/ymir/             EXISTS. CLI; `parse`, `check`, `build -S`, `run`.
 
 compiler/types/       EXISTS. Semantic types, identity, assignability, universe.
 compiler/check/       EXISTS. The whole Phase 2 checker. `ymir check` is the gate.
 compiler/bytecode/    EXISTS. Instruction set, chunk, line table, disassembler.
-vm/                   PHASE 3.
+vm/                   EXISTS. Tagged Value, stack machine, panics.
 
 editor-support/       VSCode extension, outdated. Retargeted at Phase 9.
 docs/                 Older prose docs. Superseded by docs/spec/ where they conflict.
@@ -256,7 +256,7 @@ criterion, which already requires every non-`concurrency`, non-`quantum` case to
 
 - [x] **M1** — record R9 and R10, correct the phase boundary, accept `main() -> ?error` (2026-09-02)
 - [x] **M2** — `compiler/bytecode`: ops, chunk, line table, disassembler (2026-09-02)
-- [ ] **M3** — compiler and VM spine: `main` printing a literal, end to end
+- [x] **M3** — compiler and VM spine: `main` printing a literal, end to end (2026-09-02)
 - [ ] **M4** — arithmetic and comparison, with R5's overflow trap
 - [ ] **M5** — control flow: `if`/`else`, `while`, block-scoped locals
 - [ ] **M6** — functions, frames, calls, module-level `var` as globals
@@ -976,3 +976,26 @@ is ill-formed).
   runtime's `Value` representation (R10) stays the runtime's business and the
   compile-time `Const` is its own type.
 - **Next:** M3, the compiler and VM spine — `main` printing a literal, end to end.
+
+### 2026-09-02 — Phase 3 M3: the pipeline is real
+
+- `ymir run conformance/cases/decl/main_entry_point.ymr` prints `main ran` and
+  exits 0, through parse → check → compile → bytecode → VM. That is the whole
+  point of this milestone: the pipeline exists end to end before it is widened.
+- **The suite went from 0 passed to 65 passed, 19 failed, 3 skipped.** The 65 are
+  every compile-error case, which now exit non-zero with their asserted message
+  because `ymir run` type-checks first, plus the two run-cases needing nothing
+  but `print` of literals. All 19 failures are run-cases waiting on M4–M7.
+- **A construct the compiler cannot yet handle reports with a position and exits
+  non-zero** — `a binary operator is not implemented yet` at 14:12 — rather than
+  compiling to nothing. Compiling to nothing is exactly how legacy's `func main()`
+  became a silent no-op, and `TestUnimplementedConstructsReportRatherThanVanish`
+  pins it.
+- `vm.Value` is R10's uniform tagged struct. A whole float prints as `4.0`, not
+  `4`, or a float and an int would be indistinguishable in output — which
+  `types/float_literal_arithmetic` asserts.
+- Panics carry a stack trace built from the chunk's line table, as chapter 06
+  requires, and exit 2.
+- `ymir build -S` prints the listing. `ymir build` without it says writing an
+  executable is Phase 6 rather than doing nothing.
+- **Next:** M4, arithmetic with R5's overflow trap.
