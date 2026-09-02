@@ -68,7 +68,7 @@ cmd/ymir/             EXISTS. CLI; `parse` and `check`.
 
 compiler/types/       EXISTS. Semantic types, identity, assignability, universe.
 compiler/check/       EXISTS. The whole Phase 2 checker. `ymir check` is the gate.
-compiler/bytecode/    PHASE 3.
+compiler/bytecode/    EXISTS. Instruction set, chunk, line table, disassembler.
 vm/                   PHASE 3.
 
 editor-support/       VSCode extension, outdated. Retargeted at Phase 9.
@@ -255,7 +255,7 @@ criterion, which already requires every non-`concurrency`, non-`quantum` case to
 **Milestones.** One self-contained commit each.
 
 - [x] **M1** — record R9 and R10, correct the phase boundary, accept `main() -> ?error` (2026-09-02)
-- [ ] **M2** — `compiler/bytecode`: ops, chunk, line table, disassembler
+- [x] **M2** — `compiler/bytecode`: ops, chunk, line table, disassembler (2026-09-02)
 - [ ] **M3** — compiler and VM spine: `main` printing a literal, end to end
 - [ ] **M4** — arithmetic and comparison, with R5's overflow trap
 - [ ] **M5** — control flow: `if`/`else`, `while`, block-scoped locals
@@ -950,3 +950,29 @@ is ill-formed).
   `ymir run`.
 - 2 new cases, 87 total.
 - **Next:** M2, the instruction set and disassembler.
+
+### 2026-09-02 — Phase 3 M2: the instruction set and disassembler
+
+- `compiler/bytecode`: `Op`, `Instr`, `Chunk` (code, a parallel line table,
+  an interned constant pool), `Function`, `Program`, and a disassembler.
+- **A stack machine.** Registers are faster and harder to compile to and read;
+  Phase 3 exists to pin down semantics. Nothing forecloses a register pass later,
+  because bytecode is produced and consumed in the same process and is not a
+  distributed artifact.
+- **Arithmetic opcodes are typed** — `AddInt` and `AddFloat`, never one
+  polymorphic `Add`. The checker already proved the operand types and put them in
+  `check.Info`, so a typed opcode spends information we have rather than
+  re-deriving it at runtime. It also puts R5's overflow trap only on the `int`
+  opcodes, leaving `float` to IEEE.
+- Equality is *not* typed, because chapter 04 defines `==` on any unrestricted
+  type; it dispatches on the value's kind. Ordered comparison is typed.
+- The line table is parallel to the code, so a panic can build the stack trace
+  chapter 06 requires.
+- **The disassembler is written before the compiler that feeds it**, because
+  every milestone after this one is debugged through it. It annotates operands
+  with what they resolve to, and prints `<no such constant>` for a dangling index
+  rather than a bare number that reads as fine.
+- `bytecode` does not import `vm`. The dependency runs the other way, so the
+  runtime's `Value` representation (R10) stays the runtime's business and the
+  compile-time `Const` is its own type.
+- **Next:** M3, the compiler and VM spine — `main` printing a literal, end to end.
