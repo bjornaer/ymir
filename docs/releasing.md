@@ -1,5 +1,14 @@
 # Ymir Release Process
 
+> **Superseded.** This describes the **legacy Python** release process — PyPI wheels
+> built from `ymir-legacy-py/`. Its workflow (`.github/workflows/release.yml`) was
+> removed on 2026-09-02 along with the legacy test workflow: the Python implementation
+> is frozen, standing rule 6 says we do not fix it, and it is deleted at Phase 8.
+>
+> The release process for the Go implementation is **PLAN.md §Phase 9**: GitHub Releases
+> with per-platform archives, a curl installer, Homebrew, Scoop and WinGet — all thin
+> wrappers over one cross-compiled static binary. Kept here for history.
+
 This document describes the process for creating and publishing new releases of Ymir.
 
 ## Version Numbering

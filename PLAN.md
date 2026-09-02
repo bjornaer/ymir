@@ -871,3 +871,22 @@ is ill-formed).
 `qreg[N]` not parsing at all, and eight spec defects corrected in M0.
 
 **Next:** Phase 3. Answer Q4 first.
+
+### 2026-09-02 — Remove the legacy Python CI
+
+- `legacy-py-tests.yml` and `release.yml` deleted. Both ran against
+  `ymir-legacy-py/`, both failed on every push, and both were pure noise: standing
+  rule 6 says the Python implementation is frozen and not to be fixed, and Phase 8
+  deletes it outright. CI that fails on code we have decided not to repair trains
+  people to ignore CI.
+- `release.yml` was failing in 0 seconds with no log at all — GitHub could not load
+  the workflow. It built PyPI wheels for the legacy tree, which the Go
+  implementation will never need; Phase 9 ships one cross-compiled static binary
+  through GitHub Releases instead.
+- `docs/releasing.md` marked superseded rather than deleted, like the other legacy
+  prose docs.
+- **Kept `conformance.yml`.** Its `validate-cases` job is Python, but it passes in
+  13 seconds and earns its place: the Go gate's `#@` header parser is a deliberate
+  reimplementation of `run.py`'s, and running both is how a divergence between them
+  gets noticed. Its `run-suite` job stays `if: false` until Phase 3.
+- CI on `main` is now `Go` and `Conformance`, both green.
