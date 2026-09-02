@@ -54,7 +54,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 73 cases.
+conformance/          Executable form of the spec. run.py + 75 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -756,3 +756,19 @@ Append an entry per working session. Keep it short: what changed, what to do nex
 - 5 new cases, 73 total.
 - **Next:** the R7 parser fold for complex literals, then M10 (returns on every
   path, `main`) and M11 (linearity, CI gate, phase close).
+
+### 2026-09-02 — R7 implemented: complex literals fold in the parser
+
+- `0.0 + 0.0i`, `1.0 - 2.0i` and `-1.0 + 2.0i` are each one literal of type
+  `complex`. Folded in `parseBinaryExpr`, so `1.0+2.0i` and `1.0 + 2.0i` are the
+  same program — a lexer-level fold would have made them differ, which is the
+  whitespace-sensitivity R7 was chosen to avoid.
+- Both operands must be literals. `x + 2.0i` for a `float` binding stays a
+  `BinaryExpr` and the checker still rejects it, which is the point: no implicit
+  conversion sneaks in through the back door.
+- The folded literal reuses `ast.BasicLit` with kind `IMAG` and the whole text as
+  its value, so no AST node, walker case, or printer case was added.
+- `complex` gained a constant representation, so `const ZERO: complex = 0.0 + 0.0i`
+  folds. Addition, subtraction and multiplication of complex constants work;
+  division does not, and nothing needs it before Phase 3.
+- 2 new cases, 75 total.

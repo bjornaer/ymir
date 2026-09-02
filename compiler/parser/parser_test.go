@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bjornaer/ymir/compiler/ast"
+	"github.com/bjornaer/ymir/compiler/token"
 )
 
 func parseOK(t *testing.T, src string) *ast.File {
@@ -425,6 +426,46 @@ func TestQregWidth(t *testing.T) {
 // Only qreg takes an integer. Everything else still requires a type.
 func TestIntegerArgumentIsOnlyForQreg(t *testing.T) {
 	parseErr(t, wrap("    var xs: array[4]"), "expected a type")
+}
+
+// A complex literal is `a ± bi`, folded here rather than lexed (R7). Lexing it
+// as one token would make the language depend on whitespace.
+func TestComplexLiteralFold(t *testing.T) {
+	tests := []struct{ src, want string }{
+		{"1.0 + 2.0i", "1.0+2.0i"},
+		{"1.0+2.0i", "1.0+2.0i"}, // spacing does not matter
+		{"1.0 - 2.0i", "1.0-2.0i"},
+		{"-1.0 + 2.0i", "-1.0+2.0i"},
+		{"1 + 2i", "1+2i"},
+		{"2.0i", "2.0i"}, // a bare imaginary is already complex
+	}
+	for _, tc := range tests {
+		f := parseOK(t, wrap("    z := "+tc.src))
+		rhs := f.Decls[0].(*ast.FuncDecl).Body.Stmts[0].(*ast.AssignStmt).Rhs[0]
+		lit, ok := rhs.(*ast.BasicLit)
+		if !ok {
+			t.Errorf("%s parsed as %T, want a folded *ast.BasicLit", tc.src, rhs)
+			continue
+		}
+		if lit.Kind != token.IMAG {
+			t.Errorf("%s has kind %s, want IMAG", tc.src, lit.Kind)
+		}
+		if lit.Value != tc.want {
+			t.Errorf("%s folded to %q, want %q", tc.src, lit.Value, tc.want)
+		}
+	}
+}
+
+// Only literals fold. A binding on either side stays a binary expression, so
+// the checker can reject it — there is no implicit conversion.
+func TestComplexFoldRequiresLiterals(t *testing.T) {
+	for _, src := range []string{"x + 2.0i", "1.0 + y", "1.0 * 2.0i"} {
+		f := parseOK(t, wrap("    x := 1.0\n    y := 2.0i\n    z := "+src))
+		rhs := f.Decls[0].(*ast.FuncDecl).Body.Stmts[2].(*ast.AssignStmt).Rhs[0]
+		if _, folded := rhs.(*ast.BasicLit); folded {
+			t.Errorf("%s folded into a literal; only literal operands may fold", src)
+		}
+	}
 }
 
 func TestNullableTypes(t *testing.T) {

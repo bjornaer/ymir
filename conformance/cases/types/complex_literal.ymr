@@ -1,0 +1,18 @@
+#@ case types/complex_literal
+#@ spec 02-types.md#complex-literals
+#@ exit 0
+#@ stdout
+#@ | 1
+#@ | 2
+
+module complex_literal
+
+const ZERO: complex = 0.0 + 0.0i
+
+func main() {
+    var a: complex = 1.0 + 2.0i
+    b := -1.0 - 3.0i
+    c := 2.0i
+    print(int(real(a)))
+    print(int(imag(a)))
+}

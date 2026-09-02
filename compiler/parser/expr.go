@@ -50,8 +50,69 @@ func (p *parser) parseBinaryExpr(minPrec int) ast.Expr {
 			next = prec
 		}
 		y := p.parseBinaryExpr(next)
+		if lit := complexLit(x, op.Kind, y); lit != nil {
+			x = lit
+			continue
+		}
 		x = &ast.BinaryExpr{X: x, OpPos: op.Pos, Op: op.Kind, Y: y}
 	}
+}
+
+// complexLit folds `a + bi` into a single complex literal, or returns nil.
+//
+// Resolved question R7: a complex literal is a numeric literal, then `+` or `-`,
+// then an imaginary literal. `0.0 + 0.0i` is one constant of type complex, not
+// float + complex — which the operand table of spec 04 would reject, leaving
+// complex with no writable zero value.
+//
+// This is done here rather than in the lexer deliberately. Lexing `1.0+2.0i` as
+// one token requires deciding where the literal ends, and the only signal is
+// whitespace, so `1.0+2.0i` and `1.0 + 2.0i` would lex differently. That is the
+// maximal-munch ambiguity that made the legacy lexer read `x==-3` as `x` `==-`
+// `3`, and it would make the language depend on spacing. Folding here gives the
+// same surface language with no lexer change.
+//
+// Both parts MUST be literals. `x + 2.0i` for a `float` binding x stays a
+// BinaryExpr, and the checker rejects it: there is no implicit conversion.
+func complexLit(x ast.Expr, op token.Kind, y ast.Expr) *ast.BasicLit {
+	if op != token.ADD && op != token.SUB {
+		return nil
+	}
+	im, ok := y.(*ast.BasicLit)
+	if !ok || im.Kind != token.IMAG {
+		return nil
+	}
+
+	// The real part is a numeric literal, optionally negated: `-1.0 + 2.0i`
+	// parses as unary minus applied to a literal.
+	re, isLit := x.(*ast.BasicLit)
+	neg := false
+	if !isLit {
+		u, isUnary := x.(*ast.UnaryExpr)
+		if !isUnary || u.Op != token.SUB {
+			return nil
+		}
+		re, _ = u.X.(*ast.BasicLit)
+		neg = true
+	}
+	if re == nil || (re.Kind != token.INT && re.Kind != token.FLOAT) {
+		return nil
+	}
+
+	text := re.Value
+	if neg {
+		text = "-" + text
+	}
+	if op == token.ADD {
+		text += "+"
+	} else {
+		text += "-"
+	}
+	text += im.Value
+
+	start := x.Pos()
+	width := im.End().Offset - start.Offset
+	return ast.NewBasicLit(start, token.IMAG, text, width)
 }
 
 func (p *parser) parseUnaryExpr() ast.Expr {

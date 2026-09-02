@@ -26,6 +26,7 @@ const (
 	constNone constKind = iota
 	constInt
 	constFloat
+	constComplex
 	constBool
 	constString
 )
@@ -36,6 +37,8 @@ type constVal struct {
 	kind constKind
 	i    int64
 	f    float64
+	re   float64 // constComplex
+	im   float64 // constComplex
 	b    bool
 	s    string
 }
@@ -124,10 +127,59 @@ func (c *checker) constLit(x *ast.BasicLit) (constVal, bool) {
 
 	case token.STRING:
 		return constVal{kind: constString, s: x.Value}, true
+
+	case token.IMAG:
+		// A complex literal, either a bare imaginary (`2.0i`) or a folded
+		// `a ± bi` (resolved question R7). The parser stores the whole thing
+		// as one token's text.
+		re, im, ok := parseComplex(x.Value)
+		if !ok {
+			c.errorf(x.Pos(), "malformed complex literal %s", x.Value)
+			return constVal{}, false
+		}
+		return constVal{kind: constComplex, re: re, im: im}, true
 	}
-	// complex has no constant representation here yet; it is not needed by any
-	// rule in Phase 2.
 	return constVal{}, false
+}
+
+// parseComplex reads the text of a complex literal: "2.0i", "1.0+2.0i",
+// "-1.0-3.0i". The imaginary part is always last and always carries the `i`.
+func parseComplex(text string) (re, im float64, ok bool) {
+	t := strings.ReplaceAll(text, "_", "")
+	if !strings.HasSuffix(t, "i") {
+		return 0, 0, false
+	}
+	t = t[:len(t)-1]
+
+	// Find the sign joining the two parts: the last + or - that is neither the
+	// leading sign nor an exponent marker.
+	split := -1
+	for i := 1; i < len(t); i++ {
+		if (t[i] == '+' || t[i] == '-') && t[i-1] != 'e' && t[i-1] != 'E' {
+			split = i
+		}
+	}
+	if split < 0 {
+		f, err := strconv.ParseFloat(t, 64)
+		if err != nil {
+			return 0, 0, false
+		}
+		return 0, f, true
+	}
+
+	rePart, imPart := t[:split], t[split:]
+	if imPart == "+" || imPart == "-" {
+		imPart += "1" // `1.0+i` is not written today, but do not divide by zero on it
+	}
+	r, err := strconv.ParseFloat(rePart, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	m, err := strconv.ParseFloat(imPart, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return r, m, true
 }
 
 func (c *checker) constUnary(x *ast.UnaryExpr, v constVal) (constVal, bool) {
@@ -142,6 +194,8 @@ func (c *checker) constUnary(x *ast.UnaryExpr, v constVal) (constVal, bool) {
 			return constVal{kind: constInt, i: -v.i}, true
 		case constFloat:
 			return constVal{kind: constFloat, f: -v.f}, true
+		case constComplex:
+			return constVal{kind: constComplex, re: -v.re, im: -v.im}, true
 		}
 	case token.NOT:
 		if v.kind == constBool {
@@ -159,6 +213,16 @@ func (c *checker) constBinary(x *ast.BinaryExpr, a, b constVal) (constVal, bool)
 	switch a.kind {
 	case constInt:
 		return c.constIntOp(x, a.i, b.i)
+
+	case constComplex:
+		switch x.Op {
+		case token.ADD:
+			return constVal{kind: constComplex, re: a.re + b.re, im: a.im + b.im}, true
+		case token.SUB:
+			return constVal{kind: constComplex, re: a.re - b.re, im: a.im - b.im}, true
+		case token.MUL:
+			return constVal{kind: constComplex, re: a.re*b.re - a.im*b.im, im: a.re*b.im + a.im*b.re}, true
+		}
 
 	case constFloat:
 		switch x.Op {

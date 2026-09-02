@@ -1,0 +1,12 @@
+#@ case types/complex_needs_literal_parts
+#@ spec 02-types.md#complex-literals
+#@ compile-error
+#@ | mismatched types
+
+module complex_needs_literal_parts
+
+func main() {
+    x := 1.0
+    z := x + 2.0i
+    print(1)
+}

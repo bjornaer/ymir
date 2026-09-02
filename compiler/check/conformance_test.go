@@ -60,16 +60,17 @@ var expected = map[string][]want{
 	"types/container_of_linear_rejected": {{8, 21, []string{"array cannot hold qubit", "linear"}}},
 
 	// M4 — literals, operators, inference, assignability, constant folding.
-	"types/no_implicit_conversion":  {{11, 13, []string{"mismatched types", "int", "float"}}},
-	"types/nil_not_on_plain_type":   {{10, 10, []string{"int is never nil"}}},
-	"types/const_overflow_is_error": {{8, 38, []string{"overflows int"}}},
-	"decl/no_zero_value_needs_init": {{14, 9, []string{"Shape has no zero value"}}},
-	"types/chan_has_no_zero_value":  {{9, 9, []string{"chan[int] has no zero value"}}},
-	"types/const_division_by_zero":  {{8, 23, []string{"division by zero"}}},
-	"types/no_truthiness":           {{10, 8, []string{"if condition is int", "want bool"}}},
-	"types/complex_not_ordered":     {{11, 10, []string{"complex is not ordered"}}},
-	"types/modulo_only_on_int":      {{11, 13, []string{"only on int", "float"}}},
-	"decl/cannot_infer_from_nil":    {{9, 5, []string{"cannot infer a type", "nil"}}},
+	"types/no_implicit_conversion":      {{11, 13, []string{"mismatched types", "int", "float"}}},
+	"types/nil_not_on_plain_type":       {{10, 10, []string{"int is never nil"}}},
+	"types/const_overflow_is_error":     {{8, 38, []string{"overflows int"}}},
+	"decl/no_zero_value_needs_init":     {{14, 9, []string{"Shape has no zero value"}}},
+	"types/chan_has_no_zero_value":      {{9, 9, []string{"chan[int] has no zero value"}}},
+	"types/const_division_by_zero":      {{8, 23, []string{"division by zero"}}},
+	"types/no_truthiness":               {{10, 8, []string{"if condition is int", "want bool"}}},
+	"types/complex_not_ordered":         {{11, 10, []string{"complex is not ordered"}}},
+	"types/complex_needs_literal_parts": {{10, 12, []string{"mismatched types float and complex"}}},
+	"types/modulo_only_on_int":          {{11, 13, []string{"only on int", "float"}}},
+	"decl/cannot_infer_from_nil":        {{9, 5, []string{"cannot infer a type", "nil"}}},
 
 	// M5 — calls, method sets, selection, return values.
 	"expr/call_arity_mismatch":      {{13, 16, []string{"add takes 2 arguments", "got 1"}}},
