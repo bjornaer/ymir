@@ -1,0 +1,13 @@
+#@ case quantum/linear_not_consumed_in_loop
+#@ spec 02-types.md#linearity-rules
+#@ compile-error
+#@ | inside a loop
+
+module linear_not_consumed_in_loop
+
+func main() {
+    q := qubit()
+    for i in range(0, 3) {
+        discard(q)
+    }
+}

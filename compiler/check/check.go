@@ -79,6 +79,11 @@ type Object struct {
 	// mutable in v1 (resolved question R6).
 	Mutable bool
 
+	// Borrowed marks a `mut` parameter or receiver. The caller still owns the
+	// value, so rule L1 does not require the callee to consume it — and the
+	// callee must not (rule L3: `mut` borrows for the call's duration).
+	Borrowed bool
+
 	// Exported records `export`. `var` cannot be exported: there are no
 	// mutable globals across module boundaries (chapter 03 §Exports).
 	Exported bool
@@ -160,6 +165,22 @@ type checker struct {
 	// would report them twice.
 	folds map[ast.Expr]foldResult
 
+	// consumed tracks linear bindings that have been used, and where. Branches
+	// snapshot and restore it; scope exit reads it (rules L1-L6, chapter 02).
+	consumed linearState
+
+	// callSig is the signature whose arguments are being typed, so a `mut`
+	// parameter can borrow rather than consume.
+	callSig *types.Func
+
+	// borrowDepth is non-zero while checking an argument passed to a `mut`
+	// parameter, which borrows rather than consumes (rule L3).
+	borrowDepth int
+
+	// declaredInCurrentLoop marks bindings introduced inside the loop body
+	// being checked, which L6 permits that body to consume.
+	declaredInCurrentLoop map[*Object]bool
+
 	// read records which bindings had their value read, and errBindings the
 	// ones holding an error position. Together they implement chapter 06's
 	// rule that binding an error and never reading it is a compile error.
@@ -200,8 +221,11 @@ func Check(file *ast.File, name, src string) (*Info, *diag.List) {
 		methods:      map[*types.Named]map[string]*method{},
 		narrowedFrom: map[*Object]*Object{},
 		read:         map[*Object]bool{},
-		constVals:    map[*Object]constVal{},
-		folds:        map[ast.Expr]foldResult{},
+		consumed:     linearState{},
+
+		declaredInCurrentLoop: map[*Object]bool{},
+		constVals:             map[*Object]constVal{},
+		folds:                 map[ast.Expr]foldResult{},
 	}
 	c.checkFile(file)
 	c.reportUnreadErrors()

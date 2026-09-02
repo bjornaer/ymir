@@ -1,0 +1,13 @@
+#@ case quantum/linear_branches_must_agree
+#@ spec 02-types.md#linearity-rules
+#@ compile-error
+#@ | branches disagree
+
+module linear_branches_must_agree
+
+func main() {
+    q := qubit()
+    if true {
+        discard(q)
+    }
+}

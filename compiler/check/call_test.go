@@ -386,10 +386,19 @@ func TestBuiltinSignatures(t *testing.T) {
 	mustReport(t, wrap("    print(range(1.0, 2.0))"), "range takes int arguments")
 }
 
-func TestQuantumBuiltinsAreNotImplemented(t *testing.T) {
-	// Decision D3 makes chapter 08 normative now and unimplemented until
-	// Phase 7. Allowing an allocation would let a program build a linear value
-	// the rest of the checker cannot yet track.
-	mustReport(t, wrap("    q := qubit()\n    print(1)"), "quantum fragment is not implemented yet")
-	mustReport(t, wrap("    discard(1)"), "quantum fragment is not implemented yet")
+func TestQuantumAllocationAndDisposalTypecheck(t *testing.T) {
+	// Decision D3: chapter 08 is normative now. The type rules are Phase 2 work
+	// even though the simulator that runs them is Phase 7, so allocation and
+	// the consuming operations typecheck and feed the linearity checker.
+	mustCheckClean(t, wrap("    q := qubit()\n    discard(q)"))
+	mustCheckClean(t, wrap("    q := qubit()\n    b := measure(q)\n    print(1)"))
+	mustCheckClean(t, wrap("    q := qubit()\n    reset(q)"))
+	mustCheckClean(t, wrap("    r := qreg[3]()\n    bits := measure_all(r)\n    print(len(bits))"))
+
+	mustReport(t, wrap("    discard(1)"), "discard needs a qubit, got int")
+	mustReport(t, wrap("    r := qreg[3]()\n    discard(r)"), "discard needs a qubit")
+	mustReport(t, wrap("    q := qubit()\n    print(measure_all(q))"), "measure_all needs a qreg")
+
+	// A qubit allocated and never consumed is rule L1.
+	mustReport(t, wrap("    q := qubit()\n    print(1)"), "q is not consumed")
 }

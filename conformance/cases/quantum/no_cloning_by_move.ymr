@@ -1,0 +1,13 @@
+#@ case quantum/no_cloning_by_move
+#@ spec 02-types.md#linearity-rules
+#@ compile-error
+#@ | moved
+
+module no_cloning_by_move
+
+func main() {
+    q1 := qubit()
+    q2 := q1
+    discard(q1)
+    discard(q2)
+}

@@ -70,8 +70,8 @@ func TestIdentity(t *testing.T) {
 		{"array element differs", &Array{Int}, &Array{Float}, false},
 		{"structural map", &Map{String, Int}, &Map{String, Int}, true},
 		{"map key differs", &Map{String, Int}, &Map{Int, Int}, false},
-		{"structural func", &Func{[]Type{Int}, []Type{Bool}}, &Func{[]Type{Int}, []Type{Bool}}, true},
-		{"func arity differs", &Func{[]Type{Int}, nil}, &Func{nil, nil}, false},
+		{"structural func", &Func{Params: []Type{Int}, Results: []Type{Bool}}, &Func{Params: []Type{Int}, Results: []Type{Bool}}, true},
+		{"func arity differs", &Func{Params: []Type{Int}, Results: nil}, &Func{Params: nil, Results: nil}, false},
 		{"structural tuple", &Tuple{[]Type{Int, String}}, &Tuple{[]Type{Int, String}}, true},
 		{"tuple order matters", &Tuple{[]Type{Int, String}}, &Tuple{[]Type{String, Int}}, false},
 		{"structural chan", &Chan{Int}, &Chan{Int}, true},
@@ -81,6 +81,11 @@ func TestIdentity(t *testing.T) {
 		{"nullable vs bare", NewNullable(Int), Int, false},
 		{"qreg width matters", &QReg{2}, &QReg{4}, false},
 		{"same qreg width", &QReg{4}, &QReg{4}, true},
+		// `mut` is part of a function's type: one that borrows is not
+		// interchangeable with one that copies (rule L3).
+		{"mut parameter differs", &Func{Params: []Type{Int}, Mut: []bool{true}}, &Func{Params: []Type{Int}}, false},
+		{"same mut parameters", &Func{Params: []Type{Int}, Mut: []bool{true}}, &Func{Params: []Type{Int}, Mut: []bool{true}}, true},
+		{"absent mut is not mut", &Func{Params: []Type{Int}, Mut: []bool{false}}, &Func{Params: []Type{Int}}, true},
 	}
 	for _, tc := range tests {
 		if got := Identical(tc.a, tc.b); got != tc.want {
@@ -164,9 +169,9 @@ func TestString(t *testing.T) {
 		// A union under ? is parenthesized so the rendering round-trips:
 		// `?A | B` would read as a union of `?A` and `B` (rule N1).
 		{NewNullable(NewUnion(ioError, parseError)), "?(IOError | ParseError)"},
-		{&Func{[]Type{Int}, []Type{Float}}, "func(int) -> float"},
-		{&Func{[]Type{String}, []Type{Int, NewNullable(ioError)}}, "func(string) -> (int, ?IOError)"},
-		{&Func{nil, nil}, "func()"},
+		{&Func{Params: []Type{Int}, Results: []Type{Float}}, "func(int) -> float"},
+		{&Func{Params: []Type{String}, Results: []Type{Int, NewNullable(ioError)}}, "func(string) -> (int, ?IOError)"},
+		{&Func{Params: nil, Results: nil}, "func()"},
 		{ErrorEnum, "error"},
 	}
 	for _, tc := range tests {
@@ -247,7 +252,7 @@ func TestHasZeroValue(t *testing.T) {
 		// The rule corrected in M0: nil belongs only to nullable types (N3), so
 		// a bare chan or func cannot hold it. Write ?chan[int].
 		{"chan", &Chan{Int}, false},
-		{"func", &Func{nil, nil}, false},
+		{"func", &Func{Params: nil, Results: nil}, false},
 		{"nullable chan", NewNullable(&Chan{Int}), true},
 	}
 	for _, tc := range tests {

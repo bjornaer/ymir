@@ -1,6 +1,6 @@
 #@ case quantum/no_cloning
 #@ spec 08-quantum.md#no-cloning
-#@ skip quantum fragment unimplemented (PLAN.md phase 7)
+#@ skip gate names are unresolved (open question Q14); the linearity rule it asserts is covered by quantum/no_cloning_by_move
 #@ compile-error
 #@ | moved
 

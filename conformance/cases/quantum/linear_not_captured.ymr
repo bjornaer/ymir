@@ -1,0 +1,15 @@
+#@ case quantum/linear_not_captured
+#@ spec 02-types.md#linearity-rules
+#@ compile-error
+#@ | closure cannot capture
+
+module linear_not_captured
+
+func main() {
+    q := qubit()
+    f := func() -> int {
+        discard(q)
+        return 1
+    }
+    print(f())
+}

@@ -27,6 +27,60 @@ var ErrorEnum = &Named{
 // The parameterized built-ins — array, map, tuple, matrix, chan, qreg — are not
 // here: they are not types until applied to arguments, so the checker resolves
 // them from the *ast.GenericType spelling instead. GenericNames lists them.
+// BitEnum is the predeclared `enum bit { Zero, One }` of chapter 08 §Types: a
+// classical measurement outcome. Unrestricted, like any enum with no linear
+// payload.
+var BitEnum = &Named{
+	Kind: Enum,
+	Name: "bit",
+	Variants: []*Variant{
+		{Name: "Zero"},
+		{Name: "One"},
+	},
+}
+
+// Gates are the built-in quantum gates of chapter 08 §Gates. Each borrows its
+// qubits mutably rather than consuming them, which is what `mut` records and
+// what rule L3 turns on.
+//
+// These are NOT in universe scope. Chapter 08 lists them as bare `func h(...)`
+// signatures without saying where they live, and h, x, y, z, s and t in universe
+// scope would shadow nothing but would make a typo'd `x` resolve to the Pauli-X
+// gate rather than being reported as undefined. See open question Q14; the table
+// is kept here so the answer is a one-line change.
+var Gates = map[string]*Func{
+	"h":    qubitGate(1),
+	"x":    qubitGate(1),
+	"y":    qubitGate(1),
+	"z":    qubitGate(1),
+	"s":    qubitGate(1),
+	"t":    qubitGate(1),
+	"cnot": qubitGate(2),
+	"cz":   qubitGate(2),
+	"swap": qubitGate(2),
+	"rx":   rotationGate(),
+	"ry":   rotationGate(),
+	"rz":   rotationGate(),
+
+	"toffoli": qubitGate(3),
+}
+
+func qubitGate(n int) *Func {
+	f := &Func{}
+	for i := 0; i < n; i++ {
+		f.Params = append(f.Params, QubitType)
+		f.Mut = append(f.Mut, true)
+	}
+	return f
+}
+
+func rotationGate() *Func {
+	return &Func{
+		Params: []Type{QubitType, Float},
+		Mut:    []bool{true, false},
+	}
+}
+
 var Predeclared = map[string]Type{
 	"int":     Int,
 	"float":   Float,
@@ -35,6 +89,7 @@ var Predeclared = map[string]Type{
 	"string":  String,
 	"error":   ErrorEnum,
 	"qubit":   QubitType,
+	"bit":     BitEnum,
 }
 
 // GenericNames are the predeclared parameterized type constructors, mapped to

@@ -143,6 +143,7 @@ func (c *checker) exprInternal(scope *Scope, e ast.Expr, want types.Type) types.
 	case *ast.FuncLit:
 		sig := c.litSignature(scope, x)
 		c.funcBody(scope, nil, nil, x.Params, sig.Params, sig.Results, x.Body)
+		c.checkNoLinearCapture(scope, x)
 		if len(x.Results) > 0 && !blockTerminates(x.Body) {
 			c.hint(x.Body.Rbrace,
 				"missing return at the end of this function literal",
@@ -205,6 +206,7 @@ func (c *checker) ident(scope *Scope, id *ast.Ident) types.Type {
 	}
 	c.info.Uses[id] = o
 	c.markRead(o)
+	c.consume(o, id.Pos(), id)
 
 	switch o.Kind {
 	case EnumVariant:

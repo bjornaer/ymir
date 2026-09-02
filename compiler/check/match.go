@@ -56,7 +56,13 @@ func (c *checker) matchStmt(scope *Scope, m *ast.MatchStmt) {
 	wildcard := false
 	unresolved := false
 
+	// Rule L4: every arm must leave the same linear bindings live.
+	beforeArms := c.snapshotLinear()
+	var armStates []linearState
+	var armLabels []string
+
 	for _, arm := range m.Arms {
+		c.restoreLinear(beforeArms)
 		// "Bindings introduced by a pattern are scoped to that arm."
 		armScope := NewScope(scope, BlockScope)
 		p := arm.Pattern
@@ -97,7 +103,10 @@ func (c *checker) matchStmt(scope *Scope, m *ast.MatchStmt) {
 		}
 
 		c.stmt(armScope, arm.Body)
+		armStates = append(armStates, c.snapshotLinear())
+		armLabels = append(armLabels, armLabel(p))
 	}
+	c.joinBranches(m.Keyword, beforeArms, armStates, armLabels)
 
 	// A `_` arm satisfies exhaustiveness. Chapter 05 SHOULD-avoids it on enums
 	// you own, which is a lint rather than an error, and diag has no warning
@@ -215,6 +224,19 @@ func ownerOf(members []*types.Named, variant string) string {
 		}
 	}
 	return members[0].Name
+}
+
+// armLabel names an arm for the L4 diagnostic.
+func armLabel(p *ast.Pattern) string {
+	switch {
+	case p.IsWildcard:
+		return "the _ arm"
+	case p.IsNil:
+		return "the nil arm"
+	case p.Variant != nil:
+		return "the " + p.Variant.Name + " arm"
+	}
+	return "an arm"
 }
 
 func qualify(e *types.Named, variant string, always bool) string {

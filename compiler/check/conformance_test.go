@@ -25,6 +25,17 @@ import (
 // that is absent from the table is reported as pending rather than failing, so
 // the test output doubles as the Phase 2 progress report.
 
+// checkerSkips lists cases the *checker* cannot handle yet, with the reason.
+//
+// This is deliberately separate from the `#@ skip` directive, which means "do
+// not execute this" and is run.py's business. A case can need the VM to run and
+// still be required to typecheck — most of the quantum ones are exactly that —
+// so honouring run.py's skip here would silently drop them from the gate.
+var checkerSkips = map[string]string{
+	"quantum/no_cloning":    "applies the gate `h`, and where the built-in gates live is open question Q14",
+	"quantum/qreg_register": "applies the gates `h` and `cnot`; see open question Q14",
+}
+
 // want is one expected diagnostic.
 type want struct {
 	line, col int      // 1-based, as token.Position reports them
@@ -108,6 +119,14 @@ var expected = map[string][]want{
 		{14, 9, []string{"must name its enum", "ParseError.UnexpectedEOF"}},
 	},
 
+	// M11 — linearity L1-L6.
+	"quantum/linear_unconsumed":           {{9, 5, []string{"q is not consumed"}}},
+	"quantum/no_cloning_by_move":          {{11, 13, []string{"use of moved value q1"}}},
+	"quantum/linear_used_twice":           {{11, 13, []string{"use of moved value q"}}},
+	"quantum/linear_branches_must_agree":  {{10, 5, []string{"branches disagree about q"}}},
+	"quantum/linear_not_captured":         {{11, 17, []string{"closure cannot capture q"}}},
+	"quantum/linear_not_consumed_in_loop": {{10, 26, []string{"consumed inside a loop"}}},
+
 	// M10 — returns on every path, main's signature.
 	"decl/missing_return":             {{12, 1, []string{"missing return", "classify"}}},
 	"decl/main_takes_no_parameters":   {{8, 11, []string{"main takes no parameters"}}},
@@ -158,11 +177,11 @@ func TestConformanceCasesCheck(t *testing.T) {
 			if err != nil {
 				t.Fatalf("malformed case header: %v", err)
 			}
-			if hdr.skip != "" {
-				t.Skipf("case is skipped: %s", hdr.skip)
-			}
-
 			name := filepath.ToSlash(rel)
+			caseID0 := strings.TrimSuffix(name, ".ymr")
+			if reason, skipped := checkerSkips[caseID0]; skipped {
+				t.Skipf("not checkable yet: %s", reason)
+			}
 			// The expectation table is keyed by case id, which is the path
 			// without the extension — the same key run.py uses.
 			caseID := strings.TrimSuffix(name, ".ymr")

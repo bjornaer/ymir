@@ -12,6 +12,14 @@ import (
 // write generic functions. `print` is variadic for the same reason, which
 // chapter 04 calls a wart to be removed once generics land.
 
+// measureResult is the result list of a consuming quantum operation.
+func measureResult(name string) []types.Type {
+	if name == "measure" {
+		return []types.Type{types.BitEnum}
+	}
+	return nil // reset and discard release the qubit and yield nothing
+}
+
 func (c *checker) builtinCall(scope *Scope, x *ast.CallExpr, name string) []types.Type {
 	args := c.argTypes(scope, x)
 
@@ -173,11 +181,26 @@ func (c *checker) builtinCall(scope *Scope, x *ast.CallExpr, name string) []type
 			"write make_chan[int]() or make_chan[int](capacity)")
 		return []types.Type{types.Invalid}
 
-	case "measure", "measure_all", "reset", "discard":
-		c.hint(x.Fun.Pos(),
-			"the quantum fragment is not implemented yet",
-			"chapter 08 is normative but unimplemented; see PLAN.md phase 7")
-		return []types.Type{types.Invalid}
+	case "measure", "reset", "discard":
+		// The consuming operations of chapter 08 §Allocation and disposal.
+		// Each takes a qubit by value, so the ordinary argument path already
+		// consumed it — there is no borrow here.
+		if !c.wantArity(x, name, 1, args) {
+			return measureResult(name)
+		}
+		if _, isQubit := args[0].(*types.Qubit); !isQubit && !types.IsInvalid(args[0]) {
+			c.errorf(x.Args[0].Pos(), "%s needs a qubit, got %s", name, args[0])
+		}
+		return measureResult(name)
+
+	case "measure_all":
+		if !c.wantArity(x, "measure_all", 1, args) {
+			return []types.Type{&types.Array{Elem: types.BitEnum}}
+		}
+		if _, isReg := args[0].(*types.QReg); !isReg && !types.IsInvalid(args[0]) {
+			c.errorf(x.Args[0].Pos(), "measure_all needs a qreg, got %s", args[0])
+		}
+		return []types.Type{&types.Array{Elem: types.BitEnum}}
 	}
 
 	c.errorf(x.Fun.Pos(), "internal: builtin %s has no signature", name)

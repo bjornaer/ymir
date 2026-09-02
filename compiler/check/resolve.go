@@ -246,6 +246,7 @@ func (c *checker) signature(scope *Scope, d *ast.FuncDecl) *types.Func {
 	f := &types.Func{}
 	for _, p := range d.Params {
 		f.Params = append(f.Params, c.resolveType(scope, p.Type))
+		f.Mut = append(f.Mut, p.Mut)
 	}
 	for _, r := range d.Results {
 		f.Results = append(f.Results, c.resolveType(scope, r))
@@ -257,6 +258,7 @@ func (c *checker) litSignature(scope *Scope, d *ast.FuncLit) *types.Func {
 	f := &types.Func{}
 	for _, p := range d.Params {
 		f.Params = append(f.Params, c.resolveType(scope, p.Type))
+		f.Mut = append(f.Mut, p.Mut)
 	}
 	for _, r := range d.Results {
 		f.Results = append(f.Results, c.resolveType(scope, r))
@@ -332,6 +334,7 @@ func (c *checker) funcBody(outer *Scope, recv *ast.Param, recvType types.Type, p
 	if body != nil {
 		c.block(scope, body)
 	}
+	c.checkScopeExit(scope)
 }
 
 func (c *checker) declareParam(scope *Scope, p *ast.Param, t types.Type) {
@@ -342,7 +345,8 @@ func (c *checker) declareParam(scope *Scope, p *ast.Param, t types.Type) {
 		Pos:  p.Name.Pos(),
 		// A receiver or parameter marked `mut` is a mutable reference;
 		// otherwise it is a copy the callee may not write through (R6).
-		Mutable: p.Mut,
+		Mutable:  p.Mut,
+		Borrowed: p.Mut,
 	}
 	c.declare(scope, o)
 	c.info.Defs[p.Name] = o
@@ -354,6 +358,8 @@ func (c *checker) block(outer *Scope, b *ast.BlockStmt) {
 	for _, s := range b.Stmts {
 		c.stmt(scope, s)
 	}
+	// Rule L1: a linear binding must be consumed before its scope ends.
+	c.checkScopeExit(scope)
 }
 
 func (c *checker) stmt(scope *Scope, s ast.Stmt) {
@@ -384,10 +390,21 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 		// Rule N6: `if x != nil` narrows x to T in the then branch, and
 		// `if x == nil` narrows it in the else branch.
 		thenScope, elseScope := c.narrowScopes(scope, x.Cond)
+
+		before := c.snapshotLinear()
 		c.block(thenScope, x.Then)
+		thenState := c.snapshotLinear()
+
+		c.restoreLinear(before)
 		if x.Else != nil {
 			c.stmt(elseScope, x.Else)
 		}
+		elseState := c.snapshotLinear()
+
+		// Rule L4. An `if` with no else still has two paths: the body, and
+		// skipping it.
+		c.joinBranches(x.Keyword, before,
+			[]linearState{thenState, elseState}, []string{"the then branch", "the else branch"})
 
 	case *ast.WhileStmt:
 		c.condition(scope, x.Cond, "while")
@@ -431,6 +448,7 @@ func (c *checker) stmt(scope *Scope, s ast.Stmt) {
 
 	case *ast.SpawnStmt:
 		c.exprStatement(scope, x.Call)
+		c.checkNoLinearSpawn(scope, x.Call)
 
 	case *ast.SendStmt:
 		c.expr(scope, x.Chan)
@@ -535,6 +553,7 @@ func (c *checker) exprStatement(scope *Scope, e ast.Expr) {
 		rs := c.call(scope, call)
 		c.info.Types[e] = firstOrInvalid(rs)
 		c.checkUnhandled(call, rs)
+		c.checkDroppedLinear(call, rs)
 		return
 	}
 	c.expr(scope, e)
@@ -556,7 +575,17 @@ func (c *checker) condition(scope *Scope, e ast.Expr, keyword string) {
 
 func (c *checker) loopBody(scope *Scope, b *ast.BlockStmt) {
 	c.loopDepth++
+	before := c.snapshotLinear()
+	savedDeclared := c.declaredInCurrentLoop
+	c.declaredInCurrentLoop = map[*Object]bool{}
+
 	c.block(scope, b)
+
+	// Rule L6: the body runs an unknown number of times, so it may not consume
+	// anything declared outside it.
+	c.checkLoopBody(b.Pos(), before)
+	c.declaredInCurrentLoop = savedDeclared
+	c.restoreLinear(before)
 	c.loopDepth--
 }
 
@@ -724,4 +753,5 @@ func (c *checker) declareLocal(scope *Scope, id *ast.Ident, t types.Type) {
 	c.declare(scope, o)
 	c.info.Defs[id] = o
 	c.trackErrorBinding(o)
+	c.declaredInCurrentLoop[o] = true
 }

@@ -45,3 +45,29 @@ jobs:
             fi
           done
           exit $fail
+
+      # Phase 2 exit criterion. The authoritative gate is
+      # TestConformanceCasesCheck, which asserts the line and column of every
+      # expected diagnostic -- run.py checks neither. This loop covers the other
+      # half at the CLI: a case with no `compile-error` header must check clean,
+      # and `ymir check` must exit 0 for it.
+      - name: type-check every case that is meant to compile
+        run: |
+          fail=0
+          for f in $(find conformance/cases -name '*.ymr' | sort); do
+            if grep -q '^#@ compile-error' "$f"; then
+              continue
+            fi
+            case "$f" in
+              */quantum/no_cloning.ymr|*/quantum/qreg_register.ymr)
+                continue ;;   # gate names are unresolved; see open question Q14
+            esac
+            if ! ./bin/ymir check -q "$f"; then
+              echo "::error file=$f::case must type-check but does not"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: type-check the tour
+        run: ./bin/ymir check -q examples/tour.ymr

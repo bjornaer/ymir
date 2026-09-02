@@ -60,7 +60,17 @@ func Identical(a, b Type) bool {
 
 	case *Func:
 		y, ok := b.(*Func)
-		return ok && identicalList(x.Params, y.Params) && identicalList(x.Results, y.Results)
+		if !ok || !identicalList(x.Params, y.Params) || !identicalList(x.Results, y.Results) {
+			return false
+		}
+		// `mut` is part of the type: a function that borrows its argument is
+		// not interchangeable with one that copies it.
+		for i := range x.Params {
+			if x.MutAt(i) != y.MutAt(i) {
+				return false
+			}
+		}
+		return true
 
 	case *Union:
 		y, ok := b.(*Union)

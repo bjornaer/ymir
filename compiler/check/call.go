@@ -1,7 +1,10 @@
 package check
 
 import (
+	"strconv"
+
 	"github.com/bjornaer/ymir/compiler/ast"
+	"github.com/bjornaer/ymir/compiler/token"
 	"github.com/bjornaer/ymir/compiler/types"
 )
 
@@ -66,6 +69,13 @@ func (c *checker) call(scope *Scope, x *ast.CallExpr) []types.Type {
 				return c.makeChanCall(scope, x, fun)
 			}
 		}
+		// `qreg[3]()` allocates a register (chapter 08 §Registers). Its width
+		// is a compile-time constant, not a type argument, which is why it does
+		// not go through the generic-type path.
+		if id, ok := fun.X.(*ast.Ident); ok && id.Name == "qreg" {
+			c.info.Types[id] = types.Invalid
+			return c.qregCall(scope, x, fun)
+		}
 	}
 
 	// An ordinary value that must be callable. The callee is typed first, so
@@ -81,8 +91,12 @@ func (c *checker) call(scope *Scope, x *ast.CallExpr) []types.Type {
 		c.errorf(x.Fun.Pos(), "cannot call %s, which is not a function", fnType)
 		return []types.Type{types.Invalid}
 	}
+	saved := c.callSig
+	c.callSig = sig
 	args := c.argTypesWant(scope, x, sig.Params)
+	c.callSig = saved
 	c.checkArgs(x, calleeName(x.Fun), sig.Params, args)
+	c.checkNoAliasedBorrows(x, calleeName(x.Fun), sig)
 	return sig.Results
 }
 
@@ -90,6 +104,16 @@ func (c *checker) call(scope *Scope, x *ast.CallExpr) []types.Type {
 func (c *checker) callWithParams(scope *Scope, x *ast.CallExpr, name string, params []types.Type) {
 	args := c.argTypesWant(scope, x, params)
 	c.checkArgs(x, name, params, args)
+}
+
+// callWithSig is callWithParams for a signature that carries `mut` markers, so
+// a borrowed argument is not consumed (rule L3).
+func (c *checker) callWithSig(scope *Scope, x *ast.CallExpr, name string, sig *types.Func) {
+	saved := c.callSig
+	c.callSig = sig
+	args := c.argTypesWant(scope, x, sig.Params)
+	c.callSig = saved
+	c.checkArgs(x, name, sig.Params, args)
 }
 
 // qualifiedCall handles `a.b(...)`: a module member, a qualified enum variant,
@@ -135,7 +159,7 @@ func (c *checker) qualifiedCall(scope *Scope, x *ast.CallExpr, sel *ast.Selector
 		// path below handles.
 		return nil, false
 	}
-	c.callWithParams(scope, x, recv.String()+"."+sel.Sel.Name, m.sig.Params)
+	c.callWithSig(scope, x, recv.String()+"."+sel.Sel.Name, m.sig)
 	if m.mutRecv {
 		c.requireMutable(sel.X, "call "+sel.Sel.Name+", which takes a mut receiver")
 	}
@@ -174,13 +198,10 @@ func (c *checker) conversionCall(scope *Scope, x *ast.CallExpr, name string, tar
 		return []types.Type{target}
 
 	case "qubit":
-		// Allocation, chapter 08. The fragment is unimplemented until Phase 7,
-		// and allowing it now would let a program build a linear value the rest
-		// of the checker cannot yet track.
-		c.hint(x.Fun.Pos(),
-			"the quantum fragment is not implemented yet",
-			"chapter 08 is normative but unimplemented; see PLAN.md phase 7")
-		return []types.Type{types.Invalid}
+		// Allocation: `q := qubit()` yields a fresh qubit in |0>, which the
+		// linearity checker then requires be consumed exactly once.
+		c.wantArity(x, "qubit", 0, args)
+		return []types.Type{types.QubitType}
 	}
 
 	// A struct or enum name used as a call. Struct literals are written
@@ -189,6 +210,53 @@ func (c *checker) conversionCall(scope *Scope, x *ast.CallExpr, name string, tar
 		name+" is a type, not a function",
 		"a struct is built with "+name+"{field: value}, an enum by naming a variant")
 	return []types.Type{types.Invalid}
+}
+
+// qregCall types `qreg[N]()`, whose width is a compile-time constant.
+func (c *checker) qregCall(scope *Scope, x *ast.CallExpr, idx *ast.IndexExpr) []types.Type {
+	args := c.argTypes(scope, x)
+	c.wantArity(x, "qreg", 0, args)
+
+	lit, ok := idx.Index.(*ast.BasicLit)
+	if !ok || lit.Kind != token.INT {
+		c.hint(idx.Index.Pos(),
+			"qreg takes a constant integer width",
+			"write qreg[4]()")
+		return []types.Type{types.Invalid}
+	}
+	n, err := strconv.Atoi(lit.Value)
+	if err != nil || n <= 0 {
+		c.errorf(idx.Index.Pos(), "qreg width must be a positive integer, got %s", lit.Value)
+		return []types.Type{types.Invalid}
+	}
+	return []types.Type{&types.QReg{N: n}}
+}
+
+// checkNoAliasedBorrows enforces chapter 08 §Gates: "Two `mut` borrows in one
+// call MUST refer to distinct qubits. cnot(q, q) is a compile error where
+// aliasing is statically visible, and a panic otherwise."
+func (c *checker) checkNoAliasedBorrows(x *ast.CallExpr, name string, sig *types.Func) {
+	seen := map[*Object]*ast.Ident{}
+	for i, a := range x.Args {
+		if !sig.MutAt(i) {
+			continue
+		}
+		id, ok := a.(*ast.Ident)
+		if !ok {
+			continue // not statically visible; a runtime check per chapter 08
+		}
+		o := c.info.Uses[id]
+		if o == nil {
+			continue
+		}
+		if prev, dup := seen[o]; dup {
+			c.hint(id.Pos(),
+				name+" borrows "+id.Name+" twice, and two mut borrows must be distinct",
+				"the first is at "+prev.Pos().String())
+			continue
+		}
+		seen[o] = id
+	}
 }
 
 // makeChanCall types `make_chan[T]()` and `make_chan[T](capacity)`.
@@ -266,9 +334,22 @@ func (c *checker) argTypesWant(scope *Scope, x *ast.CallExpr, params []types.Typ
 		if i < len(params) {
 			want = params[i]
 		}
+		if c.paramBorrows(i) {
+			// Rule L3: "Passing a linear value as an argument consumes it,
+			// unless the parameter is declared `mut`, which borrows it for the
+			// call's duration."
+			c.borrow(func() { args[i] = c.exprWant(scope, a, want) })
+			continue
+		}
 		args[i] = c.exprWant(scope, a, want)
 	}
 	return args
+}
+
+// paramBorrows reports whether the parameter at index i of the signature
+// currently being applied is declared `mut`.
+func (c *checker) paramBorrows(i int) bool {
+	return c.callSig != nil && c.callSig.MutAt(i)
 }
 
 // checkArgs enforces exact arity and assignability.

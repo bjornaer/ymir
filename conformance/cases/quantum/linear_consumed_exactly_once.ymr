@@ -1,0 +1,22 @@
+#@ case quantum/linear_consumed_exactly_once
+#@ spec 08-quantum.md#allocation-and-disposal
+#@ skip needs the state-vector simulator (PLAN.md phase 7)
+#@ exit 0
+#@ stdout
+#@ | done
+
+module linear_consumed_exactly_once
+
+func pass(q: qubit) -> qubit {
+    return q
+}
+
+func main() {
+    q := qubit()
+    q2 := pass(q)
+    discard(q2)
+
+    r := qreg[2]()
+    bits := measure_all(r)
+    print("done")
+}

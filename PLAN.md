@@ -4,9 +4,10 @@
 where the project stands and what happens next. Update the *Status* and *Session log*
 sections whenever you do meaningful work.
 
-- **Last updated:** 2026-09-01
-- **Current phase:** Phase 2 — type checker. In progress on `phase-2-typechecker`.
-- **Blocking:** nothing. R1–R8 are resolved; Q6 blocks Phase 5, Q4 blocks Phase 3.
+- **Last updated:** 2026-09-02
+- **Current phase:** Phase 2 — **complete**. Phase 3 (bytecode and VM) not started.
+- **Blocking:** nothing. R1–R8 are resolved. Q4 and Q5 are settled; Q6 blocks Phase 5,
+  Q14 blocks the `quantum/` cases and Phase 7.
 
 ---
 
@@ -54,7 +55,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 79 cases.
+conformance/          Executable form of the spec. run.py + 85 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -66,7 +67,7 @@ compiler/diag/        EXISTS. Errors with position, source excerpt, caret.
 cmd/ymir/             EXISTS. CLI; `parse` and `check`.
 
 compiler/types/       EXISTS. Semantic types, identity, assignability, universe.
-compiler/check/       EXISTS. Scopes, name and type resolution. Rules M4-M10 pending.
+compiler/check/       EXISTS. The whole Phase 2 checker. `ymir check` is the gate.
 compiler/bytecode/    PHASE 3.
 vm/                   PHASE 3.
 
@@ -116,7 +117,7 @@ phase before its predecessor's criteria are met.
 - [x] Go tests for both packages, plus `TestConformanceCasesParse` as the exit gate
 - [x] CI: gofmt, vet, test, and a parse pass over every conformance case
 
-### Phase 2 — Type checker  🚧 IN PROGRESS
+### Phase 2 — Type checker  ✅ COMPLETE (2026-09-02)
 
 **What Phase 1 left you.** A parsed `*ast.File` with positions on every node, and
 `compiler/diag` for reporting. `ast.Type` is *syntax only* — what was written, not what
@@ -200,14 +201,32 @@ during this phase.
 - [x] **M8** — `match` exhaustiveness over enums and unions (2026-09-01)
 - [x] **M9** — error sets, `try`, unhandled errors (2026-09-02)
 - [x] **M10** — returns on every path, `main`'s signature (2026-09-02)
-- [ ] **M11** — linearity L1–L6, CI `ymir check -q` gate, phase close
+- [x] **M11** — linearity L1–L6, CI `ymir check -q` gate, phase close (2026-09-02)
 
 **Position accuracy is enforced Go-side, not by `run.py`.** The runner checks only that
 each `compile-error` substring appears somewhere in stdout or stderr, and never checks
 line or column — a runtime failure printing the right word would pass it. The
 `compiler/check` conformance test carries the expected `line:column` per case.
 
-### Phase 3 — Bytecode and VM, minimal slice
+### Phase 3 — Bytecode and VM, minimal slice  ← START HERE
+
+**What Phase 2 left you.** `compiler/types` answers every question about a type;
+`compiler/check` resolves a parsed file against it and returns an `Info` side table —
+`Types` keyed by `ast.Expr`, `Defs` and `Uses` keyed by `*ast.Ident`. Nothing is written
+back onto the AST, so the bytecode compiler reads types out of `Info` rather than
+re-deriving them. `ymir check <file>` exits 0 or reports with position and excerpt.
+
+**Decide first, both block code generation:**
+
+- **Q4 — does `main` return anything?** The checker currently requires `func main()` with
+  no results. Changing it to `-> int` or `-> ?error` is a checker change *and* a runtime
+  change, so decide before writing the entry sequence.
+- **Q5 is already answered (R5): `int` overflow traps.** Every arithmetic opcode needs the
+  check. Constant expressions already fail at compile time.
+
+**Watch out for:** `?int` cannot be a bare int64 at runtime. Nullable primitives need a
+tagged representation or boxing — flagged since R3 and still undecided. It is a VM
+representation choice, not a semantic one; chapter 02 is normative on meaning only.
 
 - Deliverables: `compiler/bytecode`, `vm/`. Enough for: `main`, `print`, `int` and
   `float` arithmetic, `if`/`while`, function calls, module-level `var`.
@@ -315,7 +334,7 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R2 | Error propagation operator | — | **resolved: `try`** |
 | Q2 | Is `Result[T,E]` in the stdlib alongside `(T, error)`? | Phase 6 | open, largely mooted by R1 |
 | Q3 | User-facing generics in v1? | Phase 2 | open |
-| Q4 | Does `main` return `int` or `error`? | Phase 3 | open |
+| Q4 | Does `main` return `int` or `error`? | **Phase 3** | open, decide first |
 | R5 | Integer overflow: wrap, trap, or saturate? | — | **resolved: traps** |
 | Q6 | Data races on shared `array`/`map` between tasks | **Phase 5** | open |
 | Q7 | Structured concurrency instead of Go's detached `spawn`? | Phase 5 | open |
@@ -323,6 +342,7 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R3 | Should error-position nullability be written into the type? | — | **resolved: `?T`, general** |
 | R4 | Should error sets be inferred? | — | **resolved: explicit for now** |
 | Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
+| Q14 | Where do the built-in quantum gates live? Not universe scope | Phase 7 | open, found in Phase 2 |
 | R7 | How is a `complex` value written? | — | **resolved: the parser folds `a ± bi`** |
 | R8 | Is a container of a linear type linear, or ill-formed? | — | **resolved: ill-formed** |
 
@@ -791,3 +811,63 @@ Append an entry per working session. Keep it short: what changed, what to do nex
   the module loader in Phase 6.
 - 4 new cases, 79 total.
 - **Next:** M11, linearity L1–L6, the CI gate, and the phase close.
+
+### 2026-09-02 — Phase 2 M11: linearity, and the phase closes
+
+- **Rules L1 through L6 are implemented and exercised from conformance cases**, not
+  only from Go tests. That was not the plan: the brief assumed no linear value
+  could exist before Phase 7. It can — a parameter may be declared `qubit` — and
+  once allocation and disposal were allowed to *typecheck*, every rule became
+  reachable from source.
+- The state is one bit per binding, in a map that branches snapshot and restore.
+  There is no dataflow lattice, because Ymir has no `goto` and no fallthrough, so
+  control flow is the statement tree.
+- **`mut` is now part of a function's type.** `func(mut qubit)` and `func(qubit)`
+  are different types, because L3 turns on the difference: passing consumes,
+  borrowing does not.
+- **Chapter 08's allocation and disposal now typecheck** — `qubit()`, `qreg[N]()`,
+  `measure`, `reset`, `discard`, `measure_all`, and the `bit` enum. That is
+  decision D3 working as designed: the type rules are Phase 2's, the simulator is
+  Phase 7's. `quantum/linear_unconsumed` is no longer skipped.
+- **New open question Q14: where do the built-in gates live?** Adding `h`, `x`,
+  `y`, `z`, `s`, `t` to universe scope was tried and reverted within the minute —
+  `TestLoopHeaderBindingsAreScopedToTheLoop` failed because `print(x)` after the
+  loop resolved to the Pauli-X gate instead of reporting `undefined: x`. Chapter 08
+  never says what scope they are in. A `stdlib.quantum` module reached as
+  `quantum.h(q)` is the likely answer. `quantum/no_cloning` and
+  `quantum/qreg_register` stay skipped until it is settled.
+- **Bug the gate caught:** indexing a `qreg` consumed the whole register. Chapter 08
+  §Registers says indexing is a *borrow* and the register retains the obligation.
+- **Bug the tests caught:** `restoreLinear` aliased the snapshot instead of copying
+  it, so each branch mutated the baseline the join was about to compare against and
+  L4 silently passed everything. Fixed, and the reason is in the comment.
+- The Go gate no longer honours `run.py`'s `skip`. "Do not execute" and "do not
+  typecheck" are different questions, and conflating them was quietly dropping the
+  quantum cases from the gate. `checkerSkips` names the two that genuinely cannot
+  be checked, with the reason.
+- CI now type-checks every case that is meant to compile, plus the tour.
+- 6 new cases, 85 total. **83 of 85 pass the checker gate.**
+
+---
+
+## Phase 2 is complete
+
+Definition of done, from the Phase 2 brief: *every `compile-error` case reports the
+right error at the right position.* All 11 cases the brief named do, and so do the
+36 added since — position asserted in Go, because `run.py` checks neither line nor
+column.
+
+The other half holds too: every case without a `compile-error` header type-checks
+clean, as does `examples/tour.ymr`.
+
+**Suite: 26 cases at the start of Phase 2, 85 now.** The brief asked for roughly
+double; it more than tripled.
+
+**Resolved during the phase:** Q5 → R5 (overflow traps), Q8 → R6 (no `let`/`mut`),
+Q13 → R7 (complex literals fold in the parser), and R8 (a container of a linear type
+is ill-formed).
+
+**Found and filed rather than guessed:** Q13 and Q14, matrix indexing left undefined,
+`qreg[N]` not parsing at all, and eight spec defects corrected in M0.
+
+**Next:** Phase 3. Answer Q4 first.

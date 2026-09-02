@@ -96,6 +96,10 @@ func newUniverse() *Scope {
 	for name, t := range types.Predeclared {
 		s.Insert(&Object{Kind: TypeName, Name: name, Type: t})
 	}
+	// types.Gates is deliberately NOT inserted here. Chapter 08 lists h, x, y,
+	// z, s and t as gate names, and putting single letters in universe scope
+	// would mean a typo'd `x` resolves to the Pauli-X gate instead of being
+	// reported as undefined. Where the gates live is open question Q14.
 	for name, b := range types.Builtins {
 		// float, int and complex are both type names and conversion
 		// functions. The type name is inserted above and wins the scope slot;

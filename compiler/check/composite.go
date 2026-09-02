@@ -273,7 +273,12 @@ func (c *checker) indexExpr(scope *Scope, x *ast.IndexExpr) types.Type {
 
 // indexResults returns the one or two values an index produces.
 func (c *checker) indexResults(scope *Scope, x *ast.IndexExpr) []types.Type {
-	base := c.expr(scope, x.X)
+	// Indexing never consumes its base. For a qreg that is normative:
+	// "Indexing a qreg yields a mutable borrow of one qubit, not a move — the
+	// register retains the obligation" (chapter 08 §Registers). For every other
+	// indexable type the base is unrestricted, so the borrow is a no-op.
+	var base types.Type
+	c.borrow(func() { base = c.expr(scope, x.X) })
 
 	switch b := base.(type) {
 	case *types.Array:

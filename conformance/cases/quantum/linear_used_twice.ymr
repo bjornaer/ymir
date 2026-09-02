@@ -1,0 +1,12 @@
+#@ case quantum/linear_used_twice
+#@ spec 02-types.md#linearity-rules
+#@ compile-error
+#@ | moved
+
+module linear_used_twice
+
+func main() {
+    q := qubit()
+    discard(q)
+    discard(q)
+}

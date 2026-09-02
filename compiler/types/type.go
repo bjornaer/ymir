@@ -191,10 +191,19 @@ func (c *Chan) String() string { return "chan[" + c.Elem.String() + "]" }
 
 // Func is a function type. Results holds every result component including the
 // error position, which is simply the last one when it is a nullable error set.
+//
+// Mut records which parameters are declared `mut`, and is part of the type: a
+// function taking a mutable reference is not the same type as one taking a copy,
+// and rule L3 turns on the difference — passing a linear value consumes it
+// unless the parameter borrows it. A nil or short Mut means "not mut".
 type Func struct {
 	Params  []Type
 	Results []Type
+	Mut     []bool
 }
+
+// MutAt reports whether parameter i is declared `mut`.
+func (f *Func) MutAt(i int) bool { return i < len(f.Mut) && f.Mut[i] }
 
 func (*Func) typ() {}
 func (f *Func) String() string {

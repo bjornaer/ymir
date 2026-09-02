@@ -331,6 +331,21 @@ making those types non-sendable so sharing is impossible. **Blocks Phase 5.**
 `main` returning does not wait for spawned tasks. Go's choice here is widely regarded as
 its worst concurrency decision.
 
+### Q14 — Where do the built-in quantum gates live?
+
+[Chapter 08](08-quantum.md) lists `h`, `x`, `y`, `z`, `s`, `t`, `rx`, `ry`, `rz`, `cnot`,
+`cz`, `swap` and `toffoli` as bare `func` signatures without saying what scope they are
+in. Universe scope is the obvious reading and the wrong one: `x`, `y`, `z`, `s` and `t`
+are among the most common variable names in any program, and putting them there means a
+typo'd `x` resolves to the Pauli-X gate instead of being reported as undefined. A local
+binding would shadow them, per chapter 01, but only where one exists.
+
+A `stdlib.quantum` module reached as `quantum.h(q)` avoids that entirely and matches
+chapter 03's rule that every non-local name is traceable to an import. It costs a
+qualifier on every gate application, in a fragment where gate application is most of the
+code. Found while implementing linearity in Phase 2. **Blocks the `quantum/` conformance
+cases and Phase 7**, not Phase 2.
+
 ### Q12 — Are `as` and `default` reserved words or contextual identifiers?
 
 `as` (import alias) and `default` (a `select` case) are parsed as contextual identifiers,
