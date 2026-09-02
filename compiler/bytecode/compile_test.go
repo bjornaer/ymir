@@ -125,9 +125,14 @@ func TestUnimplementedConstructsReportRatherThanVanish(t *testing.T) {
 	// The failure mode this guards against is legacy's: `func main()` compiled
 	// to nothing and the program silently did nothing. A construct the checker
 	// accepts but the compiler cannot yet handle must say so, with a position.
-	_, errs := compileSrc(t, "module t\n\nfunc main() {\n    x := 1\n    print(x)\n}\n")
+	//
+	// An array literal is the probe because arrays are Phase 4. As each
+	// milestone lands, this test needs a construct that is still pending —
+	// which is the point: when nothing is left to probe, the compiler has caught
+	// up with the checker.
+	_, errs := compileSrc(t, "module t\n\nfunc main() {\n    var xs: array[int] = [1, 2]\n    print(1)\n}\n")
 	if errs == "" {
-		t.Fatal("a `:=` declaration compiled silently; it is not implemented yet")
+		t.Fatal("an array literal compiled silently; arrays are not implemented yet")
 	}
 	for _, want := range []string{"not implemented yet", "t.ymr:4"} {
 		if !strings.Contains(errs, want) {

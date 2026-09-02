@@ -6,6 +6,7 @@ import (
 
 	"github.com/bjornaer/ymir/compiler/ast"
 	"github.com/bjornaer/ymir/compiler/token"
+	"github.com/bjornaer/ymir/compiler/types"
 )
 
 // Expressions.
@@ -34,6 +35,15 @@ func (c *compiler) expr(e ast.Expr) {
 
 	case *ast.NilLit:
 		c.emit(OpNil, 0, x.Pos())
+
+	case *ast.Ident:
+		c.ident(x)
+
+	case *ast.UnaryExpr:
+		c.unary(x)
+
+	case *ast.BinaryExpr:
+		c.binary(x)
 
 	case *ast.CallExpr:
 		// In expression position a call must leave exactly one value; the
@@ -81,6 +91,140 @@ func (c *compiler) basicLit(x *ast.BasicLit) {
 	default:
 		c.unsupported(x.Pos(), "this literal")
 	}
+}
+
+// ident loads a variable.
+func (c *compiler) ident(x *ast.Ident) {
+	if slot, ok := c.resolveLocal(x); ok {
+		c.emit(OpGetLocal, slot, x.Pos())
+		return
+	}
+	if slot, ok := c.globals[x.Name]; ok {
+		c.emit(OpGetGlobal, slot, x.Pos())
+		return
+	}
+	// The checker resolved every name, so an unresolved one here means the
+	// compiler and the checker disagree about scope.
+	c.errs.Addf(x.Pos(), "internal: %s resolved by the checker but not by the compiler", x.Name)
+}
+
+func (c *compiler) unary(x *ast.UnaryExpr) {
+	c.expr(x.X)
+	t := c.typeOf(x.X)
+
+	switch x.Op {
+	case token.SUB:
+		switch {
+		case types.Identical(t, types.Int):
+			c.emit(OpNegInt, 0, x.OpPos)
+		case types.Identical(t, types.Float):
+			c.emit(OpNegFloat, 0, x.OpPos)
+		default:
+			c.unsupported(x.OpPos, "negating a "+t.String())
+		}
+	case token.NOT:
+		c.emit(OpNot, 0, x.OpPos)
+	default:
+		c.unsupported(x.OpPos, "the unary operator "+x.Op.String())
+	}
+}
+
+// binary compiles an operator, choosing the opcode from the operand type the
+// checker already proved.
+//
+// Both operands have identical types (chapter 04 §Operand typing), so one
+// lookup decides the instruction.
+func (c *compiler) binary(x *ast.BinaryExpr) {
+	t := c.typeOf(x.X)
+	if types.IsInvalid(t) {
+		t = c.typeOf(x.Y)
+	}
+
+	c.expr(x.X)
+	c.expr(x.Y)
+
+	switch x.Op {
+	// Equality is not typed: chapter 04 defines it on any unrestricted type,
+	// so it dispatches on the value's kind at runtime.
+	case token.EQL:
+		c.emit(OpEq, 0, x.OpPos)
+		return
+	case token.NEQ:
+		c.emit(OpNe, 0, x.OpPos)
+		return
+	}
+
+	if op, ok := c.opFor(x.Op, t); ok {
+		c.emit(op, 0, x.OpPos)
+		return
+	}
+	c.unsupported(x.OpPos, "`"+x.Op.String()+"` on "+t.String())
+}
+
+// opFor maps an operator and its operand type to an opcode.
+func (c *compiler) opFor(op token.Kind, t types.Type) (Op, bool) {
+	switch {
+	case types.Identical(t, types.Int):
+		switch op {
+		case token.ADD:
+			return OpAddInt, true
+		case token.SUB:
+			return OpSubInt, true
+		case token.MUL:
+			return OpMulInt, true
+		case token.QUO:
+			return OpDivInt, true
+		case token.REM:
+			return OpModInt, true
+		case token.POW:
+			return OpPowInt, true
+		case token.LSS:
+			return OpLtInt, true
+		case token.LEQ:
+			return OpLeInt, true
+		case token.GTR:
+			return OpGtInt, true
+		case token.GEQ:
+			return OpGeInt, true
+		}
+
+	case types.Identical(t, types.Float):
+		switch op {
+		case token.ADD:
+			return OpAddFloat, true
+		case token.SUB:
+			return OpSubFloat, true
+		case token.MUL:
+			return OpMulFloat, true
+		case token.QUO:
+			return OpDivFloat, true
+		case token.POW:
+			return OpPowFloat, true
+		case token.LSS:
+			return OpLtFloat, true
+		case token.LEQ:
+			return OpLeFloat, true
+		case token.GTR:
+			return OpGtFloat, true
+		case token.GEQ:
+			return OpGeFloat, true
+		}
+
+	case types.Identical(t, types.String):
+		switch op {
+		case token.ADD:
+			return OpConcat, true
+		case token.LSS:
+			return OpLtString, true
+		case token.LEQ:
+			return OpLeString, true
+		case token.GTR:
+			return OpGtString, true
+		case token.GEQ:
+			return OpGeString, true
+		}
+	}
+	return OpNop, false
 }
 
 // call compiles a call and reports how many values it leaves on the stack.

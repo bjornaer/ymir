@@ -123,6 +123,18 @@ func (v *VM) run() error {
 		case bytecode.OpPop:
 			v.pop()
 
+		case bytecode.OpGetLocal:
+			v.push(v.stack[f.base+int(in.A)])
+
+		case bytecode.OpSetLocal:
+			v.stack[f.base+int(in.A)] = v.pop()
+
+		case bytecode.OpGetGlobal:
+			v.push(v.globals[in.A])
+
+		case bytecode.OpSetGlobal:
+			v.globals[in.A] = v.pop()
+
 		case bytecode.OpPrint:
 			if err := v.doPrint(int(in.A)); err != nil {
 				return err
@@ -134,12 +146,11 @@ func (v *VM) run() error {
 
 		case bytecode.OpCall:
 			callee := v.prog.Funcs[in.A]
-			base := len(v.stack) - callee.Arity
 			// Arguments are already on the stack, in order, and become the
-			// callee's first slots. Remaining slots start as nil.
-			for i := callee.Arity; i < callee.Slots; i++ {
-				v.push(Nil())
-			}
+			// callee's first slots. Later locals push themselves as they are
+			// declared, so the stack always holds exactly the frame's live
+			// locals — the invariant the compiler's endScope maintains.
+			base := len(v.stack) - callee.Arity
 			v.frames = append(v.frames, frame{fn: callee, base: base})
 
 		case bytecode.OpReturn:
@@ -151,7 +162,15 @@ func (v *VM) run() error {
 			return nil
 
 		default:
-			return v.panicf("internal: unimplemented opcode %s", in.Op)
+			// Arithmetic, comparison and logic live in arith.go, which reports
+			// whether it recognized the opcode.
+			handled, err := v.arith(in.Op)
+			if err != nil {
+				return err
+			}
+			if !handled {
+				return v.panicf("internal: unimplemented opcode %s", in.Op)
+			}
 		}
 	}
 }

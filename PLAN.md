@@ -257,7 +257,7 @@ criterion, which already requires every non-`concurrency`, non-`quantum` case to
 - [x] **M1** — record R9 and R10, correct the phase boundary, accept `main() -> ?error` (2026-09-02)
 - [x] **M2** — `compiler/bytecode`: ops, chunk, line table, disassembler (2026-09-02)
 - [x] **M3** — compiler and VM spine: `main` printing a literal, end to end (2026-09-02)
-- [ ] **M4** — arithmetic and comparison, with R5's overflow trap
+- [x] **M4** — arithmetic, comparison, and local variables (2026-09-02)
 - [ ] **M5** — control flow: `if`/`else`, `while`, block-scoped locals
 - [ ] **M6** — functions, frames, calls, module-level `var` as globals
 - [ ] **M7** — strings, `panic` with a stack trace, exit codes, `main`'s error form
@@ -999,3 +999,28 @@ is ill-formed).
 - `ymir build -S` prints the listing. `ymir build` without it says writing an
   executable is Phase 6 rather than doing nothing.
 - **Next:** M4, arithmetic with R5's overflow trap.
+
+### 2026-09-02 — Phase 3 M4: arithmetic, comparison, and locals
+
+- Locals came in with arithmetic rather than waiting for M5, because the two
+  target cases both need them — `x := 3` before `x == -3 + 6` means anything.
+- **A local needs no store instruction.** Its initializer is already on top of
+  the stack, and that slot *is* the local. The invariant is that after every
+  statement the stack holds exactly the frame's live locals, which `endScope`
+  maintains by popping. The VM's `OpCall` was corrected to match: it no longer
+  pre-pushes slots, because locals push themselves as they are declared.
+- The opcode for an operator is chosen from the type the checker already proved,
+  so `x / 2.0` emits `DivFloat` and never asks a question at runtime.
+- **R5's overflow trap is implemented and tested** on `+`, `-`, `*`, `**`, unary
+  `-`, and `MinInt64 / -1`. Float is left to IEEE, where chapter 04 says division
+  by zero yields an infinity — the typed opcodes are what let the two differ
+  without a runtime check.
+- **70 passed, 14 failed, 3 skipped.** Green this milestone:
+  `lexical/operator_munch`, `types/float_literal_arithmetic`,
+  `scope/forward_reference`, `scope/module_var_mutation`,
+  `errors/discard_with_blank_is_legal`.
+- `TestUnimplementedConstructsReportRatherThanVanish` now probes an array
+  literal, since `:=` is implemented. It needs a still-pending construct each
+  milestone — and when nothing is left to probe, the compiler has caught up with
+  the checker.
+- **Next:** M5, control flow. `scope/shadowing` is its target.
