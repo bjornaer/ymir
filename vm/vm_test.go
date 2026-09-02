@@ -23,6 +23,7 @@ func mainWith(results int, build func(c *bytecode.Chunk)) *bytecode.Program {
 		File:             "t.ymr",
 		Funcs:            []*bytecode.Function{fn},
 		Main:             0,
+		Init:             -1,
 		MainReturnsError: results > 0,
 	}
 }
@@ -125,7 +126,7 @@ func TestPanicCarriesAStackTrace(t *testing.T) {
 }
 
 func TestMissingMainIsAnError(t *testing.T) {
-	p := &bytecode.Program{File: "t.ymr", Main: -1}
+	p := &bytecode.Program{File: "t.ymr", Main: -1, Init: -1}
 	if _, _, err := runProgram(t, p); err == nil {
 		t.Error("a program with no main must fail rather than silently succeed")
 	}

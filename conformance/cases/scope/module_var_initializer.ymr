@@ -1,0 +1,16 @@
+#@ case scope/module_var_initializer
+#@ spec 03-declarations.md#variables
+#@ exit 0
+#@ stdout
+#@ | 100
+#@ | hello
+
+module module_var_initializer
+
+var total: int = 100
+var name: string = "hello"
+
+func main() {
+    print(total)
+    print(name)
+}

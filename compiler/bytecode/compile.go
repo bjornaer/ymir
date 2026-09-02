@@ -25,7 +25,7 @@ func Compile(file *ast.File, info *check.Info, name, src string) (*Program, *dia
 	c := &compiler{
 		info:    info,
 		errs:    diag.NewList(name, src),
-		program: &Program{File: name, Main: -1},
+		program: &Program{File: name, Main: -1, Init: -1},
 		funcIdx: map[string]int{},
 		globals: map[string]int32{},
 	}
@@ -47,6 +47,7 @@ type compiler struct {
 	scopes []int     // the number of locals at each open block's start
 	slots  int       // the high-water mark of locals, for Function.Slots
 	obj    map[*check.Object]int32
+	loops  []*loop // open loops, for `break` and `continue`
 }
 
 // A local is one slot in the current frame.
@@ -83,6 +84,8 @@ func (c *compiler) run(file *ast.File) {
 		}
 	}
 
+	c.initFunction(file)
+
 	for _, d := range file.Decls {
 		x, isFunc := d.(*ast.FuncDecl)
 		if !isFunc || x.Recv != nil {
@@ -97,6 +100,46 @@ func (c *compiler) run(file *ast.File) {
 	}
 }
 
+// initFunction compiles the module-level `var` initializers into a synthetic
+// function the VM runs before main.
+//
+// Without this a global silently holds the zero Value, which is a Nil whose
+// numeric payload happens to be 0 — so `total = total + 10` produces 10 and the
+// program looks correct while the initializer was never run. Case
+// scope/module_var_mutation passed that way until this was added, which is
+// exactly the kind of accident the conformance suite exists to catch.
+//
+// Initializers run in declaration order. Whether a global may depend on one
+// declared later is open question Q15; today it reads the zero value.
+func (c *compiler) initFunction(file *ast.File) {
+	var inits []*ast.VarDecl
+	for _, d := range file.Decls {
+		if x, ok := d.(*ast.VarDecl); ok && x.Value != nil {
+			inits = append(inits, x)
+		}
+	}
+	if len(inits) == 0 {
+		return
+	}
+
+	fn := &Function{Name: "<init>"}
+	c.program.Init = len(c.program.Funcs)
+	c.program.Funcs = append(c.program.Funcs, fn)
+
+	saved := c.fn
+	c.fn = fn
+	c.locals = c.locals[:0]
+	c.scopes = c.scopes[:0]
+	c.obj = map[*check.Object]int32{}
+
+	for _, x := range inits {
+		c.expr(x.Value)
+		c.emit(OpSetGlobal, c.globals[x.Name.Name], x.Name.Pos())
+	}
+	c.emit(OpReturn, 0, file.Pos())
+	c.fn = saved
+}
+
 // function compiles one function body into its already-allocated Function.
 func (c *compiler) function(d *ast.FuncDecl) {
 	c.fn = c.program.Funcs[c.funcIdx[d.Name.Name]]
@@ -104,6 +147,7 @@ func (c *compiler) function(d *ast.FuncDecl) {
 	c.scopes = c.scopes[:0]
 	c.slots = 0
 	c.obj = map[*check.Object]int32{}
+	c.loops = c.loops[:0]
 
 	// Parameters occupy the first slots, in order.
 	for _, p := range d.Params {

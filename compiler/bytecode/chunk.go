@@ -129,6 +129,10 @@ type Program struct {
 	// Main indexes Funcs, or is -1 when the module declares no main.
 	Main int
 
+	// Init indexes the synthetic function holding module-level `var`
+	// initializers, or is -1 when there are none. The VM runs it before main.
+	Init int
+
 	// MainReturnsError records which of resolved question R9's two forms was
 	// written. When true, a non-nil result is printed to stderr and the process
 	// exits 1.

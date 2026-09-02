@@ -366,6 +366,19 @@ making those types non-sendable so sharing is impossible. **Blocks Phase 5.**
 `main` returning does not wait for spawned tasks. Go's choice here is widely regarded as
 its worst concurrency decision.
 
+### Q15 — In what order do module-level `var` initializers run?
+
+Chapter 03 makes module-scope declarations visible regardless of textual order, so
+`var a: int = b` may name a `var b` declared below it. It does not say what `a` gets.
+The implementation runs initializers in declaration order, so `a` reads `b`'s zero
+value — which is defensible and silent, and silence is the objection.
+
+Options: keep declaration order and make a forward reference between initializers a
+compile error; or order them by dependency, as Go does, and make a cycle the error.
+The second is friendlier and needs a dependency graph over module-level initializers.
+Found while implementing the initializer sequence in Phase 3. **Blocks nothing**, but
+the longer it stays open the more code depends on whichever answer is accidental.
+
 ### Q14 — Where do the built-in quantum gates live?
 
 [Chapter 08](08-quantum.md) lists `h`, `x`, `y`, `z`, `s`, `t`, `rx`, `ry`, `rz`, `cnot`,

@@ -55,7 +55,7 @@ executable reference. Its defect catalogue is in its README.
 
 ```
 docs/spec/            NORMATIVE language definition. Chapters 00-09.
-conformance/          Executable form of the spec. run.py + 87 cases.
+conformance/          Executable form of the spec. run.py + 88 cases.
 examples/tour.ymr     Exercises the full grammar. Keep it parsing.
 ymir-legacy-py/       Frozen Python implementation. Reference only. Delete at Phase 8.
 
@@ -258,8 +258,8 @@ criterion, which already requires every non-`concurrency`, non-`quantum` case to
 - [x] **M2** — `compiler/bytecode`: ops, chunk, line table, disassembler (2026-09-02)
 - [x] **M3** — compiler and VM spine: `main` printing a literal, end to end (2026-09-02)
 - [x] **M4** — arithmetic, comparison, and local variables (2026-09-02)
-- [ ] **M5** — control flow: `if`/`else`, `while`, block-scoped locals
-- [ ] **M6** — functions, frames, calls, module-level `var` as globals
+- [x] **M5** — control flow: `if`/`else`, `while`, `for`, short-circuit, `break` (2026-09-02)
+- [x] **M6** — functions, frames, calls, module-level `var` as globals (2026-09-02)
 - [ ] **M7** — strings, `panic` with a stack trace, exit codes, `main`'s error form
 - [ ] **M8** — CI runs the suite; phase close and the Phase 4 brief
 
@@ -378,6 +378,7 @@ Blocking work. Answer in `docs/spec/00-overview.md`, then update here.
 | R4 | Should error sets be inferred? | — | **resolved: explicit for now** |
 | Q12 | Are `as` and `default` reserved words or contextual identifiers? | Phase 6 | open, found in Phase 1 |
 | Q14 | Where do the built-in quantum gates live? Not universe scope | Phase 7 | open, found in Phase 2 |
+| Q15 | Order of module-level `var` initializers | — | open, found in Phase 3 |
 | R7 | How is a `complex` value written? | — | **resolved: the parser folds `a ± bi`** |
 | R8 | Is a container of a linear type linear, or ill-formed? | — | **resolved: ill-formed** |
 
@@ -1024,3 +1025,31 @@ is ill-formed).
   milestone — and when nothing is left to probe, the compiler has caught up with
   the checker.
 - **Next:** M5, control flow. `scope/shadowing` is its target.
+
+### 2026-09-02 — Phase 3 M5 and M6: control flow, and a global that was never initialized
+
+- `if`/`else`, `while`, the C-style `for`, `break`, `continue`, `++`/`--`, and
+  short-circuiting `&&`/`||`. Chapter 04 makes short-circuit evaluation
+  normative rather than an optimization — the right operand may have effects —
+  so it is lowered to jumps rather than evaluated and discarded.
+- M6's targets were already green from M4, since a call with parameters needed
+  frames and locals to work at all. Its remaining work was one real bug.
+- **`scope/module_var_mutation` was passing for the wrong reason.** Module-level
+  `var` initializers were never compiled, so a global held the zero `Value` —
+  whose numeric payload is 0 — and `total = total + 10` produced 10 while the
+  initializer had never run. `var name: string = "hello"` printed `nil`.
+- Fixed with a synthetic `<init>` function the VM runs before `main`, and case
+  `scope/module_var_initializer`, which would have caught it. This is precisely
+  what standing rule 2 is for: the rule existed, the case did not, so the rule
+  was not enforced.
+- **New open question Q15: in what order do module-level initializers run?**
+  Declaration order today, so `var a: int = b` reads `b`'s zero value when `b` is
+  declared below. Silent, and silence is the objection. The alternatives are
+  making a forward reference an error, or dependency ordering as Go does.
+- `TestNoJumpIsLeftUnpatched` walks every compiled form and asserts no jump still
+  carries its placeholder. An unpatched jump sends the VM to a wild pc and is
+  invisible until some branch happens to be taken.
+- **73 passed, 12 failed, 3 skipped.** Green: `scope/shadowing`,
+  `types/narrowing_else_branch`, `scope/module_var_initializer`.
+- **Next:** M7. `decl/main_returns_error` is the last Phase 3 target, and needs
+  destructuring a multi-valued call.

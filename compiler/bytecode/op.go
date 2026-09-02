@@ -87,6 +87,7 @@ const (
 	// --- control flow. A is an absolute pc within the same chunk.
 	OpJump
 	OpJumpIfFalse
+	OpJumpIfTrue
 
 	// --- calls. A is an index into Program.Funcs. Arity is fixed at compile
 	// time and lives on the callee, so it is not encoded here. Calling a
@@ -148,6 +149,7 @@ var opNames = [...]string{
 	OpNot:         "Not",
 	OpJump:        "Jump",
 	OpJumpIfFalse: "JumpIfFalse",
+	OpJumpIfTrue:  "JumpIfTrue",
 	OpCall:        "Call",
 	OpReturn:      "Return",
 	OpPrint:       "Print",
@@ -167,7 +169,7 @@ func (o Op) String() string {
 func (o Op) HasOperand() bool {
 	switch o {
 	case OpConst, OpGetLocal, OpSetLocal, OpGetGlobal, OpSetGlobal,
-		OpJump, OpJumpIfFalse, OpCall, OpPrint:
+		OpJump, OpJumpIfFalse, OpJumpIfTrue, OpCall, OpPrint:
 		return true
 	}
 	return false
@@ -175,4 +177,6 @@ func (o Op) HasOperand() bool {
 
 // IsJump reports whether A is a program counter rather than an index. The
 // compiler patches these after the target is known.
-func (o Op) IsJump() bool { return o == OpJump || o == OpJumpIfFalse }
+func (o Op) IsJump() bool {
+	return o == OpJump || o == OpJumpIfFalse || o == OpJumpIfTrue
+}

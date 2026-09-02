@@ -25,7 +25,7 @@ func TestOpNamesAreComplete(t *testing.T) {
 func TestOperandClassification(t *testing.T) {
 	withOperand := []Op{
 		OpConst, OpGetLocal, OpSetLocal, OpGetGlobal, OpSetGlobal,
-		OpJump, OpJumpIfFalse, OpCall, OpPrint,
+		OpJump, OpJumpIfFalse, OpJumpIfTrue, OpCall, OpPrint,
 	}
 	want := map[Op]bool{}
 	for _, op := range withOperand {

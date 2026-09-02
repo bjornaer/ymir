@@ -96,7 +96,7 @@ func (c *Chunk) annotate(in Instr, p *Program) string {
 		}
 		return "  ; <no such function>"
 
-	case OpJump, OpJumpIfFalse:
+	case OpJump, OpJumpIfFalse, OpJumpIfTrue:
 		return fmt.Sprintf("  ; -> %04d", in.A)
 
 	case OpPrint:

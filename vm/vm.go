@@ -79,6 +79,17 @@ func (v *VM) Run() (Value, error) {
 		return Nil(), fmt.Errorf("no main function in module %s", v.prog.File)
 	}
 
+	// Module-level `var` initializers run before main. Without this a global
+	// holds the zero Value and a program can look correct while its initializer
+	// never ran.
+	if v.prog.Init >= 0 {
+		v.frames = append(v.frames, frame{fn: v.prog.Funcs[v.prog.Init], base: 0})
+		if err := v.run(); err != nil {
+			return Nil(), err
+		}
+		v.stack = v.stack[:0]
+	}
+
 	main := v.prog.Funcs[v.prog.Main]
 	v.frames = append(v.frames, frame{fn: main, base: 0})
 
@@ -134,6 +145,19 @@ func (v *VM) run() error {
 
 		case bytecode.OpSetGlobal:
 			v.globals[in.A] = v.pop()
+
+		case bytecode.OpJump:
+			f.pc = int(in.A)
+
+		case bytecode.OpJumpIfFalse:
+			if !v.pop().IsTrue() {
+				f.pc = int(in.A)
+			}
+
+		case bytecode.OpJumpIfTrue:
+			if v.pop().IsTrue() {
+				f.pc = int(in.A)
+			}
 
 		case bytecode.OpPrint:
 			if err := v.doPrint(int(in.A)); err != nil {

@@ -140,6 +140,15 @@ func (c *compiler) binary(x *ast.BinaryExpr) {
 		t = c.typeOf(x.Y)
 	}
 
+	// && and || evaluate their right operand only if the result is not already
+	// determined. Chapter 04 §Short-circuit evaluation makes that normative,
+	// not an optimization: the right operand may have effects.
+	switch x.Op {
+	case token.LAND, token.LOR:
+		c.shortCircuit(x)
+		return
+	}
+
 	c.expr(x.X)
 	c.expr(x.Y)
 
@@ -159,6 +168,27 @@ func (c *compiler) binary(x *ast.BinaryExpr) {
 		return
 	}
 	c.unsupported(x.OpPos, "`"+x.Op.String()+"` on "+t.String())
+}
+
+// shortCircuit compiles `&&` and `||`, whose right operand is evaluated only
+// when the left did not already decide the answer.
+func (c *compiler) shortCircuit(x *ast.BinaryExpr) {
+	c.expr(x.X)
+
+	skip := OpJumpIfFalse // && : a false left decides it
+	decided := OpFalse
+	if x.Op == token.LOR {
+		skip = OpJumpIfTrue // || : a true left decides it
+		decided = OpTrue
+	}
+
+	toDecided := c.emit(skip, -1, x.OpPos)
+	c.expr(x.Y)
+	toEnd := c.emit(OpJump, -1, x.OpPos)
+
+	c.fn.Chunk.Patch(toDecided, int32(c.fn.Chunk.Len()))
+	c.emit(decided, 0, x.OpPos)
+	c.fn.Chunk.Patch(toEnd, int32(c.fn.Chunk.Len()))
 }
 
 // opFor maps an operator and its operand type to an opcode.

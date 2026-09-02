@@ -40,6 +40,21 @@ func (c *compiler) stmt(s ast.Stmt) {
 	case *ast.AssignStmt:
 		c.assign(x)
 
+	case *ast.IfStmt:
+		c.ifStmt(x)
+
+	case *ast.WhileStmt:
+		c.whileStmt(x)
+
+	case *ast.ForStmt:
+		c.forStmt(x)
+
+	case *ast.BranchStmt:
+		c.branchStmt(x)
+
+	case *ast.IncDecStmt:
+		c.incDec(x)
+
 	default:
 		c.unsupported(s.Pos(), describeStmt(s))
 	}
@@ -139,6 +154,146 @@ func (c *compiler) returnStmt(x *ast.ReturnStmt) {
 		c.expr(r)
 	}
 	c.emit(OpReturn, int32(len(x.Results)), x.Keyword)
+}
+
+// ifStmt compiles a conditional.
+//
+//	<cond>
+//	JumpIfFalse -> else
+//	<then>
+//	Jump -> end
+//	else: <else>
+//	end:
+func (c *compiler) ifStmt(x *ast.IfStmt) {
+	c.expr(x.Cond)
+	toElse := c.emit(OpJumpIfFalse, -1, x.Keyword)
+
+	c.block(x.Then)
+
+	if x.Else == nil {
+		c.fn.Chunk.Patch(toElse, int32(c.fn.Chunk.Len()))
+		return
+	}
+
+	toEnd := c.emit(OpJump, -1, x.Keyword)
+	c.fn.Chunk.Patch(toElse, int32(c.fn.Chunk.Len()))
+	c.stmt(x.Else)
+	c.fn.Chunk.Patch(toEnd, int32(c.fn.Chunk.Len()))
+}
+
+// loop holds the patch targets a `break` and a `continue` need.
+type loop struct {
+	start     int   // where `continue` jumps to
+	breaks    []int // jumps to patch to the loop's end
+	continues []int // jumps to patch to the post clause, for a C-style for
+}
+
+func (c *compiler) whileStmt(x *ast.WhileStmt) {
+	start := c.fn.Chunk.Len()
+	c.expr(x.Cond)
+	toEnd := c.emit(OpJumpIfFalse, -1, x.Keyword)
+
+	c.loops = append(c.loops, &loop{start: start})
+	c.block(x.Body)
+	l := c.loops[len(c.loops)-1]
+	c.loops = c.loops[:len(c.loops)-1]
+
+	// `continue` on a while goes back to the condition.
+	for _, pc := range l.continues {
+		c.fn.Chunk.Patch(pc, int32(start))
+	}
+	c.emit(OpJump, int32(start), x.Keyword)
+
+	end := int32(c.fn.Chunk.Len())
+	c.fn.Chunk.Patch(toEnd, end)
+	for _, pc := range l.breaks {
+		c.fn.Chunk.Patch(pc, end)
+	}
+}
+
+// forStmt compiles the C-style form. The range form needs arrays and arrives in
+// Phase 4.
+func (c *compiler) forStmt(x *ast.ForStmt) {
+	// "The init clause's bindings are scoped to the loop" (chapter 05 §for), so
+	// the whole statement is one scope.
+	c.beginScope()
+	if x.Init != nil {
+		c.stmt(x.Init)
+	}
+
+	start := c.fn.Chunk.Len()
+	toEnd := -1
+	if x.Cond != nil {
+		c.expr(x.Cond)
+		toEnd = c.emit(OpJumpIfFalse, -1, x.Keyword)
+	}
+
+	c.loops = append(c.loops, &loop{start: start})
+	c.block(x.Body)
+	l := c.loops[len(c.loops)-1]
+	c.loops = c.loops[:len(c.loops)-1]
+
+	// `continue` skips the rest of the body but still runs the post clause.
+	post := int32(c.fn.Chunk.Len())
+	for _, pc := range l.continues {
+		c.fn.Chunk.Patch(pc, post)
+	}
+	if x.Post != nil {
+		c.stmt(x.Post)
+	}
+	c.emit(OpJump, int32(start), x.Keyword)
+
+	end := int32(c.fn.Chunk.Len())
+	if toEnd >= 0 {
+		c.fn.Chunk.Patch(toEnd, end)
+	}
+	for _, pc := range l.breaks {
+		c.fn.Chunk.Patch(pc, end)
+	}
+	c.endScope(x.Body.Rbrace)
+}
+
+func (c *compiler) branchStmt(x *ast.BranchStmt) {
+	if len(c.loops) == 0 {
+		// The checker already rejected this (chapter 05 §break and continue),
+		// so reaching here means the two disagree.
+		c.errs.Addf(x.Keyword, "internal: %s outside a loop reached the compiler", x.Tok)
+		return
+	}
+	l := c.loops[len(c.loops)-1]
+	pc := c.emit(OpJump, -1, x.Keyword)
+	if x.Tok == token.BREAK {
+		l.breaks = append(l.breaks, pc)
+	} else {
+		l.continues = append(l.continues, pc)
+	}
+}
+
+// incDec compiles `x++` and `x--`, which chapter 05 defines as `x += 1`.
+func (c *compiler) incDec(x *ast.IncDecStmt) {
+	id, ok := x.X.(*ast.Ident)
+	if !ok {
+		c.unsupported(x.X.Pos(), "`++` on this target")
+		return
+	}
+
+	c.expr(x.X)
+	c.constant(Const{Kind: ConstInt, I: 1}, x.TokPos)
+	if x.Tok == token.INC {
+		c.emit(OpAddInt, 0, x.TokPos)
+	} else {
+		c.emit(OpSubInt, 0, x.TokPos)
+	}
+
+	if slot, ok := c.resolveLocal(id); ok {
+		c.emit(OpSetLocal, slot, x.TokPos)
+		return
+	}
+	if slot, ok := c.globals[id.Name]; ok {
+		c.emit(OpSetGlobal, slot, x.TokPos)
+		return
+	}
+	c.errs.Addf(id.Pos(), "internal: %s resolved by the checker but not by the compiler", id.Name)
 }
 
 // describeStmt names a statement for the unimplemented diagnostic, so the
